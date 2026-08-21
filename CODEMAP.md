@@ -2,7 +2,7 @@
 
 This file maps what exists in the repository and what is only planned.
 
-**Rule:** a planned path below must not be treated as an existing implementation until it is actually present and `STATUS.md` is updated.
+**Rule:** a planned path is not implementation evidence. `STATUS.md` remains authoritative for implementation/verification state.
 
 ## Existing
 
@@ -16,42 +16,28 @@ This file maps what exists in the repository and what is only planned.
 ├─ ROADMAP.md
 ├─ ARCHITECTURE.md
 ├─ CODEMAP.md
-├─ THIRD_PARTY_NOTICES.md
+├─ REFERENCES.md
 ├─ CHANGELOG.md
 └─ llms.txt
 ```
 
-At this stage the repository contains documentation only. No Unity package, MCP server, bridge protocol source, gateway, or client integration source tree is implemented yet.
+At this stage the repository contains documentation only. No Unity package, MCP/server runtime, bridge protocol source, gateway runtime, or client integration source tree exists yet.
 
 ## Documentation responsibilities
 
-### `STATUS.md`
-
-Canonical answer to: **What is actually implemented and verified?**
-
-### `DESIGN.md`
-
-Durable detailed system design / memory anchor. Records intended behavior such as transport layering, command dispatch, retries, reconnect, object identity, Undo, routing, and testing.
-
-### `DECISIONS.md`
-
-Architecture decision history and rationale. Accepted decisions should not be silently reversed.
-
-### `ROADMAP.md`
-
-Public capability phases and exit gates. Roadmap items are not implementation evidence.
-
-### `ARCHITECTURE.md`
-
-High-level architecture principles and subsystem boundaries.
-
-### `AGENTS.md`
-
-Mandatory rules for AI agents and contributors.
+- `STATUS.md` — what is actually implemented and verified
+- `DESIGN.md` — durable detailed design / memory anchor
+- `DECISIONS.md` — architecture decision history and rationale
+- `ROADMAP.md` — public phases and exit gates
+- `ARCHITECTURE.md` — concise high-level boundaries
+- `AGENTS.md` — mandatory AI/contributor rules
+- `REFERENCES.md` — external research references; not proof of code reuse
+- `CHANGELOG.md` — notable project changes
+- `llms.txt` — compact AI entrypoint
 
 ## Planned source layout
 
-The following is the current target layout, not current code:
+The following is the current target, not current code:
 
 ```text
 /
@@ -97,57 +83,60 @@ The following is the current target layout, not current code:
    └─ e2e/
 ```
 
-The exact file/folder names may change during Phase 0 scaffolding. If they change, update this map and record any meaningful architecture change in `DECISIONS.md`.
+Exact paths may change during Phase 0 scaffolding. Routine folder-name adjustments do not need an architecture decision unless they change subsystem ownership or contracts.
 
 ## Planned ownership boundaries
 
 ### `unity-package/`
 
-Target responsibility: code that runs inside Unity Editor and interacts with Unity APIs.
+Unity Editor-side implementation:
 
-Expected major responsibilities:
-
-- outbound/local connection lifecycle,
-- command queue and main-thread dispatcher,
-- object resolution,
+- connection lifecycle,
+- command queue/main-thread dispatcher,
+- target/object resolution,
 - Unity tool handlers,
-- Undo and dirty-state reporting,
-- compile/domain-reload watcher,
+- Undo/dirty-state handling,
+- compile/domain-reload lifecycle,
 - Unity-side tests.
 
 ### `bridge-protocol/`
 
-Target responsibility: explicit versioned Unity-facing command/result schemas and fixtures shared conceptually by both sides.
-
-The protocol is separate from MCP so Unity transport details can evolve without redefining public tool semantics.
+Explicit, versioned Unity-facing command/result schemas and fixtures. This contract is separate from MCP so Unity transport details can evolve without redefining every public tool semantic.
 
 ### `mcp-server/`
 
-Target responsibility: MCP protocol/tool schemas, validation, risk policy, routing, transport adaptation, request/result correlation, and structured errors.
+Provider-neutral MCP/server core:
 
-Initial design direction is TypeScript with the official MCP TypeScript SDK v2 line. This is a design decision, not evidence that dependencies have been installed.
+- MCP tool schemas,
+- validation/risk policy,
+- bridge adaptation,
+- request/result correlation,
+- reusable routing abstractions,
+- structured errors,
+- local/self-host behavior.
+
+Initial design direction is TypeScript with the official MCP TypeScript SDK v2 line. No dependency/runtime code exists yet.
 
 ### `integrations/`
 
-Target responsibility: thin provider/client-specific packaging or metadata. Provider-specific behavior should not leak into core Unity logic without a documented reason.
+Thin provider/client-specific metadata/adapters. Provider-specific behavior should not leak into Unity command logic without a documented interoperability reason.
 
 ### `tests/`
 
-Target responsibility: cross-layer protocol/integration/end-to-end verification that does not fit naturally inside one package.
+Cross-layer protocol/integration/end-to-end verification that does not naturally belong to one package.
 
-### hosted infrastructure
+### Private hosted infrastructure
 
-Production auth databases, secrets, deployment state, operational dashboards, production-only administration, and hosted-service internals belong in the separate private infrastructure repository by default.
+`unity-ai-mcp-infra` is intended for managed-service composition/deployment: production auth/database/provider wiring, rate limits/abuse controls, monitoring, deployment pipelines, and private operations.
 
-The private repository should consume/deploy the public core rather than maintain a second private copy of core behavior.
+It should consume/deploy the public core rather than duplicate the core implementation.
 
 ## Updating this map
 
-When adding or moving a meaningful subsystem:
+When a meaningful subsystem is added or moved:
 
 1. inspect actual repository paths,
-2. update this tree,
-3. describe the responsibility,
-4. update `STATUS.md` if implementation status changed,
-5. update `DESIGN.md`/`DECISIONS.md` if architecture changed,
-6. avoid listing fictional files merely because a design diagram mentions them.
+2. update this map,
+3. update `STATUS.md` if implementation state changed,
+4. update `DESIGN.md`/`DECISIONS.md` only if responsibilities/contracts changed,
+5. never list a fictional path as existing merely because it appears in a plan.
