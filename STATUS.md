@@ -25,9 +25,11 @@ Overall status: **In progress**
 | Public GitHub repository | Verified | Repository exists and accepts commits. |
 | Project README | Implemented | Initial project scope and target direction documented. |
 | AI/contributor guardrails | Implemented | `AGENTS.md` defines mandatory evidence and verification rules. |
-| Architecture documentation | Planned | To be added in bootstrap documentation. |
-| Code map | Planned | To be added in bootstrap documentation. |
-| Third-party provenance log | Planned | To be added before external code reuse. |
+| Architecture documentation | Implemented | `ARCHITECTURE.md` separates target design from implementation claims. |
+| Code map | Implemented | `CODEMAP.md` separates existing paths from planned source layout. |
+| Third-party provenance log | Implemented | `THIRD_PARTY_NOTICES.md` exists; no third-party implementation is recorded as incorporated. |
+| Changelog | Implemented | `CHANGELOG.md` records bootstrap documentation changes. |
+| AI quick-entry file | Implemented | `llms.txt` points agents to canonical rules/status documents. |
 | Unity Editor package | Planned | No working package should be assumed. |
 | MCP server | Planned | No working MCP endpoint should be assumed. |
 | Unity connection/transport | Planned | No working transport should be assumed. |
@@ -50,13 +52,13 @@ Overall status: **In progress**
 
 Phase 0 is complete when:
 
-- [ ] architecture boundaries are documented,
-- [ ] public/private responsibilities are documented,
-- [ ] third-party provenance rules are established,
+- [x] architecture boundaries are documented,
+- [x] public/private responsibilities are documented,
+- [x] third-party provenance rules are established,
 - [ ] initial source tree exists,
 - [ ] development/runtime versions are intentionally selected,
 - [ ] the first test strategy is documented,
-- [ ] no secret or production credential is committed.
+- [x] no secret or production credential is intentionally committed in the bootstrap documentation.
 
 ## Phase 1 target — Minimal local end-to-end path
 
