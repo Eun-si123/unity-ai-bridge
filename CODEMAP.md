@@ -13,9 +13,12 @@ This file maps what exists in the repository and what is only planned.
 ├─ STATUS.md
 ├─ ARCHITECTURE.md
 ├─ CODEMAP.md
-├─ THIRD_PARTY_NOTICES.md   (planned during bootstrap)
-└─ CHANGELOG.md             (planned during bootstrap)
+├─ THIRD_PARTY_NOTICES.md
+├─ CHANGELOG.md
+└─ llms.txt
 ```
+
+At this stage the repository contains documentation only. No Unity package, MCP server, gateway, or client integration source tree is implemented yet.
 
 ## Planned source layout
 
