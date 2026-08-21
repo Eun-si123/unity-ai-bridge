@@ -6,264 +6,216 @@ Mandatory operating rules for AI agents and automated contributors working in th
 
 **Never convert an assumption into a repository fact.**
 
-Repository evidence has priority over:
+Repository evidence has priority over chat history, model memory, plans, other repositories, and intuition about how Unity/MCP probably works.
 
-1. chat history,
-2. model memory,
-3. plans and roadmaps,
-4. other repositories,
-5. intuition about how Unity/MCP "probably" works.
-
-If evidence is missing, say **unknown / not verified** and investigate before changing status documentation.
+If evidence is missing, say **Unknown / Not verified / Planned** and continue only from what can be established.
 
 ## 1. Source-of-truth order
 
-Use this order when deciding what is true:
+When deciding what is true:
 
-1. Current repository files and git history.
-2. Reproducible runtime/test output from the current revision.
-3. `STATUS.md` verified entries.
-4. `DECISIONS.md` accepted architecture decisions.
-5. `DESIGN.md` accepted design baseline.
-6. `ARCHITECTURE.md` high-level architecture/boundaries.
-7. `README.md` overview.
-8. `ROADMAP.md` future direction only.
-9. Issues, discussions, chat history, external documentation.
+1. current repository files and git history,
+2. reproducible runtime/test output from the relevant revision,
+3. `STATUS.md`,
+4. accepted entries in `DECISIONS.md`,
+5. `DESIGN.md`,
+6. `ARCHITECTURE.md`,
+7. `README.md`,
+8. `ROADMAP.md`, issues, discussions, chat history, external sources.
 
-If these disagree, do not silently choose one. Reconcile the conflict and update stale documentation.
+Design/roadmap documents can describe things that do not exist yet. They are not implementation evidence.
 
-**Important:** `DESIGN.md`, `ARCHITECTURE.md`, `DECISIONS.md`, and `ROADMAP.md` can describe things that do not exist yet. They are not implementation evidence.
+## 2. What to read
 
-## 2. Implementation status vocabulary
+### At the start of a new session or after losing project context
 
-Use only these meanings:
-
-- **Planned** — desired, but no implementation should be assumed.
-- **In progress** — implementation exists but is incomplete or unverified.
-- **Implemented** — code exists, but runtime behavior may still be unverified.
-- **Verified** — exercised with reproducible evidence on the current or explicitly named revision.
-- **Blocked** — cannot proceed because a named dependency/problem is unresolved.
-
-Never write "works", "done", "fixed", "supported", or "passed" unless the evidence meets the **Verified** definition or the sentence clearly says it is only implemented/not yet tested.
-
-## 3. Before modifying anything
-
-An agent must read, in this order:
+Read:
 
 1. `AGENTS.md`
 2. `STATUS.md`
-3. `DESIGN.md`
-4. `DECISIONS.md`
-5. `ROADMAP.md`
-6. `ARCHITECTURE.md`
-7. `CODEMAP.md`
-8. `THIRD_PARTY_NOTICES.md`
+3. `CODEMAP.md`
+4. relevant parts of `DESIGN.md`
+5. relevant accepted entries in `DECISIONS.md`
 
-Then:
+Read `ROADMAP.md` when planning milestone work, `ARCHITECTURE.md` when changing high-level boundaries, and `REFERENCES.md` when external projects/materials are relevant.
 
-1. inspect the files it plans to change,
-2. check whether the same feature already exists under another name,
-3. check relevant tests and recent commits when available,
-4. identify third-party provenance before copying or adapting external code.
+### Before a routine change
 
-Do not create duplicate systems because an existing implementation was overlooked.
+Do **not** reload every project document mechanically. Inspect the files/tests being changed plus the smallest relevant design/decision/status context needed to avoid contradiction.
 
-## 4. Do not silently reverse accepted design decisions
+The goal is grounding, not wasting context on unrelated documentation.
 
-`DECISIONS.md` exists so that future contributors do not repeatedly redesign the project from memory.
+## 3. Status vocabulary
 
-If current evidence suggests an accepted decision is wrong:
+Use these meanings:
 
-1. gather the evidence,
-2. add a new numbered decision,
-3. mark the old decision `Superseded`,
-4. explain the trade-off and migration impact,
-5. update `DESIGN.md` and relevant code/tests.
+- **Planned** — desired, no implementation should be assumed.
+- **In progress** — partial/incomplete implementation exists.
+- **Implemented** — implementation exists but relevant runtime behavior may still be unverified.
+- **Verified** — reproduced with evidence on a named revision/environment.
+- **Blocked** — a named unresolved dependency/problem prevents progress.
 
-Do not simply delete or rewrite the old rationale to make the new architecture look inevitable.
+Do not use `Implemented` for a design choice merely because it is written in a document. Use **Accepted design decision** instead.
 
-## 5. No hallucinated APIs, files, tools, or test results
+Never write `works`, `done`, `fixed`, `supported`, or `passed` unless the claim is backed by the required verification or clearly qualified.
+
+## 4. Before modifying code or architecture
+
+- inspect the actual files involved,
+- check whether the same capability already exists under another name,
+- inspect relevant tests/recent commits when available,
+- check accepted decisions before changing architecture,
+- verify external provenance/license before copying or substantially adapting outside material.
+
+Do not create duplicate subsystems because existing work was overlooked.
+
+## 5. Architecture history
+
+Do not silently reverse an accepted decision.
+
+If new evidence changes a significant architecture choice:
+
+1. collect the evidence,
+2. add a new decision entry,
+3. mark the old decision superseded where appropriate,
+4. explain trade-offs/migration impact,
+5. update design/status/code/tests consistently.
+
+## 6. No hallucinated APIs, files, capabilities, or tests
 
 Do not invent:
 
-- Unity APIs or signatures,
-- MCP methods, transports, schemas, or capabilities,
-- package names/versions,
-- directories or files that do not exist,
-- environment variables,
-- server endpoints,
-- plugin capabilities,
-- test commands,
-- CI jobs,
-- benchmark results,
-- successful runtime behavior.
+- Unity APIs/signatures,
+- MCP methods/transports/schemas,
+- package/runtime versions,
+- files/directories,
+- environment variables/endpoints,
+- client/plugin capabilities,
+- test commands/CI jobs,
+- benchmark or runtime results.
 
-When an API or version is uncertain, verify it against authoritative documentation or the dependency actually used by the repository.
+Verify uncertain external behavior against current authoritative documentation and uncertain internal behavior against the repository/runtime.
 
-## 6. Plans are not implementation
+## 7. Unity execution safety
 
-`DESIGN.md`, `ARCHITECTURE.md`, `DECISIONS.md`, `ROADMAP.md`, issues, TODOs, examples, and code blocks may describe future behavior. Their existence does not mean the feature exists.
+Unless verified otherwise for a specific operation:
 
-When documenting proposed structures, label them **Planned**, **Proposed**, **Target architecture**, or otherwise make the status explicit.
+- treat Unity Editor API access as main-thread-sensitive,
+- do not mutate Unity objects directly from network callbacks,
+- route mutations through a controlled main-thread dispatcher,
+- expect compilation/domain reload and reconnects,
+- do not use transient `InstanceID` as the only durable identity,
+- use stable identifiers/validation where practical,
+- register Undo for editor mutations where practical,
+- report dirty/unsaved state,
+- do not silently save unless the tool contract requests it,
+- do not block Unity's UI/main thread on network I/O,
+- serialize conflicting writes by default,
+- protect mutations against ambiguous retry/duplicate execution.
 
-`STATUS.md` is the canonical list of what actually exists.
+Arbitrary C# execution is a privileged capability, not a normal fallback.
 
-## 7. Verification requirements
+## 8. Tool design
 
-For every functional change, perform the strongest available verification and record what was actually run.
+Every public tool/action should have, where applicable:
 
-Preferred order:
-
-1. automated unit/integration tests,
-2. compile/build checks,
-3. Unity EditMode/PlayMode tests,
-4. protocol/tool-call integration checks,
-5. manual reproduction with captured output.
-
-If verification cannot be performed, state that explicitly. Never substitute code inspection for runtime verification without saying so.
-
-A verification record should include, when relevant:
-
-- date,
-- revision/commit,
-- environment (OS, Unity version, runtime version),
-- exact command/action,
-- expected result,
-- observed result,
-- known limitations.
-
-## 8. Unity-specific safety rules
-
-Unless a verified implementation proves otherwise:
-
-- Treat Unity Editor API calls as main-thread-sensitive.
-- Route network callbacks through a main-thread command queue before touching Unity objects.
-- Expect script changes to trigger compilation/domain reload and possible reconnection.
-- Do not rely only on transient instance IDs across reloads/scenes.
-- Use stable identifiers where possible (asset GUIDs, `GlobalObjectId`, hierarchy identity plus validation).
-- Register Undo for editor mutations where practical.
-- Report dirty scenes/assets and do not silently save user work unless the tool contract explicitly permits it.
-- Avoid blocking network I/O on `OnGUI`, `EditorApplication.update`, or other editor UI/main-thread paths.
-- Serialize conflicting write operations unless the operation is explicitly designed and tested for concurrency.
-- Treat arbitrary C# execution as a privileged/high-risk capability, not a normal fallback.
-- Treat reconnect/domain reload as normal lifecycle, not a rare exceptional path.
-- Protect mutations against ambiguous retries/duplicate request execution.
-
-## 9. MCP/tool design rules
-
-Every public tool should have:
-
-- one clear responsibility,
+- a clear responsibility,
 - explicit input schema,
-- validation before Unity mutation,
+- validation before mutation,
 - structured success/error output,
-- deterministic behavior where practical,
-- cancellation/timeout behavior for long operations,
 - documented side effects,
-- explicit destructive-risk classification where applicable.
+- timeout/cancellation semantics for long operations,
+- risk classification,
+- verification behavior that distinguishes delivery from observed Unity completion.
 
-Follow the design baseline in `DESIGN.md` and accepted choices in `DECISIONS.md`.
+Prefer a small reliable/composable surface over tool-count inflation. Do not introduce a giant `do_anything` escape hatch merely to claim broad coverage.
 
-Prefer composable high-quality tools over inflating the tool count.
+## 9. Security
 
-Do not expose hundreds of tools merely to match another project. Add tools because they improve reliability, safety, or usability.
+Never commit real:
 
-Do not replace missing bounded tools with arbitrary code execution unless a later accepted decision explicitly introduces and gates that privileged capability.
+- API/OAuth keys or secrets,
+- pairing/session tokens,
+- private keys/certificates,
+- service/database/cloud credentials,
+- user project data or logs containing secrets.
 
-## 10. Security rules
+Remote editor control is privileged and must fail closed.
 
-Never commit:
+For hosted routing:
 
-- API keys,
-- OAuth secrets,
-- pairing tokens,
-- private certificates/keys,
-- service credentials,
-- user project contents or logs containing secrets.
+- client-supplied editor/workspace IDs are selectors, not authorization,
+- server-side ownership checks are mandatory,
+- cross-user command delivery is a critical failure.
 
-Remote control is privileged. Authentication must fail closed.
+A future BYO-MCP feature must not become an unrestricted SSRF/arbitrary-server proxy.
 
-Do not let a user-selected upstream MCP URL become an unrestricted server-side request primitive. BYO-MCP/gateway features require allowlisting/validation, authentication boundaries, request limits, and SSRF protections before public release.
+## 10. External references, code reuse, and licenses
 
-Destructive operations must be clearly marked and should support confirmation/policy controls at the client or gateway layer.
+`REFERENCES.md` records projects/materials that influenced research. **Being listed there does not mean their source is incorporated.**
 
-In hosted routing, a client-provided editor/workspace identifier is a selector, **not authorization**. Server-side ownership checks are mandatory.
+Before copying, porting, translating, or substantially adapting third-party implementation/material:
 
-Cross-user command delivery is a critical-severity failure.
+1. identify exact source and revision,
+2. read the applicable license,
+3. verify intended redistribution/commercial use is permitted,
+4. preserve required notices/attribution,
+5. record exact provenance and affected paths in the same change.
 
-## 11. Third-party code and licensing
+If an actual third-party notice/license file becomes required, add it **because incorporated material requires it**, not merely because another project was studied.
 
-Before copying, porting, translating, or substantially adapting code from another repository:
+Feature ideas, public interoperability requirements, and known failure modes may be studied and independently implemented using authoritative Unity/MCP documentation where practical.
 
-1. identify the exact repository and revision,
-2. read its license,
-3. record it in `THIRD_PARTY_NOTICES.md`,
-4. preserve required copyright/license notices,
-5. confirm that the intended distribution/commercial model is permitted.
+## 11. Public vs private repository boundary
 
-Feature ideas and interoperability requirements may be studied, but do not copy implementations whose license is incompatible or unclear.
+This public repository is intended to hold the Unity/MCP core and self-hostable path.
 
-Do not describe independently written code as copied from an upstream project, and do not describe copied/adapted code as fully original.
+Do not add production secrets, private deployment state, user databases, or sensitive hosted-service operations here.
 
-## 12. Public vs infrastructure separation
+The private infrastructure repository should compose/deploy the public core rather than maintain a divergent copy of it.
 
-This repository is intended to hold the public/core implementation.
+## 12. Documentation maintenance
 
-Do not add production secrets, private deployment state, user databases, or sensitive hosted-service internals here merely because a related infrastructure repository exists.
+After a meaningful change, update only the documents actually affected:
 
-When the project uses a separate infrastructure repository, keep the interface between the two documented and minimal.
-
-Do not duplicate the public core into the private infrastructure repository and allow the copies to diverge.
-
-## 13. Documentation maintenance
-
-After a meaningful change:
-
-- update `STATUS.md` if implementation/verification status changed,
-- update `CHANGELOG.md` for user-visible changes,
-- update `CODEMAP.md` when paths/responsibilities change,
-- update `DESIGN.md` when detailed design changes,
-- update `DECISIONS.md` for significant architecture choices/reversals,
-- update `ROADMAP.md` when milestone scope/status changes,
-- update `ARCHITECTURE.md` for high-level boundaries,
-- update `THIRD_PARTY_NOTICES.md` when provenance changes.
+- `STATUS.md` — implementation/verification state,
+- `CHANGELOG.md` — notable user-visible/project changes,
+- `CODEMAP.md` — paths/responsibilities,
+- `DESIGN.md` — detailed design,
+- `DECISIONS.md` — significant architecture decisions/reversals,
+- `ROADMAP.md` — milestone scope/status,
+- `ARCHITECTURE.md` — high-level boundaries,
+- `REFERENCES.md` — material external research/provenance context.
 
 Documentation must not get ahead of the code.
 
-## 14. Scope control
-
-The project should not become large merely to look complete.
+## 13. Scope control
 
 Before adding a subsystem, ask:
 
-1. Is it needed for the current roadmap phase/exit gate?
-2. Can an existing safe generic primitive cover it?
+1. Is it needed for the current phase/exit gate?
+2. Can an existing bounded primitive cover it safely?
 3. Does it create a new security/maintenance burden?
-4. Can it be postponed until actual users need it?
+4. Can it wait until there is a concrete need?
 
-Prefer finishing one end-to-end path over starting many incomplete systems.
+Prefer finishing one verified end-to-end path over starting many incomplete systems.
 
-`ROADMAP.md` deliberately puts remote hosting and advanced Unity domains after the local reliability core. Do not skip those gates merely because later work is more exciting.
+## 14. Error handling
 
-## 15. Error handling philosophy
+- fail explicitly rather than pretending success,
+- redact secrets while returning useful diagnostics,
+- distinguish validation, policy/auth, transport, disconnect, timeout, stale-target, Unity API, and compile/reload failures,
+- never turn an exception into success because the requested state probably happened,
+- message delivery is not proof of Unity-side completion.
 
-- Fail explicitly rather than pretending success.
-- Return enough context to diagnose the failure, but redact secrets.
-- Distinguish validation errors, Unity errors, transport errors, timeouts, disconnected editor state, compile/reload state, stale target state, and permission errors.
-- Never convert an exception into `success: true` because the requested final state "probably" happened.
-- Delivery of a command is not proof of Unity-side completion.
+## 15. When uncertain
 
-## 16. When uncertain
-
-Stop the assumption, not the project.
-
-Use one of these forms:
+Use explicit wording such as:
 
 - `Unknown: needs repository inspection.`
 - `Implemented but not runtime-verified.`
 - `Proposed only; no implementation exists yet.`
 - `External behavior may have changed; verify current documentation.`
 - `License compatibility has not been confirmed; do not copy code yet.`
-- `This conflicts with an accepted decision; add/supersede a decision before changing architecture.`
 
-That is preferable to a confident hallucination.
+Stop the unsupported claim, not the work.

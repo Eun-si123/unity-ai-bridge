@@ -1,15 +1,15 @@
 # Architecture Decisions
 
-> This file records decisions that future contributors and AI agents should not silently re-litigate or reverse without new evidence.
->
-> `STATUS.md` says what exists. `DESIGN.md` says how the system is intended to work. This file says **why key choices were made**.
+This file records important choices so future contributors and AI agents do not silently redesign the project from memory.
 
-## Decision status vocabulary
+`STATUS.md` says what exists. `DESIGN.md` says how the system is intended to work. This file says **why major choices were made**.
 
-- **Proposed** — candidate direction; implementation may not rely on it yet.
-- **Accepted** — current design baseline.
-- **Superseded** — replaced by a later numbered decision.
-- **Rejected** — explicitly considered and not selected.
+## Decision status
+
+- **Proposed** — candidate direction
+- **Accepted** — current design baseline
+- **Superseded** — replaced by a later decision
+- **Rejected** — considered and intentionally not selected
 
 ---
 
@@ -20,34 +20,28 @@
 
 ### Decision
 
-The Unity control core will use MCP-compatible/provider-neutral interfaces and must not embed ChatGPT-, Claude-, Gemini-, or other vendor-specific behavior into Unity command logic unless an interoperability constraint requires it.
+Unity command logic should use MCP-compatible/provider-neutral boundaries and avoid embedding ChatGPT-, Claude-, Gemini-, or other vendor-specific behavior unless interoperability requires it.
 
 ### Why
 
-The useful asset is reliable Unity control. Multiple AI clients can sit above the same core, and vendor capabilities can change independently.
-
-### Consequence
-
-Provider-specific integration code should remain thin and replaceable.
+Reliable Unity control is the reusable asset; AI-client ecosystems can change independently.
 
 ---
 
-## D-002 — Public open core, private hosted operations
+## D-002 — Public reusable core, private managed-service operations
 
 **Status:** Accepted  
 **Date:** 2026-08-22
 
 ### Decision
 
-`unity-ai-bridge` is the public open-core repository. `unity-ai-mcp-infra` is reserved for managed-service deployment/auth/operations.
+`unity-ai-bridge` is the public repository for reusable Unity/MCP behavior. `unity-ai-mcp-infra` is for managed-service-specific deployment, production provider wiring, policy, and operations.
 
-### Why
+The private repository must consume/deploy the public core through explicit interfaces/versioning rather than maintain a second private copy.
 
-This preserves self-hostability and public trust while preventing production deployment state and sensitive operations from contaminating the public repository.
+### Important terminology note
 
-### Consequence
-
-The private repository must consume/deploy the public core through a versioned interface rather than maintaining a private fork of core logic.
+A public GitHub repository is **not automatically open source**. The project license is still undecided. Until a `LICENSE` file is intentionally selected, describe this as a **public core / self-hostable design target**, not as a licensed open-source/open-core release.
 
 ---
 
@@ -58,15 +52,11 @@ The private repository must consume/deploy the public core through a versioned i
 
 ### Decision
 
-Unity-side automation will be implemented as a Unity Package Manager package written in C#, with Editor-side code responsible for Unity Editor API access.
+Unity-side automation will be implemented as a Unity Package Manager package in C#, with Editor-side code responsible for Unity Editor API access.
 
 ### Why
 
-Unity's editor APIs are native to C# and require lifecycle/main-thread awareness that belongs inside the Editor process.
-
-### Consequence
-
-Network/server code must not pretend it can safely manipulate Unity objects directly.
+Unity Editor APIs and lifecycle/main-thread behavior belong inside the Editor process.
 
 ---
 
@@ -77,29 +67,21 @@ Network/server code must not pretend it can safely manipulate Unity objects dire
 
 ### Decision
 
-Start the public MCP/server core in TypeScript using the official Model Context Protocol TypeScript SDK v2 line unless an implementation test demonstrates a concrete blocker.
+Start the public MCP/server core in TypeScript using the official Model Context Protocol TypeScript SDK v2 line unless implementation evidence shows a concrete blocker.
 
-Remote MCP should use Streamable HTTP. Exact runtime/minimum Node version will be pinned when source scaffolding is committed.
+Use Streamable HTTP for remote MCP.
 
-### Evidence considered
+### Evidence at decision time
 
-At the time of this decision, the official TypeScript SDK v2 documents support for the 2026-07-28 MCP revision and provides server/client packages for modern MCP. Official SDK documentation recommends Streamable HTTP for remote MCP servers.
-
-### Why
-
-- first-party MCP support,
-- strong schema validation/tooling,
-- practical remote deployment,
-- easy separation from Unity C#,
-- suitable for local/self-host and hosted gateway code.
+On 2026-08-22, official MCP TypeScript SDK v2 documentation identified v2 as the stable line for the 2026-07-28 protocol generation and documented Streamable HTTP support. Exact package/runtime versions are still to be pinned in source/lockfiles.
 
 ### Revisit trigger
 
-A concrete compatibility, deployment, performance, maintenance, or SDK limitation demonstrated by code/tests.
+A demonstrated compatibility, deployment, performance, maintenance, or SDK limitation.
 
 ---
 
-## D-005 — WebSocket first for Unity bridge transport
+## D-005 — WebSocket first for the Unity bridge
 
 **Status:** Accepted for first implementation  
 **Date:** 2026-08-22
@@ -108,15 +90,11 @@ A concrete compatibility, deployment, performance, maintenance, or SDK limitatio
 
 Define a transport-independent Unity bridge protocol and implement WebSocket first.
 
-Hosted mode should use an **outbound** Unity connection to avoid requiring ordinary users to configure inbound ports or router forwarding.
-
-### Why
-
-The bridge needs bidirectional commands/results and connection presence. WebSocket is broadly deployable and works for both localhost and remote gateway scenarios.
+Hosted mode should use an outbound Unity connection so ordinary users do not need inbound port forwarding.
 
 ### Consequence
 
-Tool semantics and command schemas must not depend on WebSocket-specific behavior.
+Tool semantics/command schemas must not depend on WebSocket-specific details.
 
 ---
 
@@ -125,17 +103,7 @@ Tool semantics and command schemas must not depend on WebSocket-specific behavio
 **Status:** Accepted  
 **Date:** 2026-08-22
 
-### Decision
-
-Network callbacks parse/validate/enqueue only. Unity Editor API mutations execute through a controlled main-thread dispatcher.
-
-### Why
-
-Unity editor state is main-thread-sensitive, and blocking/network work on the Editor UI thread creates freezes and race conditions.
-
-### Consequence
-
-Every Unity command handler must fit the dispatcher/queue lifecycle or explicitly document why it is safe outside it.
+Network callbacks may parse/validate/enqueue, but Unity Editor API mutation must execute through a controlled Unity main-thread boundary unless a specific operation is proven safe elsewhere.
 
 ---
 
@@ -144,89 +112,53 @@ Every Unity command handler must fit the dispatcher/queue lifecycle or explicitl
 **Status:** Accepted  
 **Date:** 2026-08-22
 
-### Decision
+Begin with roughly 10–20 stable domain tools/tool families rather than hundreds of tiny tools.
 
-Begin with roughly 10–20 stable domain tools/tool families rather than exposing hundreds of tiny tools.
-
-### Why
-
-A giant tool surface increases schema context, maintenance, compatibility, review, and safety cost. Many Unity operations can share well-designed domain schemas.
-
-### Consequence
-
-Tool count is not a project success metric. Advanced domains are added after the underlying execution model is proven reliable.
+Tool count is not a success metric. Reliability, schema quality, recovery, and usefulness are.
 
 ---
 
-## D-008 — No arbitrary C# execution in the early public core
+## D-008 — No arbitrary C# execution as an early default escape hatch
 
 **Status:** Accepted  
 **Date:** 2026-08-22
 
-### Decision
+Arbitrary C# execution is not part of the early default public surface.
 
-Do not use arbitrary C# execution as the default escape hatch for missing tools in early public releases.
-
-### Why
-
-It greatly expands capability, but also bypasses bounded schemas, permission boundaries, reviewability, and safety controls.
-
-### Consequence
-
-If arbitrary execution is added later it must be classified as privileged, explicitly gated, and reviewed separately.
+If introduced later it must be a separately reviewed/gated privileged capability because it bypasses bounded schemas and greatly expands authority.
 
 ---
 
-## D-009 — Request identity and ambiguous-retry protection
+## D-009 — Mutation request identity and ambiguous-retry protection
 
 **Status:** Accepted  
 **Date:** 2026-08-22
 
-### Decision
+Mutation requests require request identity plus operation-appropriate deduplication/idempotency behavior.
 
-Mutation requests need request identity and operation-appropriate idempotency/deduplication behavior from the first real bridge protocol.
-
-### Why
-
-A timeout can occur after Unity performs a mutation but before the response reaches the caller. Blind retry could duplicate or repeat destructive state changes.
-
-### Consequence
-
-Transport retry logic cannot simply re-execute every write.
+A timeout after Unity changed state but before the response arrived must not cause a blind retry to duplicate the mutation.
 
 ---
 
-## D-010 — Stable target resolution, not InstanceID-only
+## D-010 — Durable target resolution, not `InstanceID` alone
 
 **Status:** Accepted  
 **Date:** 2026-08-22
 
-### Decision
+Do not use Unity `InstanceID` as the sole durable protocol identity across reloads, scene changes, or restarts.
 
-Do not use Unity `InstanceID` as the sole durable protocol identity across reloads, scene changes, or editor restarts.
-
-### Direction
-
-Use asset GUIDs, `GlobalObjectId` where appropriate, scene/hierarchy identity plus validation metadata, and component ownership/type information depending on target class.
-
-### Consequence
-
-Object resolution is a first-class subsystem rather than helper code hidden inside individual tools.
+Use stronger identity appropriate to the target, such as asset GUIDs, `GlobalObjectId` where suitable, scene/hierarchy identity plus validation metadata, and component ownership/type information.
 
 ---
 
-## D-011 — Domain reload and reconnection are normal lifecycle events
+## D-011 — Domain reload and reconnect are normal lifecycle
 
 **Status:** Accepted  
 **Date:** 2026-08-22
 
-### Decision
+Compilation/domain reload, editor restart, sleep/network changes, stale sockets, and reconnects are expected states.
 
-Compilation/domain reload, editor restart, sleep/network transitions, and stale sockets are expected states. The connection protocol must recover without treating every reconnect as a new unrelated user/editor.
-
-### Consequence
-
-Pending work, connection generations, and compile state require explicit modeling.
+Pending work and connection generations must be modeled explicitly enough that stale connections cannot act as current ones.
 
 ---
 
@@ -235,72 +167,70 @@ Pending work, connection generations, and compile state require explicit modelin
 **Status:** Accepted  
 **Date:** 2026-08-22
 
-### Decision
-
-Where Unity supports it, mutations should integrate with Undo and report dirty/unsaved state. Saving is a distinct explicit action.
-
-### Why
-
-AI-generated editor mutations must be recoverable, and successful mutation is not equivalent to persistence on disk.
+Where Unity supports it, mutations should integrate with Undo and report dirty/unsaved state. Saving is a distinct explicit operation.
 
 ---
 
-## D-013 — Easy Connect is the intended default UX, not the first engineering milestone
+## D-013 — Easy Connect is the product UX target, not the first engineering milestone
 
 **Status:** Accepted  
 **Date:** 2026-08-22
 
-### Decision
+Begin with a narrow local end-to-end path. Add hosted pairing/auth/routing only after the Unity execution path is trustworthy.
 
-The product target is a beginner pairing flow with no port/MCP configuration, but engineering begins with a narrow local end-to-end path.
-
-### Why
-
-Remote auth/routing can hide bugs in the more fundamental Unity execution path. The local path should become trustworthy before hosted complexity is added.
+The eventual default user experience should hide ports/MCP configuration where platform support permits it.
 
 ---
 
-## D-014 — TeamForge is not a dependency
+## D-014 — TeamForge is not an early dependency
 
 **Status:** Accepted  
 **Date:** 2026-08-22
 
-### Decision
-
-Unity AI Bridge must not depend on or integrate with TeamForge during early development.
-
-### Why
-
-They are separate projects with different readiness and failure domains. Coupling them would increase scope and make debugging harder.
+Unity AI Bridge must develop independently of TeamForge during early phases.
 
 ### Revisit trigger
 
-Both projects are independently stable and there is a concrete user-facing integration requirement.
+Both projects are independently stable and a concrete user-facing integration requirement exists.
 
 ---
 
-## D-015 — Roadmap dates are not promises
+## D-015 — Roadmap uses capability gates, not invented ETAs
+
+**Status:** Accepted  
+**Date:** 2026-08-22
+
+Roadmap phases advance based on reproducible capability/verification gates rather than arbitrary completion dates.
+
+---
+
+## D-016 — Research references are separate from incorporated third-party material
 
 **Status:** Accepted  
 **Date:** 2026-08-22
 
 ### Decision
 
-The public roadmap uses capability/phase gates rather than invented completion dates.
+Use `REFERENCES.md` to record external projects/materials that influence research, requirements, interoperability thinking, or known-failure analysis.
+
+Do not create or populate a `THIRD_PARTY_NOTICES.md` merely because another repository was studied.
+
+If third-party implementation/code/docs/assets are actually incorporated later, review the exact source/revision/license and add whatever license/notice files are genuinely required by that incorporated material.
 
 ### Why
 
-This project is pre-alpha and technical unknowns are expected. False ETAs create pressure to mark unverified work complete.
+A reference list and a legal redistribution notice serve different purposes. Mixing them can falsely imply that external code is included in this project.
 
 ---
 
-## Adding or changing a decision
+## Changing a decision
 
-When a meaningful architecture decision changes:
+When a meaningful choice changes:
 
-1. do not rewrite the old entry to pretend the old choice never existed,
+1. gather the new evidence,
 2. add a new numbered decision,
-3. mark the old decision `Superseded`,
-4. link the replacement,
-5. explain the evidence that caused the change,
-6. update `DESIGN.md`, `STATUS.md`, and code/tests where applicable.
+3. mark the old decision `Superseded` when appropriate,
+4. explain the trade-off/migration impact,
+5. update `DESIGN.md`, `STATUS.md`, code/tests, and other affected docs consistently.
+
+Do not rewrite history merely to make the latest architecture look inevitable.
