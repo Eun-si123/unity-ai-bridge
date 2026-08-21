@@ -1,0 +1,40 @@
+# Unity AI Bridge — AI entrypoint
+
+Status: pre-alpha repository bootstrap.
+
+Before making changes, read in this order:
+1. AGENTS.md
+2. STATUS.md
+3. DESIGN.md
+4. DECISIONS.md
+5. ROADMAP.md
+6. ARCHITECTURE.md
+7. CODEMAP.md
+8. THIRD_PARTY_NOTICES.md
+9. README.md
+10. CHANGELOG.md
+
+Critical rules:
+- Repository evidence beats memory, chat history, and plans.
+- STATUS.md is the canonical implementation/verification truth.
+- DESIGN.md is the durable detailed design, not proof of implementation.
+- DECISIONS.md records accepted architecture choices; do not silently reverse them.
+- ROADMAP.md is future direction and capability gates, not proof of implementation.
+- Do not claim a feature exists unless STATUS.md and repository evidence support it.
+- Do not claim tests passed unless they were actually run and the result is recorded.
+- Do not invent Unity APIs, MCP tools, files, endpoints, versions, environment variables, or test results.
+- Do not copy external implementation code until its exact license/provenance is recorded in THIRD_PARTY_NOTICES.md.
+- Treat Unity API mutations as main-thread-sensitive.
+- Expect compilation/domain reload and reconnection as normal lifecycle events.
+- Protect mutations against ambiguous retries/duplicate execution.
+- Prefer stable target identity rather than Unity InstanceID alone.
+- Prefer Undo-capable, recoverable editor mutations and report dirty state.
+- Never commit secrets or production credentials.
+- Keep the initial scope small: prove one end-to-end MCP -> Unity path before expanding tool count or hosted complexity.
+- TeamForge is not an early dependency.
+
+Canonical implementation status: STATUS.md
+Mandatory contributor rules: AGENTS.md
+Detailed design memory: DESIGN.md
+Architecture rationale/history: DECISIONS.md
+Public future plan: ROADMAP.md
