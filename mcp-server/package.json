@@ -10,13 +10,15 @@
     "build": "tsc -p tsconfig.json",
     "test": "npm run build && node --test dist/tests/*.test.js",
     "start": "node dist/src/index.js",
-    "verify:unity": "npm run build && node dist/src/dev/verify-unity.js"
+    "verify:unity": "npm run build && node dist/src/dev/verify-unity.js",
+    "verify:mcp-unity": "npm run build && node dist/src/dev/verify-mcp-unity.js"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "2.0.0",
     "ws": "8.21.3"
   },
   "devDependencies": {
+    "@modelcontextprotocol/client": "2.0.0",
     "@types/node": "24.13.3",
     "@types/ws": "8.18.1",
     "typescript": "7.0.2"
