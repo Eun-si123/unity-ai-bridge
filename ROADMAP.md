@@ -82,11 +82,11 @@ Verified foundation slice:
 - ✅ Domain-reload reconnect with stable editor identity and new `connectionGeneration`
 - ✅ Post-reconnect command success on the new generation
 
-Remaining minimum capabilities:
+Minimum capabilities:
 
 - ✅ Unity/editor status
 - ✅ Active scene information
-- ⬜ Hierarchy read — next active slice (`feat/phase1-hierarchy`)
+- 🟨 Hierarchy read — implementation, bounded traversal, identity metadata, simulated tests, and real verifier exist on `feat/phase1-hierarchy`; real Unity compile/runtime verification pending
 - ⬜ Create a simple GameObject
 - ⬜ Read Console/compiler errors
 - ✅ Structured error model for the current read/routing path
@@ -104,7 +104,7 @@ A clean test project can perform the minimum capabilities repeatedly with reprod
 
 **State:** ⬜ Planned as a full phase; some connection-lifecycle groundwork was completed early in Phase 1
 
-- 🟨 Main-thread dispatcher hardened — verified for the current `editor.status` read path; broader tool coverage pending
+- 🟨 Main-thread dispatcher hardened — verified for the current `editor.status` read path; hierarchy uses the same boundary but is pending real runtime verification
 - ⬜ Serialized conflicting writes
 - ⬜ Stable object resolver
 - ⬜ Undo integration
