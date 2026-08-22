@@ -19,6 +19,8 @@ Current automated coverage should verify at minimum:
 - simulated Unity `hello` registration,
 - request ID and route propagation for `editor.status`,
 - simulated structured result correlation,
+- bounded `scene.hierarchy` request/result propagation,
+- hierarchy input-limit validation,
 - explicit failure when no Unity Editor is connected,
 - explicit stale-generation error propagation.
 
@@ -116,7 +118,40 @@ Expected success output includes:
 [Unity AI Bridge] Reconnect + stale-generation verification PASS.
 ```
 
-## 6. Evidence format
+## 6. Real MCP `unity_get_hierarchy` end-to-end check
+
+Use the current hierarchy branch/package source and keep the Unity Editor open on a scene whose Hierarchy window you can compare against. First confirm Unity has finished compiling the branch with no Unity AI Bridge compile errors, then run from the repository root:
+
+```text
+npm --prefix mcp-server ci
+npm --prefix mcp-server run verify:hierarchy
+```
+
+The verifier launches the normal MCP server over stdio, confirms `unity_get_hierarchy` is advertised, waits for the real Unity Editor connection, calls the tool with `maxDepth=8` and `maxNodes=200`, and validates the structured hierarchy result.
+
+Expected success output includes:
+
+```text
+[Unity AI Bridge] MCP handshake PASS; unity_get_hierarchy is advertised.
+[Unity AI Bridge] MCP unity_get_hierarchy PASS:
+{
+  "sceneName": "...",
+  "scenePath": "...",
+  "rootCount": 0,
+  "returnedNodeCount": 0,
+  "maxDepth": 8,
+  "maxNodes": 200,
+  "truncatedByDepth": false,
+  "truncatedByNodes": false,
+  "nodes": []
+}
+```
+
+The exact counts and node list depend on the live scene. For PASS, compare the returned scene name/path, root GameObject names, parent/child ordering, and active states with the actual Unity Hierarchy. Every returned node should contain a `globalObjectId` string and a transient `instanceId`. `hierarchyPath` and `instanceId` are informational/session-scoped aids and must not be treated as sole durable identity.
+
+If the scene exceeds the requested bounds, `truncatedByDepth` or `truncatedByNodes` may legitimately be true. That is not a failure by itself.
+
+## 7. Evidence format
 
 Every real verification entry added to `STATUS.md` should record:
 
