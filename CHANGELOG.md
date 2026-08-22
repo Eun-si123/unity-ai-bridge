@@ -13,6 +13,45 @@ The project is pre-alpha. Internal package version `0.0.1` does not represent a 
 - Clarified that the separate private `unity-ai-mcp-infra` repository is not automatically licensed under the public core's Apache-2.0 license.
 - Closed the Phase 0 "project license selected" governance item; real Unity 6000.3.21f1 compile verification remains open.
 
+### Phase 1 — Local Unity Heartbeat / `editor.status` — In progress
+
+#### Added
+
+- Local WebSocket bridge server bound to `127.0.0.1:5081`.
+- Unity outbound `ClientWebSocket` connection/reconnect loop.
+- Bridge protocol v0 `hello` schema with editor identity and `connectionGeneration`.
+- Unity Editor main-thread dispatcher boundary for Unity API access.
+- `editor.status` bridge operation returning Unity version, project name, active scene, Play Mode state, and compilation state.
+- MCP `unity_get_status` tool wired through the local bridge.
+- Request ID correlation, deadlines/timeouts, disconnect handling, stale-generation rejection, bounded payloads, and serialized Unity-side sends.
+- Simulated Unity WebSocket integration tests covering hello/status round-trip and the no-editor failure path.
+- Phase 1 design document and CI workflow.
+- `docs/TESTING.md` with repeatable Node, Unity compile, real bridge, MCP end-to-end, and reconnect verification procedures.
+
+#### Dependencies
+
+- Added exact `ws` `8.21.3` runtime dependency.
+- Added exact `@types/ws` `8.18.1` development dependency.
+- Refreshed `mcp-server/package-lock.json` with the Phase 1 dependency graph.
+
+#### Fixed
+
+- Corrected WebSocket send callback handling so both `null` and `undefined` are treated as successful sends; CI exposed the original `reject(null)` failure during the status round-trip test.
+- Made WebSocket test/server teardown deterministic so transport cleanup details do not mask request-path failures.
+- Rebuilt the Phase 1 branch on the squash-merged Phase 0 `main`, and again on the Apache-2.0 licensing `main`, so PR #4 contains Phase 1 changes without losing current governance state.
+
+#### Verification
+
+- Current Phase 1 code tree was re-verified on 2026-08-22 before the Apache-2.0 documentation rebase.
+- Node Verification run `32564186863`: **PASS**.
+- Phase 1 Local Bridge Verification run `32564186926`: **PASS**.
+- Lockfile generation/refresh, `npm ci`, TypeScript build, and all Node tests: **PASS**.
+- Simulated Unity `hello -> editor.status -> structured result`: **PASS**.
+- Explicit no-editor failure path: **PASS**.
+- Real Unity 6000.3.21f1 package compile/connect: **Not yet verified**.
+- Real MCP `unity_get_status` against a live Unity Editor: **Not yet verified**.
+- Domain reload/editor restart reconnection with a new connection generation: **Not yet verified**.
+
 ## Phase 0 — Foundation Runtime Scaffold — 2026-08-22
 
 ### Added

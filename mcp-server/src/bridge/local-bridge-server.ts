@@ -1,0 +1,297 @@
+import { randomUUID } from "node:crypto";
+import type { AddressInfo } from "node:net";
+
+import { WebSocket, WebSocketServer, type RawData } from "ws";
+
+import {
+  BRIDGE_PROTOCOL_VERSION,
+  type BridgeCommandEnvelope,
+  type BridgeResultEnvelope,
+} from "../protocol/bridge.js";
+
+export interface BridgeHello {
+  type: "hello";
+  protocolVersion: typeof BRIDGE_PROTOCOL_VERSION;
+  editorId: string;
+  connectionGeneration: number;
+  unityVersion: string;
+  projectName: string;
+}
+
+export interface EditorStatusPayload {
+  unityVersion: string;
+  projectName: string;
+  activeScene: string;
+  isPlaying: boolean;
+  isCompiling: boolean;
+}
+
+interface ActiveEditor {
+  socket: WebSocket;
+  hello: BridgeHello;
+}
+
+interface PendingRequest {
+  resolve: (value: unknown) => void;
+  reject: (error: Error) => void;
+  timer: NodeJS.Timeout;
+}
+
+export class LocalBridgeServer {
+  private readonly server: WebSocketServer;
+  private readonly pending = new Map<string, PendingRequest>();
+  private activeEditor: ActiveEditor | undefined;
+
+  public constructor(
+    private readonly host = "127.0.0.1",
+    private readonly requestedPort = 5081,
+  ) {
+    this.server = new WebSocketServer({
+      host: this.host,
+      port: this.requestedPort,
+      maxPayload: 1024 * 1024,
+      perMessageDeflate: false,
+    });
+
+    this.server.on("connection", (socket) => this.onConnection(socket));
+  }
+
+  public async start(): Promise<number> {
+    if (this.server.address() !== null) {
+      return this.port;
+    }
+
+    await new Promise<void>((resolve, reject) => {
+      const onListening = (): void => {
+        cleanup();
+        resolve();
+      };
+      const onError = (error: Error): void => {
+        cleanup();
+        reject(error);
+      };
+      const cleanup = (): void => {
+        this.server.off("listening", onListening);
+        this.server.off("error", onError);
+      };
+
+      this.server.once("listening", onListening);
+      this.server.once("error", onError);
+    });
+
+    return this.port;
+  }
+
+  public get port(): number {
+    const address = this.server.address();
+    if (address === null || typeof address === "string") {
+      throw new Error("Local bridge server is not listening.");
+    }
+
+    return (address as AddressInfo).port;
+  }
+
+  public get connectedEditor(): BridgeHello | undefined {
+    return this.activeEditor?.hello;
+  }
+
+  public async waitForEditor(timeoutMs = 5000): Promise<BridgeHello> {
+    const current = this.activeEditor?.hello;
+    if (current !== undefined) {
+      return current;
+    }
+
+    return await new Promise<BridgeHello>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.server.off("editor-connected", onEditorConnected);
+        reject(new Error(`No Unity Editor connected within ${timeoutMs} ms.`));
+      }, timeoutMs);
+
+      const onEditorConnected = (hello: BridgeHello): void => {
+        clearTimeout(timeout);
+        resolve(hello);
+      };
+
+      this.server.once("editor-connected", onEditorConnected);
+    });
+  }
+
+  public async requestEditorStatus(timeoutMs = 5000): Promise<EditorStatusPayload> {
+    const editor = this.activeEditor;
+    if (editor === undefined || editor.socket.readyState !== WebSocket.OPEN) {
+      throw new Error("No Unity Editor is connected to the local bridge.");
+    }
+
+    const requestId = randomUUID();
+    const command: BridgeCommandEnvelope = {
+      protocolVersion: BRIDGE_PROTOCOL_VERSION,
+      requestId,
+      operation: "editor.status",
+      arguments: {},
+      risk: "read",
+      route: {
+        editorId: editor.hello.editorId,
+        connectionGeneration: editor.hello.connectionGeneration,
+      },
+      deadlineUnixMs: Date.now() + timeoutMs,
+    };
+
+    const result = await new Promise<unknown>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pending.delete(requestId);
+        reject(new Error(`editor.status timed out after ${timeoutMs} ms.`));
+      }, timeoutMs);
+
+      this.pending.set(requestId, { resolve, reject, timer });
+
+      editor.socket.send(JSON.stringify(command), (error) => {
+        if (error == null) {
+          return;
+        }
+
+        const pending = this.pending.get(requestId);
+        if (pending !== undefined) {
+          clearTimeout(pending.timer);
+          this.pending.delete(requestId);
+          pending.reject(error);
+        }
+      });
+    });
+
+    if (!isEditorStatusPayload(result)) {
+      throw new Error("Unity returned an invalid editor.status payload.");
+    }
+
+    return result;
+  }
+
+  public async stop(): Promise<void> {
+    for (const pending of this.pending.values()) {
+      clearTimeout(pending.timer);
+      pending.reject(new Error("Local bridge server stopped before the request completed."));
+    }
+    this.pending.clear();
+
+    for (const client of this.server.clients) {
+      client.terminate();
+    }
+
+    await new Promise<void>((resolve) => {
+      this.server.close(() => resolve());
+    });
+  }
+
+  private onConnection(socket: WebSocket): void {
+    socket.on("message", (data) => this.onMessage(socket, data));
+    socket.on("close", () => {
+      if (this.activeEditor?.socket === socket) {
+        this.activeEditor = undefined;
+        this.rejectPendingForDisconnect();
+      }
+    });
+  }
+
+  private onMessage(socket: WebSocket, data: RawData): void {
+    let message: unknown;
+    try {
+      message = JSON.parse(data.toString());
+    } catch {
+      socket.close(1003, "invalid JSON");
+      return;
+    }
+
+    if (isBridgeHello(message)) {
+      const previous = this.activeEditor;
+      if (previous !== undefined && previous.socket !== socket) {
+        previous.socket.close(1000, "replaced by newer editor connection");
+      }
+
+      this.activeEditor = { socket, hello: message };
+      this.server.emit("editor-connected", message);
+      return;
+    }
+
+    if (isBridgeResultEnvelope(message)) {
+      const pending = this.pending.get(message.requestId);
+      if (pending === undefined) {
+        return;
+      }
+
+      clearTimeout(pending.timer);
+      this.pending.delete(message.requestId);
+
+      if (message.ok) {
+        pending.resolve(message.result);
+      } else {
+        pending.reject(
+          new Error(
+            `${message.error.category}/${message.error.code}: ${message.error.message}`,
+          ),
+        );
+      }
+    }
+  }
+
+  private rejectPendingForDisconnect(): void {
+    for (const pending of this.pending.values()) {
+      clearTimeout(pending.timer);
+      pending.reject(new Error("Unity Editor disconnected before the request completed."));
+    }
+    this.pending.clear();
+  }
+}
+
+function isBridgeHello(value: unknown): value is BridgeHello {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  return (
+    candidate.type === "hello" &&
+    candidate.protocolVersion === BRIDGE_PROTOCOL_VERSION &&
+    typeof candidate.editorId === "string" &&
+    candidate.editorId.length > 0 &&
+    typeof candidate.connectionGeneration === "number" &&
+    Number.isSafeInteger(candidate.connectionGeneration) &&
+    typeof candidate.unityVersion === "string" &&
+    typeof candidate.projectName === "string"
+  );
+}
+
+function isBridgeResultEnvelope(value: unknown): value is BridgeResultEnvelope {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  if (
+    candidate.protocolVersion !== BRIDGE_PROTOCOL_VERSION ||
+    typeof candidate.requestId !== "string" ||
+    typeof candidate.ok !== "boolean" ||
+    !Array.isArray(candidate.warnings)
+  ) {
+    return false;
+  }
+
+  if (candidate.ok) {
+    return candidate.error === undefined;
+  }
+
+  return typeof candidate.error === "object" && candidate.error !== null;
+}
+
+function isEditorStatusPayload(value: unknown): value is EditorStatusPayload {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.unityVersion === "string" &&
+    typeof candidate.projectName === "string" &&
+    typeof candidate.activeScene === "string" &&
+    typeof candidate.isPlaying === "boolean" &&
+    typeof candidate.isCompiling === "boolean"
+  );
+}

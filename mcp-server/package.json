@@ -8,14 +8,16 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "npm run build && node --test dist/tests/bridge-protocol.test.js",
+    "test": "npm run build && node --test dist/tests/*.test.js",
     "start": "node dist/src/index.js"
   },
   "dependencies": {
-    "@modelcontextprotocol/server": "2.0.0"
+    "@modelcontextprotocol/server": "2.0.0",
+    "ws": "8.21.3"
   },
   "devDependencies": {
     "@types/node": "24.13.3",
+    "@types/ws": "8.18.1",
     "typescript": "7.0.2"
   }
 }
