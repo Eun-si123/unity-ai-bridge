@@ -1,0 +1,145 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Unity AI Bridge Result v0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "protocolVersion",
+    "requestId",
+    "ok",
+    "warnings"
+  ],
+  "properties": {
+    "protocolVersion": {
+      "const": "0"
+    },
+    "requestId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "ok": {
+      "type": "boolean"
+    },
+    "result": {},
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "changedTargets": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "dirtyState": {
+      "type": "string",
+      "enum": [
+        "unchanged",
+        "dirty",
+        "unknown"
+      ]
+    },
+    "undo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "available"
+      ],
+      "properties": {
+        "available": {
+          "type": "boolean"
+        },
+        "groupName": {
+          "type": "string"
+        }
+      }
+    },
+    "compileState": {
+      "type": "string",
+      "enum": [
+        "idle",
+        "compiling",
+        "failed",
+        "unknown"
+      ]
+    },
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "category",
+        "code",
+        "message"
+      ],
+      "properties": {
+        "category": {
+          "type": "string",
+          "enum": [
+            "validation",
+            "policy",
+            "routing",
+            "stale_target",
+            "timeout",
+            "unity_api",
+            "compile_reload",
+            "disconnected",
+            "unsupported",
+            "transport",
+            "internal"
+          ]
+        },
+        "code": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "details": {}
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "ok": {
+            "const": false
+          }
+        },
+        "required": [
+          "ok"
+        ]
+      },
+      "then": {
+        "required": [
+          "error"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "ok": {
+            "const": true
+          }
+        },
+        "required": [
+          "ok"
+        ]
+      },
+      "then": {
+        "not": {
+          "required": [
+            "error"
+          ]
+        }
+      }
+    }
+  ]
+}
