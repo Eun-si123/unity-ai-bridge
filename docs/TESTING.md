@@ -35,32 +35,64 @@ Target editor: Unity 6000.3.21f1.
 
 PASS requires the package to load and the Editor assembly to compile successfully.
 
-## 3. Real local bridge connection
+## 3. Real local bridge + `editor.status` verification helper
 
-1. Install Node dependencies from the committed lockfile.
-2. Build the MCP/server package.
-3. Start the local MCP/server process.
-4. Open the Unity project with the Unity AI Bridge package installed.
-5. Confirm Unity establishes an outbound connection to `ws://127.0.0.1:5081`.
-6. Confirm the server receives a protocol v0 `hello` containing a non-empty `editorId`, current `connectionGeneration`, Unity version, and project name.
+With the Unity project open and the package loaded, run from the repository root:
 
-PASS requires a real Unity Editor hello, not a simulated WebSocket peer.
+```text
+npm --prefix mcp-server ci
+npm --prefix mcp-server run verify:unity
+```
 
-## 4. Real `unity_get_status` end-to-end check
+The helper builds the TypeScript server, listens on `ws://127.0.0.1:5081`, waits up to 30 seconds for the real Unity Editor's protocol v0 `hello`, prints the received editor identity/version/project data, sends a real `editor.status` command, and prints the structured result.
 
-With the real Unity Editor connected:
+Expected success output includes:
 
-1. Invoke MCP tool `unity_get_status`.
-2. Confirm the bridge emits an `editor.status` command with a unique request ID.
-3. Confirm Unity executes the status read on the Editor main thread.
-4. Compare the returned Unity version, project name, active scene, Play Mode state, and compilation state with the actual Editor state.
-5. Repeat after changing the active scene or Play Mode state where practical.
+```text
+[Unity AI Bridge] Verification bridge listening on ws://127.0.0.1:5081
+[Unity AI Bridge] Real Unity hello received:
+...
+[Unity AI Bridge] editor.status PASS:
+...
+```
+
+Compare the printed status against the open Editor:
+
+- Unity version,
+- project name,
+- active scene,
+- Play Mode state,
+- compilation state.
+
+This helper verifies the real Unity WebSocket/bridge path. It does not by itself prove the MCP stdio tool transport.
+
+## 4. Real MCP `unity_get_status` end-to-end check
+
+Start the normal MCP/server process:
+
+```text
+npm --prefix mcp-server run build
+npm --prefix mcp-server start
+```
+
+The process should report:
+
+```text
+[Unity AI Bridge] Local bridge listening on ws://127.0.0.1:5081
+```
+
+With a real Unity Editor connected, invoke MCP tool `unity_get_status` from an MCP client and:
+
+1. confirm the bridge emits an `editor.status` command with a unique request ID,
+2. confirm Unity executes the status read on the Editor main thread,
+3. compare returned Unity version, project name, active scene, Play Mode state, and compilation state with the actual Editor state,
+4. repeat after changing the active scene or Play Mode state where practical.
 
 PASS requires the MCP result to match re-read Editor state.
 
 ## 5. Reconnect / domain reload check
 
-1. Record the current `editorId` and `connectionGeneration`.
+1. Record the current `editorId` and `connectionGeneration` from a successful real hello.
 2. Trigger a script/domain reload or restart the Editor.
 3. Confirm the old connection closes or becomes unusable.
 4. Confirm Unity reconnects automatically.
