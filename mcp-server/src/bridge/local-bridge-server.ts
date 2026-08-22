@@ -7,6 +7,7 @@ import {
   BRIDGE_PROTOCOL_VERSION,
   type BridgeCommandEnvelope,
   type BridgeResultEnvelope,
+  type BridgeRoute,
 } from "../protocol/bridge.js";
 
 export interface BridgeHello {
@@ -117,11 +118,21 @@ export class LocalBridgeServer {
   }
 
   public async requestEditorStatus(timeoutMs = 5000): Promise<EditorStatusPayload> {
-    const editor = this.activeEditor;
-    if (editor === undefined || editor.socket.readyState !== WebSocket.OPEN) {
-      throw new Error("No Unity Editor is connected to the local bridge.");
-    }
+    const editor = this.requireActiveEditor();
+    return await this.requestEditorStatusForRoute(
+      {
+        editorId: editor.hello.editorId,
+        connectionGeneration: editor.hello.connectionGeneration,
+      },
+      timeoutMs,
+    );
+  }
 
+  public async requestEditorStatusForRoute(
+    route: BridgeRoute,
+    timeoutMs = 5000,
+  ): Promise<EditorStatusPayload> {
+    const editor = this.requireActiveEditor();
     const requestId = randomUUID();
     const command: BridgeCommandEnvelope = {
       protocolVersion: BRIDGE_PROTOCOL_VERSION,
@@ -129,10 +140,7 @@ export class LocalBridgeServer {
       operation: "editor.status",
       arguments: {},
       risk: "read",
-      route: {
-        editorId: editor.hello.editorId,
-        connectionGeneration: editor.hello.connectionGeneration,
-      },
+      route,
       deadlineUnixMs: Date.now() + timeoutMs,
     };
 
@@ -179,6 +187,14 @@ export class LocalBridgeServer {
     await new Promise<void>((resolve) => {
       this.server.close(() => resolve());
     });
+  }
+
+  private requireActiveEditor(): ActiveEditor {
+    const editor = this.activeEditor;
+    if (editor === undefined || editor.socket.readyState !== WebSocket.OPEN) {
+      throw new Error("No Unity Editor is connected to the local bridge.");
+    }
+    return editor;
   }
 
   private onConnection(socket: WebSocket): void {
