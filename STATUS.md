@@ -17,7 +17,7 @@ Do not infer implementation from README examples, design diagrams, decisions, ro
 **Phase 1 — Minimal local end-to-end**  
 Overall status: **In progress**
 
-Phase 0 was squash-merged to `main` on 2026-08-22. Its foundation checks are verified and the public repository license is **Apache License 2.0**. The heartbeat/status slice is fully runtime-verified on Windows / Unity 6000.3.21f1. The hierarchy-read slice is also now runtime-verified on Windows / Unity 6000.3.21f1 after fixing a Unity 6000.3 `GlobalObjectId.GetGlobalObjectIdsSlow` signature mismatch discovered by the real compile check. GameObject create and Console/compiler read remain planned.
+Phase 0 was squash-merged to `main` on 2026-08-22. Its foundation checks are verified and the public repository license is **Apache License 2.0**. The heartbeat/status and hierarchy-read slices are runtime-verified on Windows / Unity 6000.3.21f1. The first bounded write slice, empty root GameObject creation with explicit mutation identity and duplicate-retry protection, is also runtime-verified on Windows / Unity 6000.3.21f1. Console/compiler diagnostics remain the final planned Phase 1 minimum capability.
 
 ## What exists now
 
@@ -26,24 +26,25 @@ Phase 0 was squash-merged to `main` on 2026-08-22. Its foundation checks are ver
 | Public GitHub repository | Verified | Repository exists and accepts commits. |
 | Public-core license | Implemented | Root `LICENSE` is Apache License 2.0. The separate private `unity-ai-mcp-infra` repository is outside this repository's automatic license boundary. |
 | Core design/docs | Implemented | `AGENTS.md`, `DESIGN.md`, `DECISIONS.md`, `ROADMAP.md`, `CODEMAP.md`, `REFERENCES.md`. |
-| Unity Editor package scaffold | Verified manually | Package Manager load and Unity AI Bridge Editor assembly compilation passed in Unity 6000.3.21f1 on Windows at revision `059727365c025eb1d18013371fe95e055517e570`; the hierarchy additions were subsequently compiled successfully after the Unity 6000.3 API compatibility fix. |
-| Initial Unity target | Verified for current Phase 1 read slices | Unity 6000.3.21f1 compiled the package and completed real WebSocket/status, MCP status, reconnect lifecycle, and live hierarchy verification. Broader compatibility remains unverified. |
-| Bridge protocol v0 | Implemented | Command/result schemas, TypeScript/C# protocol types/constants, and editor-status/hierarchy fixtures exist. |
+| Unity Editor package scaffold | Verified manually | Package Manager load and Unity AI Bridge Editor assembly compilation passed in Unity 6000.3.21f1 on Windows; later hierarchy and GameObject-create additions also compiled in the same target during their real verification runs. |
+| Initial Unity target | Verified for current Phase 1 slices | Unity 6000.3.21f1 completed real WebSocket/status, MCP status, reconnect lifecycle, hierarchy read, and bounded GameObject create/dedup verification. Broader compatibility remains unverified. |
+| Bridge protocol v0 | Implemented | Command/result schemas, TypeScript/C# protocol types/constants, and current operation fixtures/docs exist. |
 | MCP/server scaffold | Verified | Phase 0 Node 24.19.0 install/build/tests passed in Actions run `32562797071`. |
 | Phase 1 dependency lockfile | Verified | `mcp-server/package-lock.json` contains the pinned Phase 1 dependency graph and has been consumed by passing Phase 1 CI revisions. |
-| Local WebSocket bridge server | Verified for status and hierarchy | Status path is verified in real Unity. `scene.hierarchy` routing/result validation passed simulated Node coverage and the real MCP-to-Unity hierarchy verifier. |
+| Local WebSocket bridge server | Verified for current Phase 1 slices | Status, hierarchy, and `gameObject.create` requests have completed through the real local bridge against Unity 6000.3.21f1. |
 | Unity outbound WebSocket connection | Verified manually | Real `ClientWebSocket` connection, reconnect after domain reload, and renewed hello succeeded on Windows / Unity 6000.3.21f1. |
-| Unity main-thread dispatcher | Verified for `editor.status` and hierarchy read | Real status and hierarchy requests completed through the dispatcher-backed Unity main-thread path. |
+| Unity main-thread dispatcher | Verified for status, hierarchy, and create | Real read operations and the first write operation completed through the dispatcher-backed Unity main-thread path. |
 | `editor.status` bridge operation | Verified manually | Returned Unity `6000.3.21f1`, active scene `Assets/Scenes/SampleScene.unity`, `isPlaying=false`, and `isCompiling=false` before and after reconnect. |
 | MCP `unity_get_status` | Verified manually | Official MCP TypeScript client completed stdio handshake, confirmed the tool was advertised, called `unity_get_status`, and received matching live Unity structured content. |
-| `scene.hierarchy` bridge operation | Verified manually | Live `SampleScene` returned three root GameObjects in sibling order with bounded preorder metadata, non-empty `GlobalObjectId` values, and no truncation under default limits. |
-| MCP `unity_get_hierarchy` | Verified manually | The real MCP stdio verifier returned the live active-scene hierarchy from Unity 6000.3.21f1 with `rootCount=3`, `returnedNodeCount=3`, `maxDepth=8`, `maxNodes=200`, and both truncation flags false. |
-| Hierarchy object identity | Verified for the tested saved scene | Each returned node had a Unity `GlobalObjectId` string plus transient `instanceId`; roots had empty parent IDs and sibling indices 0/1/2. Broader identity behavior for unsaved/new scene objects remains unverified. |
-| Reconnect / stale-generation lifecycle | Verified manually + CI support | Real domain reload preserved `editorId`, changed `connectionGeneration` from `1787395056602` to `1787395125304`, rejected an explicitly stale generation with `routing/stale_connection`, and succeeded on a new-generation `editor.status`. |
-| Node local-bridge integration tests | Verified | Coverage includes status round-trip, hierarchy request/result validation, hierarchy input limits, explicit routed stale-generation propagation, and no-editor failure. Node Verification run `32568901972` and Phase 1 Local Bridge Verification run `32568901982` passed at revision `2619472abe97ffe9149e05fbe826936f439d62e2`; later hierarchy commits changed only Unity C# compatibility and documentation. |
-| GameObject mutation tools | Planned | Not implemented. |
+| `scene.hierarchy` bridge operation | Verified manually | Live `SampleScene` returned root GameObjects in sibling order with bounded preorder metadata, non-empty `GlobalObjectId` values, and expected truncation metadata. |
+| MCP `unity_get_hierarchy` | Verified manually | The real MCP stdio verifier returned the live active-scene hierarchy from Unity 6000.3.21f1. |
+| Hierarchy object identity | Verified for the tested saved scene | Returned nodes use Unity `GlobalObjectId` plus transient `instanceId`; broader identity behavior for unsaved/new scene objects remains unverified. |
+| Reconnect / stale-generation lifecycle | Verified manually + CI support | Real domain reload preserved `editorId`, changed `connectionGeneration`, rejected an explicitly stale generation with `routing/stale_connection`, and succeeded on the new generation. |
+| Node local-bridge integration tests | Verified | Coverage includes status, hierarchy, stale-generation routing, no-editor failure, GameObject create write routing, explicit mutation-id reuse, and pre-delivery create validation. Latest create-slice CI passed in Node Verification run `32606458264` and Phase 1 Local Bridge Verification run `32606458269` at revision `2969bcfa379f10498d4b5bac69fb085f209d499d`. |
+| GameObject create write slice | Verified manually + CI support | `unity_create_game_object` / `gameObject.create` created one empty root object, marked the scene dirty, registered Undo, returned a `GlobalObjectId`, and replayed the same result rather than duplicating the object when the same `mutationId` was delivered again. |
+| Mutation retry/dedup protection | Verified for `gameObject.create` immediate same-session retry | First call reported `replayed=false`; the second call with the same mutation ID and arguments reported `replayed=true`, returned the same `GlobalObjectId`, and hierarchy readback found exactly one matching object. General mutation dedup and post-Undo/deletion replay semantics remain future reliability work. |
+| Undo integration | Verified for the bounded GameObject-create slice only | Created objects are registered with Unity Undo. General mutation Undo/rollback behavior remains planned for Phase 2. |
 | Console/compiler tools beyond status | Planned | Not implemented. |
-| Undo integration | Planned | Not implemented. |
 | Remote gateway / Easy Connect | Planned | Not implemented. |
 | Pairing/authentication | Planned | Not implemented. |
 | Multi-user/editor routing | Planned | Local bridge intentionally supports one active editor only. |
@@ -81,7 +82,7 @@ MCP client
    -> MCP result
 ```
 
-Heartbeat/status slice:
+### Heartbeat/status slice
 
 - [x] local bridge design documented
 - [x] v0 hello contract implemented
@@ -98,7 +99,7 @@ Heartbeat/status slice:
 - [x] stale connection generation rejected in a real Editor lifecycle
 - [x] post-reconnect status succeeds on the new generation
 
-Hierarchy slice:
+### Hierarchy slice
 
 - [x] `scene.hierarchy` Unity command source implemented
 - [x] bounded preorder traversal implemented (`maxDepth`, `maxNodes`)
@@ -108,14 +109,30 @@ Hierarchy slice:
 - [x] simulated bridge hierarchy round-trip test implemented
 - [x] invalid hierarchy limit tests implemented
 - [x] real `verify:hierarchy` MCP verifier implemented
-- [x] hierarchy Node/bridge CI recorded as passing on the latest Node/TypeScript revision (`2619472abe97ffe9149e05fbe826936f439d62e2`)
-- [x] Unity package compile with hierarchy source verified in 6000.3.21f1 after the API compatibility fix
-- [x] real MCP `unity_get_hierarchy` result observed and matched the live `SampleScene` root hierarchy
+- [x] hierarchy Node/bridge CI recorded as passing
+- [x] Unity package compile with hierarchy source verified in 6000.3.21f1
+- [x] real MCP `unity_get_hierarchy` result observed and matched the live `SampleScene` hierarchy
 
-Remaining Phase 1 minimum after hierarchy:
+### First write slice — GameObject create
 
-- [ ] create a simple GameObject with write retry/dedup protection
-- [ ] read Console/compiler errors
+- [x] `gameObject.create` Unity command implemented for one empty root GameObject
+- [x] MCP `unity_create_game_object` implemented with `risk=write`
+- [x] name and mutation-id validation implemented before Unity mutation
+- [x] Unity Undo registration and scene dirty marking implemented
+- [x] `GlobalObjectId` + transient `instanceId` returned
+- [x] completed mutation result cached in Unity `SessionState`
+- [x] same `mutationId` + same arguments replays the cached result instead of creating again
+- [x] same `mutationId` + different arguments is rejected
+- [x] verifier waits for a live Unity connection before the first write
+- [x] ambiguous connection/timeout retry uses the same mutation ID
+- [x] Node/TypeScript create tests pass
+- [x] real Unity create succeeds
+- [x] real same-mutation retry reports `replayed=true`
+- [x] real hierarchy readback finds exactly one matching object
+
+### Remaining Phase 1 minimum
+
+- [ ] read Console/compiler errors/diagnostics through a bounded structured MCP tool
 
 ## Verification log
 
@@ -166,34 +183,19 @@ Result: PASS
 ### 2026-08-22 — Real MCP stdio -> live Unity status
 
 ```text
-Revision under test: Phase 1 heartbeat branch containing verify:mcp-unity; exact local checkout SHA not separately captured
 Environment: Windows, Unity 6000.3.21f1, Node 24.x, official MCP TypeScript client 2.0.0
 Action: npm.cmd --prefix mcp-server run verify:mcp-unity
-Expected: MCP initialize handshake succeeds; unity_get_status is advertised; tool call reaches live Unity and returns current structured Editor state
-Observed: MCP handshake PASS; unity_get_status advertised; MCP unity_get_status PASS returned unityVersion=6000.3.21f1, projectName=My project (1), activeScene=Assets/Scenes/SampleScene.unity, isPlaying=false, isCompiling=false
+Observed: MCP handshake PASS; unity_get_status advertised; live Unity structured Editor state returned
 Result: PASS (manual user verification)
 ```
 
 ### 2026-08-22 — Real domain reload / reconnect / stale-generation lifecycle
 
 ```text
-Revision under test: Phase 1 heartbeat branch containing verify:reconnect; exact local checkout SHA not separately captured
 Environment: Windows, Unity 6000.3.21f1, Node 24.x
 Action: npm.cmd --prefix mcp-server run verify:reconnect -> trigger Unity script/domain reload
-Expected: same editorId reconnects with a new connectionGeneration; a command explicitly routed to the old generation is rejected with routing/stale_connection; editor.status succeeds on the new generation
-Observed: editorId remained 2c64561eff545bef6b876adfd7c4945172c640117d136cef1a0b6cace98f653d; connectionGeneration changed 1787395056602 -> 1787395125304; stale generation rejection PASS with routing/stale_connection; post-reconnect editor.status PASS returned SampleScene, isPlaying=false, isCompiling=false
+Observed: editorId remained stable; connectionGeneration changed; stale generation was rejected with routing/stale_connection; post-reconnect editor.status succeeded
 Result: PASS (manual user verification)
-```
-
-### 2026-08-22 — Hierarchy slice first CI attempt
-
-```text
-Revision under test: 7ccc84b8f3f3176ed04b6662293a5a7ce1741780
-Environment: GitHub Actions ubuntu-24.04, Node 24.19.0
-Action: dependency refresh -> npm ci -> TypeScript build -> tests
-Observed: build failed before tests because exactOptionalPropertyTypes rejected explicitly passing undefined hierarchy option fields from the MCP handler
-Result: FAIL (fixed in subsequent revision)
-Notes: this was a TypeScript option-shape error, not a Unity runtime result.
 ```
 
 ### 2026-08-22 — Hierarchy Node/bridge verification
@@ -204,23 +206,39 @@ Environment: GitHub Actions ubuntu-24.04, Node 24.19.0
 Action: dependency refresh -> npm ci -> TypeScript build -> Node tests
 Observed: Node Verification run 32568901972 and Phase 1 Local Bridge Verification run 32568901982 completed successfully
 Result: PASS
-Notes: later hierarchy commits changed the Unity C# batch GlobalObjectId call for 6000.3 compatibility and documentation, not the Node/TypeScript hierarchy path.
 ```
 
 ### 2026-08-22 — Real Unity 6000.3 hierarchy compile + MCP read
 
 ```text
-Revision under test: hierarchy branch containing Unity 6000.3 compatibility fix `005327886b6ed40f35c8338559e721d256d900b6` plus subsequent documentation-only commit(s)
 Environment: Windows, Unity 6000.3.21f1, SampleScene, Node 24.x, official MCP TypeScript client 2.0.0
-Action: git pull -> Unity compile -> npm.cmd --prefix mcp-server run verify:hierarchy
-Expected: hierarchy source compiles; MCP `unity_get_hierarchy` reaches live Unity and returns the active scene's bounded hierarchy
-Observed: initial pre-fix compile failed with CS1615 because Unity 6000.3 does not accept `out` for the second `GetGlobalObjectIdsSlow` parameter. After changing to a preallocated `GlobalObjectId[]`, Unity compiled and the MCP verifier returned sceneName=SampleScene, scenePath=Assets/Scenes/SampleScene.unity, rootCount=3, returnedNodeCount=3, maxDepth=8, maxNodes=200, truncatedByDepth=false, truncatedByNodes=false. Nodes were Main Camera, Directional Light, and Global Volume in sibling order 0/1/2, each with a non-empty GlobalObjectId.
+Action: Unity compile -> npm.cmd --prefix mcp-server run verify:hierarchy
+Observed: after fixing the Unity 6000.3 `GetGlobalObjectIdsSlow` signature mismatch, Unity compiled and MCP returned the live SampleScene hierarchy with non-empty GlobalObjectId values
 Result: PASS (manual user verification)
 ```
 
-## Known unknowns
+### 2026-08-23 — First GameObject create + duplicate-retry protection
+
+```text
+Revision under test: 2969bcfa379f10498d4b5bac69fb085f209d499d
+Environment: Windows, Unity 6000.3.21f1, SampleScene, Node 24.x, official MCP TypeScript client 2.0.0
+CI: Node Verification run 32606458264 PASS; Phase 1 Local Bridge Verification run 32606458269 PASS
+Action: npm.cmd --prefix mcp-server run verify:create
+Expected: verifier waits for Unity; first create mutates once; identical retry uses the same mutationId and does not duplicate; hierarchy readback finds one object
+Observed first result: replayed=false, name=MCP_Create_Verify_1787442917163, GlobalObjectId=GlobalObjectId_V1-2-99c9720ab356a0642a771bea13969a05-1399885475-0, siblingIndex=3
+Observed retry: replayed=true with the same mutationId and the same GlobalObjectId
+Observed hierarchyMatches: 1
+Observed Editor state: one MCP_Create_Verify object visible in the SampleScene hierarchy; scene marked dirty
+Result: PASS (manual user verification)
+Notes: the first verifier attempt exposed a readiness race (`No Unity Editor is connected`) because the MCP verifier called create before the Editor connected. The verifier was corrected to poll `unity_get_status` first and to reuse the same mutationId for retryable ambiguous failures. The corrected verifier then passed.
+```
+
+## Known unknowns / remaining reliability work
 
 - exact `GlobalObjectId` behavior for unsaved/new scene objects and unusual object cases,
+- GameObject-create dedup replay after the created object is manually deleted or undone is not yet semantically revalidated; Phase 2 native readback/verification should close this gap,
+- mutation dedup persistence across a full Unity Editor restart is not provided by the current `SessionState` implementation,
+- general write serialization/idempotency across future mutation families remains unimplemented,
 - long-term Unity support matrix beyond 6000.3.21f1,
 - future multi-editor routing design,
 - remote authentication/pairing cryptography,
