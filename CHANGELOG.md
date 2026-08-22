@@ -47,17 +47,20 @@ The project is pre-alpha. Internal package version `0.0.1` does not represent a 
 
 #### Verification
 
-- Node Verification and Phase 1 Local Bridge Verification are passing on the previously verified Phase 1 code tree; current-head CI is required after each new verifier/test change.
-- Lockfile generation/refresh, `npm ci`, TypeScript build, and Node tests have passed on prior Phase 1 revisions.
+- Current-head Node Verification and Phase 1 Local Bridge Verification are passing.
+- TypeScript build and Node tests: **PASS**.
 - Simulated Unity `hello -> editor.status -> structured result`: **PASS**.
 - Explicit no-editor failure path: **PASS**.
+- Simulated stale-generation error propagation: **PASS**.
 - Unity 6000.3.21f1 package load/compile at revision `059727365c025eb1d18013371fe95e055517e570`: **PASS (manual Windows verification, 2026-08-22)**.
 - Real Unity WebSocket protocol v0 `hello` to `127.0.0.1:5081`: **PASS**.
 - Real bridge `editor.status` round trip: **PASS**; returned Unity 6000.3.21f1, `Assets/Scenes/SampleScene.unity`, `isPlaying=false`, `isCompiling=false`.
 - Real MCP stdio `unity_get_status` against the live Unity Editor: **PASS (manual Windows verification, 2026-08-22)**; official MCP client handshake succeeded, the tool was advertised, and structured live Unity state was returned.
-- Domain reload/editor restart reconnection with a new connection generation: **Not yet verified in real Unity**.
-- Real stale-generation rejection after reconnect: **Not yet verified in real Unity**.
-- Successful post-reconnect status on the new generation: **Not yet verified in real Unity**.
+- Real domain reload reconnection: **PASS (manual Windows verification, 2026-08-22)**; the same `editorId` reconnected with a new `connectionGeneration` (`1787395056602` -> `1787395125304`).
+- Real stale-generation rejection after reconnect: **PASS**; an `editor.status` command routed to the old generation was rejected with `routing/stale_connection`.
+- Successful post-reconnect `editor.status` on the new generation: **PASS**; live Unity state matched the Editor after reconnect.
+
+The heartbeat/status slice is therefore runtime-verified end-to-end. The broader Phase 1 minimum still has planned hierarchy, GameObject-create, and Console/compiler-read capabilities.
 
 ## Phase 0 — Foundation Runtime Scaffold — 2026-08-22
 
