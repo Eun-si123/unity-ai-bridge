@@ -86,7 +86,7 @@ Minimum capabilities:
 
 - ✅ Unity/editor status
 - ✅ Active scene information
-- 🟨 Hierarchy read — implementation, bounded traversal, identity metadata, simulated tests, and real verifier exist on `feat/phase1-hierarchy`; real Unity compile/runtime verification pending
+- ✅ Hierarchy read — verified through real MCP stdio against Unity 6000.3.21f1 with bounded traversal and `GlobalObjectId` metadata
 - ⬜ Create a simple GameObject
 - ⬜ Read Console/compiler errors
 - ✅ Structured error model for the current read/routing path
@@ -104,7 +104,7 @@ A clean test project can perform the minimum capabilities repeatedly with reprod
 
 **State:** ⬜ Planned as a full phase; some connection-lifecycle groundwork was completed early in Phase 1
 
-- 🟨 Main-thread dispatcher hardened — verified for the current `editor.status` read path; hierarchy uses the same boundary but is pending real runtime verification
+- 🟨 Main-thread dispatcher hardened — verified for the current `editor.status` and hierarchy read paths; broader write/tool coverage pending
 - ⬜ Serialized conflicting writes
 - ⬜ Stable object resolver
 - ⬜ Undo integration
