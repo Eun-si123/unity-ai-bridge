@@ -17,13 +17,15 @@ Install Unity package
 
 The control layer is intended to remain provider-neutral so the same Unity-side implementation can work with multiple MCP-capable AI clients.
 
-## Important licensing note
+## License
 
-This repository is public, but a project `LICENSE` has **not yet been selected**.
+The public `unity-ai-bridge` repository is licensed under the **Apache License 2.0**. See [`LICENSE`](LICENSE).
 
-Public visibility is not the same thing as an open-source license. Until a license is intentionally added, do not assume redistribution, modification, or commercial-use permissions beyond GitHub's default copyright rules.
+Apache-2.0 permits use, modification, distribution, and commercial use subject to its terms, including preservation of required notices. It also includes an explicit patent license and does not grant permission to use project trademarks beyond the license's limited terms.
 
-The long-term design target is a public/self-hostable core plus an optional managed hosted service, but the exact license and service model remain Phase 0 decisions.
+This license applies to this public repository. The separate private `unity-ai-mcp-infra` repository is managed-service infrastructure and is not automatically licensed under this repository's Apache-2.0 license.
+
+The long-term product direction remains a public/self-hostable core plus an optional managed hosted service.
 
 ## Where to start
 
@@ -35,6 +37,7 @@ The long-term design target is a public/self-hostable core plus an optional mana
 - [`AGENTS.md`](AGENTS.md) — mandatory AI/contributor rules
 - [`REFERENCES.md`](REFERENCES.md) — external research references; not incorporated code
 - [`CHANGELOG.md`](CHANGELOG.md) — notable project changes
+- [`LICENSE`](LICENSE) — Apache License 2.0 terms for this public repository
 - [`llms.txt`](llms.txt) — compact AI-agent entrypoint
 
 [`ARCHITECTURE.md`](ARCHITECTURE.md) is a shorter high-level architecture summary. `DESIGN.md` is the detailed design authority.
@@ -56,7 +59,7 @@ Current initial pins:
 - `@types/node`: **24.13.3**
 - Unity bridge protocol: **v0**
 
-The direct versions are pinned in source, but no generated dependency lockfile or recorded successful build/test run exists yet. See `STATUS.md` for the exact verification state.
+The direct dependency versions and generated lockfile are committed. Node dependency install, TypeScript build, and protocol smoke tests have passed in GitHub Actions; see `STATUS.md` for exact evidence and remaining Unity verification gaps.
 
 ## Design goals
 
@@ -101,12 +104,12 @@ Current direction:
 - target identity: not dependent on Unity `InstanceID` alone
 - mutations: request identity/retry protection, Undo where practical, dirty-state reporting
 
-Only the initial package/protocol/server scaffold exists today. WebSocket bridging, command dispatch, Unity API handlers, and public tools are still planned.
+Only the initial package/protocol/server scaffold exists on `main` today. WebSocket bridging, command dispatch, Unity API handlers, and public tools are later-phase work unless `STATUS.md` records otherwise.
 
 ## Repository split
 
 ```text
-unity-ai-bridge        (PUBLIC)
+unity-ai-bridge        (PUBLIC, Apache-2.0)
   reusable Unity package, MCP/server core, bridge protocol,
   local/self-host path, reusable routing abstractions, tests/docs
 

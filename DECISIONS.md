@@ -39,9 +39,9 @@ Reliable Unity control is the reusable asset; AI-client ecosystems can change in
 
 The private repository must consume/deploy the public core through explicit interfaces/versioning rather than maintain a second private copy.
 
-### Important terminology note
+### Licensing boundary
 
-A public GitHub repository is **not automatically open source**. The project license is still undecided. Until a `LICENSE` file is intentionally selected, describe this as a **public core / self-hostable design target**, not as a licensed open-source/open-core release.
+The public `unity-ai-bridge` repository is licensed under Apache License 2.0 by D-017. That license applies to the contents of this public repository and does not automatically license the separate private `unity-ai-mcp-infra` repository.
 
 ---
 
@@ -220,6 +220,36 @@ If third-party implementation/code/docs/assets are actually incorporated later, 
 ### Why
 
 A reference list and a legal redistribution notice serve different purposes. Mixing them can falsely imply that external code is included in this project.
+
+---
+
+## D-017 — Apache-2.0 for the public core
+
+**Status:** Accepted  
+**Date:** 2026-08-22
+
+### Decision
+
+License the public `unity-ai-bridge` repository under the **Apache License 2.0**.
+
+The separate private `unity-ai-mcp-infra` repository is outside this repository's license boundary unless it is separately and explicitly licensed later.
+
+### Why
+
+The public core is intended to be reusable and self-hostable, including in commercial environments. Apache-2.0 keeps a permissive adoption model while providing explicit patent-license terms and redistribution/notice requirements that are useful for a growing infrastructure/tooling project.
+
+The project can still operate a separate managed hosted service using private infrastructure around the public core.
+
+### Consequences
+
+- commercial use, modification, and redistribution of the public core are allowed subject to Apache-2.0 terms,
+- forks may be used in proprietary/commercial products subject to those terms,
+- project trademarks are not granted by the software license except as the license itself permits,
+- private managed-service code is not made public merely because it consumes or deploys the Apache-2.0 core.
+
+### Revisit trigger
+
+A future licensing change would require an explicit new decision plus review of contributor/copyright implications; do not silently replace the license text.
 
 ---
 
