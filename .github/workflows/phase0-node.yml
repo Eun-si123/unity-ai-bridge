@@ -1,8 +1,8 @@
-name: Phase 0 Node Verification
+name: Node Verification
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, feat/phase0-runtime-scaffold]
   push:
     branches: [feat/phase0-runtime-scaffold]
 
@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   node-verify:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -42,7 +42,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add mcp-server/package-lock.json
           if ! git diff --cached --quiet; then
-            git commit -m "chore: add generated MCP server lockfile"
+            git commit -m "chore: refresh MCP server lockfile"
             git push
           fi
 
