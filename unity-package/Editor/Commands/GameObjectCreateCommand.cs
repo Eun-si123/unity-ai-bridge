@@ -20,6 +20,22 @@ namespace UnityAiBridge.Editor.Commands
         public int siblingIndex;
     }
 
+    internal sealed class GameObjectCreateMutationConflictException : InvalidOperationException
+    {
+        public GameObjectCreateMutationConflictException(string message)
+            : base(message)
+        {
+        }
+    }
+
+    internal sealed class GameObjectCreateCompilingException : InvalidOperationException
+    {
+        public GameObjectCreateCompilingException(string message)
+            : base(message)
+        {
+        }
+    }
+
     internal static class GameObjectCreateCommand
     {
         public const int MaximumNameLength = 128;
@@ -38,6 +54,12 @@ namespace UnityAiBridge.Editor.Commands
         {
             ValidateArguments(name, mutationId);
 
+            if (EditorApplication.isCompiling)
+            {
+                throw new GameObjectCreateCompilingException(
+                    "Unity is compiling; gameObject.create was not executed.");
+            }
+
             var sessionKey = SessionKeyPrefix + mutationId;
             var cachedJson = SessionState.GetString(sessionKey, string.Empty);
             if (!string.IsNullOrEmpty(cachedJson))
@@ -50,7 +72,7 @@ namespace UnityAiBridge.Editor.Commands
 
                 if (!string.Equals(cached.name, name, StringComparison.Ordinal))
                 {
-                    throw new InvalidOperationException(
+                    throw new GameObjectCreateMutationConflictException(
                         "mutationId was already used for gameObject.create with different arguments.");
                 }
 
