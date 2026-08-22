@@ -19,8 +19,8 @@ Current automated coverage should verify at minimum:
 - simulated Unity `hello` registration,
 - request ID and route propagation for `editor.status`,
 - simulated structured result correlation,
-- explicit stale-generation error propagation,
-- explicit failure when no Unity Editor is connected.
+- explicit failure when no Unity Editor is connected,
+- explicit stale-generation error propagation.
 
 GitHub Actions is the canonical CI environment for this layer.
 
@@ -88,27 +88,24 @@ Expected success output includes:
 
 Compare the returned Unity version, project name, active scene, Play Mode state, and compilation state with the actual Editor state. PASS requires the real MCP tool result to match live Unity state; a direct `LocalBridgeServer` call alone is insufficient for this gate.
 
-## 5. Reconnect / domain reload verification helper
+## 5. Reconnect / domain reload / stale-generation check
 
-With Unity open and the package loaded, run:
+With Unity still open, run:
 
 ```text
 npm --prefix mcp-server run verify:reconnect
 ```
 
-The helper:
+The verifier first records the live `editorId` and `connectionGeneration` and confirms `editor.status`. When it prints that it is waiting for a new connection generation, trigger a Unity script/domain reload. There is no dedicated "Domain Reload" button required for this test; creating or editing a C# script so Unity recompiles scripts is sufficient.
 
-1. waits for the initial real Unity hello,
-2. records `editorId` and `connectionGeneration`,
-3. confirms an initial `editor.status` call,
-4. waits up to 90 seconds for a domain reload/reconnect,
-5. requires the same `editorId` with a different `connectionGeneration`,
-6. deliberately sends `editor.status` using the old generation and requires `routing/stale_connection`,
-7. sends a normal `editor.status` using the new generation and requires success.
+PASS requires all of the following:
 
-After the helper prints `Trigger a Unity script/domain reload now`, trigger one in the Editor. A simple repeatable path is to select a Unity AI Bridge `.cs` file under the package in the Project window and choose **Reimport**.
+1. the same `editorId` reconnects,
+2. the new hello has a different `connectionGeneration`,
+3. an `editor.status` command deliberately routed to the old generation is rejected with `routing/stale_connection`,
+4. a normal `editor.status` succeeds on the new generation.
 
-Expected final output includes:
+Expected success output includes:
 
 ```text
 [Unity AI Bridge] Reconnect detected:
@@ -118,8 +115,6 @@ Expected final output includes:
 ...
 [Unity AI Bridge] Reconnect + stale-generation verification PASS.
 ```
-
-PASS requires all four lifecycle properties: stable editor identity, changed generation, stale-generation rejection, and successful post-reconnect status.
 
 ## 6. Evidence format
 
