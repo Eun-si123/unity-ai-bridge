@@ -1,10 +1,14 @@
 # Changelog
 
-All notable user-visible/project changes should be documented here.
+All notable project changes are recorded here by implementation phase.
 
-The project is pre-alpha; the initial scaffold uses internal package version `0.0.1`, but no public release is claimed.
+The project is pre-alpha. Internal package version `0.0.1` does not represent a public release.
 
 ## Unreleased
+
+No post-Phase-0 changes are recorded on this branch. New work should be added as its own phase/change section instead of being mixed into the Phase 0 history below.
+
+## Phase 0 — Foundation Runtime Scaffold — 2026-08-22
 
 ### Added
 
@@ -24,7 +28,7 @@ The project is pre-alpha; the initial scaffold uses internal package version `0.
 - Initial `mcp-server/` TypeScript MCP v2 stdio bootstrap.
 - Strict TypeScript build configuration and Node test-runner protocol smoke tests.
 - Root build/test delegation, Node 24.19.0 runtime pin, and repository ignore rules.
-- GitHub Actions Phase 0 Node verification workflow.
+- GitHub Actions Node verification workflow.
 - Generated `mcp-server/package-lock.json` dependency lockfile.
 
 ### Changed
@@ -42,8 +46,12 @@ The project is pre-alpha; the initial scaffold uses internal package version `0.
 
 - Premature `THIRD_PARTY_NOTICES.md` reference log. A real third-party notice/license file should be added only when incorporated dependencies/material actually require one.
 
-### Important
+### Verification
 
-- The Node/MCP scaffold dependency install, TypeScript build, and protocol smoke tests are verified by GitHub Actions.
-- The Unity package scaffold and protocol source exist, but Unity 6000.3.21f1 package load/compile has not yet been recorded as passing.
-- No Unity WebSocket bridge, Unity command dispatcher, Unity tool handlers, remote gateway, pairing service, or ChatGPT integration is claimed by this changelog.
+- Node/MCP dependency install, TypeScript build, and protocol smoke tests: **Verified by GitHub Actions**.
+- Unity 6000.3.21f1 package load/compile: **Not yet verified**.
+- Project license: **Not yet selected**.
+
+### Scope at Phase 0
+
+Phase 0 does **not** claim a working Unity WebSocket bridge, Unity command dispatcher, Unity tool handlers, remote gateway, pairing service, or ChatGPT integration. Those belong to later phases.
