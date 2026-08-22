@@ -13,6 +13,35 @@ The project is pre-alpha. Internal package version `0.0.1` does not represent a 
 - Clarified that the separate private `unity-ai-mcp-infra` repository is not automatically licensed under the public core's Apache-2.0 license.
 - Closed the Phase 0 "project license selected" governance item.
 
+### Phase 1 — Root GameObject Create — In progress
+
+#### Added
+
+- Unity `scene.create_game_object` mutation for creating one root GameObject in the active scene.
+- MCP `unity_create_game_object` tool with required `name` and caller-supplied `idempotencyKey`.
+- Explicit bridge `risk: write` classification for the mutation path.
+- Same-intent retry protection backed by Unity `SessionState` plus `GlobalObjectId` target identity.
+- Fail-closed ambiguous mutation handling: the idempotency key is consumed before Unity state changes, so a reload/error in the narrow pre-completion window does not silently replay the create.
+- Same-key/different-arguments conflict rejection.
+- Consumed-key/original-target-missing rejection instead of blind recreation after Undo/removal.
+- `Undo.RegisterCreatedObjectUndo` integration with `Unity AI Bridge: Create GameObject` as the Undo group name.
+- Explicit `EditorSceneManager.MarkSceneDirty` handling without implicit scene save.
+- Created-target `GlobalObjectId` reverse readback before reporting success.
+- Structured mutation result containing target identity, scene metadata, sibling index, active state, dirty state, create/dedup flags, and Undo group name.
+- Simulated Node tests for mutation write routing and create-input validation.
+- `verify:create` real MCP verifier that checks first creation, same-key deduplication, and hierarchy readback uniqueness.
+- Protocol request/result fixtures and test documentation for the create operation.
+
+#### Verification
+
+- Node Verification run `32570170957` and Phase 1 Local Bridge Verification run `32570170947` at revision `648e3c472f20f6ed805be0d7d3c9e151f8a7b7d9`: **PASS**.
+- A later Unity-only safety hardening commit consumes mutation identity before state change; current-head CI is re-run after each branch push.
+- Unity 6000.3.21f1 compile/runtime for the create source: **Not yet verified**.
+- Real MCP first-create / same-key dedup / hierarchy uniqueness: **Not yet verified**.
+- Real Unity Undo removal of the created test object: **Not yet verified**.
+
+Current idempotency storage is scoped to the current Unity Editor session via `SessionState`; cross-Editor-restart mutation durability is intentionally not claimed yet.
+
 ### Phase 1 — Active Scene Hierarchy Read — Verified slice
 
 #### Added
