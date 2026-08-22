@@ -26,20 +26,23 @@ Overall status: **In progress**
 | Public GitHub repository | Verified | Repository exists and accepts commits. |
 | README / project overview | Implemented | Scope, intended UX, repository split, and documentation map exist. |
 | AI/contributor rules | Implemented | `AGENTS.md`. |
-| Detailed design baseline | Implemented | `DESIGN.md` records intended behavior; this is documentation, not runtime functionality. |
+| Detailed design baseline | Implemented | `DESIGN.md`; design is not runtime verification. |
 | Architecture decision record | Implemented | `DECISIONS.md`. |
 | Public roadmap | Implemented | `ROADMAP.md`. |
-| High-level architecture summary | Implemented | `ARCHITECTURE.md`. |
 | Code/repository map | Implemented | `CODEMAP.md`. |
 | External research references | Implemented | `REFERENCES.md`; no listed Unity MCP implementation is recorded as copied into this project. |
-| Changelog | Implemented | `CHANGELOG.md`. |
-| AI quick-entry file | Implemented | `llms.txt`. |
-| Unity Editor package | Planned | No working package exists. |
-| MCP/server runtime | Planned | No working endpoint exists. |
-| Unity bridge transport | Planned | No working transport exists. |
+| Unity Editor package scaffold | Implemented | `unity-package/package.json`, Editor asmdef, and protocol constants exist. Not yet loaded/compiled in Unity. |
+| Initial Unity target | Implemented | Package manifest pins minimum target to Unity `6000.3` + `21f1` (6000.3.21f1). Broader compatibility is unverified. |
+| Bridge protocol v0 source contract | Implemented | Command/result JSON Schemas, fixtures, C# version constant, and TypeScript types exist. No transport compatibility verification yet. |
+| MCP/server scaffold | Implemented | TypeScript stdio MCP bootstrap source exists using `@modelcontextprotocol/server` 2.0.0. Dependencies have not been installed or built in recorded verification yet. |
+| Node runtime pin | Implemented | `.nvmrc` pins Node 24.19.0; package engines constrain Node 24.x from 24.19.0. |
+| Direct TypeScript dependency pins | Implemented | MCP server 2.0.0, TypeScript 7.0.2, and `@types/node` 24.13.3 are exact direct pins. No lockfile exists yet, so transitive dependency resolution is not frozen. |
+| Initial automated check commands | Implemented | Root/server `build` and `test` scripts plus Node test-runner smoke tests exist. They have not yet been recorded as passing. |
+| Unity bridge transport | Planned | No WebSocket transport implementation exists. |
 | Unity status/scene/hierarchy tools | Planned | Not implemented. |
 | GameObject mutation tools | Planned | Not implemented. |
 | Console/compiler tools | Planned | Not implemented. |
+| Main-thread dispatcher / command queue | Planned | Not implemented. |
 | Undo integration | Planned | Not implemented. |
 | Script editing | Planned | Not implemented. |
 | Play Mode / Test Runner integration | Planned | Not implemented. |
@@ -52,7 +55,7 @@ Overall status: **In progress**
 
 ## Accepted design decisions — not implementation claims
 
-The following directions are accepted in `DECISIONS.md`, but no working code should be inferred from them:
+The following directions are accepted in `DECISIONS.md`:
 
 - provider-neutral core,
 - public core + separate private managed-service infrastructure,
@@ -79,14 +82,16 @@ The following directions are accepted in `DECISIONS.md`, but no working code sho
 - [x] architecture decisions recorded
 - [x] public roadmap documented
 - [x] external-reference/code-reuse rules documented
-- [ ] initial source tree exists
-- [ ] initial Unity support target selected and pinned
-- [ ] exact runtime/dependency versions pinned in source/configuration
-- [ ] bridge protocol v0 schema exists in source
+- [x] initial source tree exists
+- [x] initial Unity support target selected and pinned
+- [ ] dependency graph fully pinned with a generated lockfile
+- [x] bridge protocol v0 schema exists in source
 - [x] initial test strategy documented in `DESIGN.md`
-- [ ] executable initial test/check commands exist
+- [x] executable initial test/check commands exist
+- [ ] initial dependency install/build/test commands recorded as passing
+- [ ] Unity package load/compile check recorded as passing
 - [ ] project license selected
-- [x] no real secret or production credential intentionally committed in foundation docs
+- [x] no real secret or production credential intentionally committed in foundation files
 
 ## Phase 1 target — Minimal local end-to-end path
 
@@ -115,7 +120,7 @@ These are **targets, not current features**.
 
 ## Verification log
 
-No Unity/MCP runtime verification has been performed because no runtime implementation exists yet.
+No dependency install, TypeScript build/test, Unity package load/compile, or MCP-to-Unity runtime verification has been recorded yet for the scaffold branch.
 
 Future verification entries should include:
 
@@ -132,14 +137,13 @@ Notes:
 
 ## Known unknowns
 
-Do not guess these until intentionally decided/pinned:
+Do not guess these until intentionally decided/verified:
 
 - project license,
-- initial and long-term Unity support matrix,
-- exact Node/runtime minimum version,
-- exact dependency versions,
-- exact bridge protocol v0 field/schema names,
+- long-term Unity support matrix beyond the initial 6000.3.21f1 target,
+- generated lockfile/transitive dependency resolution,
 - exact Unity WebSocket/client implementation,
+- bridge v0 compatibility/migration policy beyond the initial pre-stable schema,
 - public hosting provider,
 - ChatGPT integration/submission requirements when that phase begins,
 - authentication/pairing cryptography and credential storage,
