@@ -1,8 +1,8 @@
 # Unity AI Bridge
 
-> **Status: pre-alpha / foundation**
+> **Status: pre-alpha / Phase 0 foundation scaffold**
 >
-> This repository currently contains project documentation and design work. Do not assume a working Unity package, MCP server, gateway, or ChatGPT integration exists unless [`STATUS.md`](STATUS.md) says so.
+> The repository now contains an initial Unity package scaffold, bridge protocol v0 schemas/types, and a minimal TypeScript MCP server bootstrap. These pieces are **implemented but not yet runtime-verified**. No working MCP-to-Unity connection, Unity tool surface, remote gateway, or ChatGPT integration should be assumed unless [`STATUS.md`](STATUS.md) says so.
 
 Unity AI Bridge is intended to make AI-assisted Unity Editor control easy enough that users do not need to understand MCP, ports, networking, or Unity editor scripting just to get started.
 
@@ -28,16 +28,35 @@ The long-term design target is a public/self-hostable core plus an optional mana
 ## Where to start
 
 - [`STATUS.md`](STATUS.md) — what actually exists and what has been verified
+- [`CODEMAP.md`](CODEMAP.md) — current and planned repository structure
 - [`DESIGN.md`](DESIGN.md) — detailed intended system behavior
 - [`DECISIONS.md`](DECISIONS.md) — why major architecture choices were made
 - [`ROADMAP.md`](ROADMAP.md) — public milestone/phase plan
-- [`CODEMAP.md`](CODEMAP.md) — current and planned repository structure
 - [`AGENTS.md`](AGENTS.md) — mandatory AI/contributor rules
 - [`REFERENCES.md`](REFERENCES.md) — external research references; not incorporated code
 - [`CHANGELOG.md`](CHANGELOG.md) — notable project changes
 - [`llms.txt`](llms.txt) — compact AI-agent entrypoint
 
 [`ARCHITECTURE.md`](ARCHITECTURE.md) is a shorter high-level architecture summary. `DESIGN.md` is the detailed design authority.
+
+## Current source scaffold
+
+```text
+unity-package/      Unity Editor UPM package scaffold
+bridge-protocol/    versioned Unity-facing command/result schemas + fixtures
+mcp-server/         TypeScript MCP v2 stdio bootstrap + bridge types/tests
+```
+
+Current initial pins:
+
+- Unity: **6000.3.21f1** initial development target
+- Node.js: **24.19.0 LTS**
+- `@modelcontextprotocol/server`: **2.0.0**
+- TypeScript: **7.0.2**
+- `@types/node`: **24.13.3**
+- Unity bridge protocol: **v0**
+
+The direct versions are pinned in source, but no generated dependency lockfile or recorded successful build/test run exists yet. See `STATUS.md` for the exact verification state.
 
 ## Design goals
 
@@ -52,8 +71,6 @@ The long-term design target is a public/self-hostable core plus an optional mana
 - **Self-hostable target:** managed convenience should not require a permanently divergent private copy of the core.
 
 ## Accepted technical direction
-
-These are **design decisions, not implemented features**:
 
 ```text
 ChatGPT / Claude / Codex / Gemini / other MCP client
@@ -73,28 +90,28 @@ ChatGPT / Claude / Codex / Gemini / other MCP client
                 Unity Editor APIs
 ```
 
-Current initial direction:
+Current direction:
 
 - Unity side: C# Unity Editor package
 - MCP/server side: TypeScript
-- MCP SDK direction: official MCP TypeScript SDK v2 line
+- MCP SDK: official MCP TypeScript SDK v2 line
 - remote MCP transport: Streamable HTTP
 - Unity bridge: transport-independent protocol, WebSocket first
 - conflicting writes: serialized by default
 - target identity: not dependent on Unity `InstanceID` alone
 - mutations: request identity/retry protection, Undo where practical, dirty-state reporting
 
-Exact package/runtime versions are not pinned yet. See `DECISIONS.md` and `STATUS.md` before treating any direction as current implementation.
+Only the initial package/protocol/server scaffold exists today. WebSocket bridging, command dispatch, Unity API handlers, and public tools are still planned.
 
 ## Repository split
 
 ```text
 unity-ai-bridge        (PUBLIC)
-  intended: Unity package, MCP/server core, bridge protocol,
+  reusable Unity package, MCP/server core, bridge protocol,
   local/self-host path, reusable routing abstractions, tests/docs
 
 unity-ai-mcp-infra     (PRIVATE)
-  intended: managed-service deployment, production auth/database wiring,
+  managed-service deployment, production auth/database wiring,
   rate limits/abuse controls, monitoring and private operations
 ```
 
@@ -113,7 +130,7 @@ The first runtime milestone is intentionally narrow:
 7. Return structured results/errors.
 8. Re-read Unity state to verify the requested effect.
 
-Only after this path is reliable should the project expand into components, scripts, assets, prefabs, Play Mode, tests, remote pairing, multi-user routing, or public AI-client integrations.
+Only after this path is reliable should the project expand into components, scripts, assets, prefabs, Play Mode, remote pairing, multi-user routing, or public AI-client integrations.
 
 ## Why not start with 300 tools?
 
