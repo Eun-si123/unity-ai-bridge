@@ -3,6 +3,9 @@ import { randomUUID } from "node:crypto";
 import { Client } from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 
+const timeoutMs = 30_000;
+const pollIntervalMs = 500;
+
 const client = new Client({
   name: "unity-ai-bridge-gameobject-create-verifier",
   version: "0.0.1",
@@ -21,6 +24,9 @@ try {
   await client.connect(transport);
 
   const { tools } = await client.listTools();
+  if (!tools.some((tool) => tool.name === "unity_get_status")) {
+    throw new Error("MCP server did not advertise unity_get_status.");
+  }
   if (!tools.some((tool) => tool.name === "unity_create_game_object")) {
     throw new Error("MCP server did not advertise unity_create_game_object.");
   }
@@ -28,21 +34,13 @@ try {
     throw new Error("MCP server did not advertise unity_get_hierarchy.");
   }
 
-  console.log("[Unity AI Bridge] MCP handshake PASS; create + hierarchy tools are advertised.");
-  console.log(`[Unity AI Bridge] Creating '${objectName}' with mutationId=${mutationId}...`);
+  console.log("[Unity AI Bridge] MCP handshake PASS; status + create + hierarchy tools are advertised.");
+  console.log(`[Unity AI Bridge] Waiting up to ${timeoutMs / 1000}s for Unity to connect...`);
+  await waitForUnityReady();
 
-  const firstCall = await client.callTool({
-    name: "unity_create_game_object",
-    arguments: {
-      name: objectName,
-      mutationId,
-    },
-  });
+  console.log(`[Unity AI Bridge] Unity connection ready. Creating '${objectName}' with mutationId=${mutationId}...`);
 
-  if (firstCall.isError) {
-    throw new Error(`First unity_create_game_object call failed: ${readToolText(firstCall)}`);
-  }
-
+  const firstCall = await callCreateWithSafeRetry();
   const first = firstCall.structuredContent;
   if (!isCreatePayload(first)) {
     throw new Error(`First create returned invalid structuredContent: ${JSON.stringify(first)}`);
@@ -117,6 +115,74 @@ try {
   process.exitCode = 1;
 } finally {
   await client.close();
+}
+
+async function waitForUnityReady(): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  let lastError = "No Unity status result received.";
+
+  while (Date.now() < deadline) {
+    const status = await client.callTool({
+      name: "unity_get_status",
+      arguments: {},
+    });
+
+    if (!status.isError) {
+      return;
+    }
+
+    lastError = readToolText(status);
+    await delay(pollIntervalMs);
+  }
+
+  throw new Error(`Timed out waiting for Unity connection. Last tool error: ${lastError}`);
+}
+
+async function callCreateWithSafeRetry() {
+  const deadline = Date.now() + timeoutMs;
+  let lastError = "No create result received.";
+
+  while (Date.now() < deadline) {
+    const result = await client.callTool({
+      name: "unity_create_game_object",
+      arguments: {
+        name: objectName,
+        mutationId,
+      },
+    });
+
+    if (!result.isError) {
+      return result;
+    }
+
+    lastError = readToolText(result);
+    if (!isRetryableConnectionError(lastError)) {
+      throw new Error(`First unity_create_game_object call failed: ${lastError}`);
+    }
+
+    console.log(
+      `[Unity AI Bridge] Create attempt was ambiguous/unavailable; retrying with the SAME mutationId (${mutationId})...`,
+    );
+    await delay(pollIntervalMs);
+  }
+
+  throw new Error(
+    `Timed out waiting for first unity_create_game_object result. Last tool error: ${lastError}; mutationId=${mutationId}`,
+  );
+}
+
+function isRetryableConnectionError(message: string): boolean {
+  return (
+    message.includes("No Unity Editor is connected") ||
+    message.includes("disconnected") ||
+    message.includes("timed out") ||
+    message.includes("timeout/") ||
+    message.includes("routing/stale_connection")
+  );
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function readToolText(result: { content: Array<{ type: string; text?: string }> }): string {
