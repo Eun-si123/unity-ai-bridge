@@ -29,7 +29,7 @@ These roadmap markers describe milestone progress only. `STATUS.md` is authorita
 
 **Goal:** make the repository safe for humans and AI agents to continue without relying on lost conversation context.
 
-**Current state:** 🟨 In progress
+**Current state:** ✅ Verified milestone — completed 2026-08-22
 
 - ✅ Public/private repository boundary defined
 - ✅ AI/contributor hallucination guardrails documented
@@ -38,24 +38,25 @@ These roadmap markers describe milestone progress only. `STATUS.md` is authorita
 - ✅ Architecture decisions recorded
 - ✅ Third-party provenance rules established
 - ✅ Public roadmap created
-- 🟨 Select and pin initial Unity support target — 6000.3.21f1 is pinned; runtime compatibility check pending
-- 🟨 Scaffold initial source tree — package/protocol/server scaffold exists; runtime verification pending
-- 🟨 Pin TypeScript/runtime/dependency versions — runtime/direct pins exist; generated lockfile pending
-- 🟨 Define bridge protocol v0 schema — source schemas/types/fixtures exist; compatibility verification pending
-- 🟨 Define first automated test commands — build/test scripts exist; passing run not yet recorded
-- ⬜ Select project license
+- ✅ Initial Unity support target selected and pinned — Unity 6000.3.21f1
+- ✅ Initial source tree scaffolded and exercised
+- ✅ TypeScript/runtime/dependency versions pinned with generated lockfile
+- ✅ Bridge protocol v0 schema/types/fixtures defined
+- ✅ Initial automated build/test commands verified in CI
+- ✅ Unity package load/compile verified on Windows / Unity 6000.3.21f1
+- ✅ Project license selected — Apache License 2.0 for the public core
 
 ### Exit gate
 
-Phase 0 ends only when a new contributor can clone the repository, understand the architecture, install dependencies, and run the initial checks without needing private chat history.
+✅ **Passed.** The repository can be cloned, its architecture understood from repository documentation, dependencies installed, automated checks run, and the Unity package loaded/compiled without relying on private chat history. Phase 0 was squash-merged to `main` on 2026-08-22.
 
 ---
 
 # Phase 1 — Minimal Local End-to-End
 
-**Goal:** prove one complete request can travel from MCP to Unity and back correctly.
+**Goal:** prove complete requests can travel from MCP to Unity and back correctly, then establish the minimum useful local tool slice.
 
-**State:** ⬜ Planned
+**State:** 🟨 In progress
 
 Target flow:
 
@@ -70,15 +71,26 @@ MCP client
   -> re-read state for verification
 ```
 
-Minimum capabilities:
+Verified foundation slice:
 
-- ⬜ Unity/editor status
-- ⬜ Active scene information
-- ⬜ Hierarchy read
+- ✅ Real Unity package load/compile on Unity 6000.3.21f1
+- ✅ Real local WebSocket hello and `editor.status` round trip
+- ✅ Real MCP stdio handshake and `unity_get_status` call against live Unity
+- ✅ Active scene / Play Mode / compilation state returned as structured data
+- ✅ Request IDs, deadlines, routing generation checks, timeout/disconnect handling
+- ✅ Structured bridge error propagation, including real `routing/stale_connection`
+- ✅ Domain-reload reconnect with stable editor identity and new `connectionGeneration`
+- ✅ Post-reconnect command success on the new generation
+
+Remaining minimum capabilities:
+
+- ✅ Unity/editor status
+- ✅ Active scene information
+- ⬜ Hierarchy read — next active slice (`feat/phase1-hierarchy`)
 - ⬜ Create a simple GameObject
 - ⬜ Read Console/compiler errors
-- ⬜ Structured error model
-- ⬜ Request IDs and write retry protection
+- ✅ Structured error model for the current read/routing path
+- 🟨 Request IDs and write retry protection — request IDs/routing are verified; mutation dedup/retry protection awaits the first write tool
 
 ### Exit gate
 
@@ -90,19 +102,19 @@ A clean test project can perform the minimum capabilities repeatedly with reprod
 
 **Goal:** make AI changes recoverable and resilient to normal Unity lifecycle events.
 
-**State:** ⬜ Planned
+**State:** ⬜ Planned as a full phase; some connection-lifecycle groundwork was completed early in Phase 1
 
-- ⬜ Main-thread dispatcher hardened
+- 🟨 Main-thread dispatcher hardened — verified for the current `editor.status` read path; broader tool coverage pending
 - ⬜ Serialized conflicting writes
 - ⬜ Stable object resolver
 - ⬜ Undo integration
 - ⬜ Scene/asset dirty-state reporting
 - ⬜ Explicit save behavior
 - ⬜ Compilation watcher
-- ⬜ Domain reload recovery
-- ⬜ Reconnection and connection generations
-- ⬜ Timeout/cancellation behavior
-- ⬜ Duplicate/replayed request protection
+- ✅ Domain reload recovery — verified for the local connection/status lifecycle
+- ✅ Reconnection and connection generations — verified for the local single-editor lifecycle
+- 🟨 Timeout/cancellation behavior — request deadlines/timeouts exist; broader cancellation semantics pending
+- ⬜ Duplicate/replayed request protection for mutations
 - ⬜ Unity EditMode test coverage for core execution
 
 ### Exit gate
