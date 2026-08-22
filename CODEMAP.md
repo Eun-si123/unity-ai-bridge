@@ -4,10 +4,11 @@ This file maps what exists in the repository and what is only planned.
 
 **Rule:** a planned path is not implementation evidence. `STATUS.md` remains authoritative for implementation/verification state.
 
-## Existing
+## Existing source tree
 
 ```text
 /
+├─ .github/workflows/
 ├─ .gitignore
 ├─ .nvmrc
 ├─ package.json
@@ -22,11 +23,20 @@ This file maps what exists in the repository and what is only planned.
 ├─ REFERENCES.md
 ├─ CHANGELOG.md
 ├─ llms.txt
+├─ docs/
+│  └─ TESTING.md
 │
 ├─ unity-package/
 │  ├─ package.json
 │  └─ Editor/
 │     ├─ UnityAiBridge.Editor.asmdef
+│     ├─ Commands/
+│     │  ├─ EditorStatusCommand.cs
+│     │  └─ HierarchyCommand.cs
+│     ├─ Connection/
+│     │  └─ LocalBridgeConnection.cs
+│     ├─ Dispatch/
+│     │  └─ EditorMainThreadDispatcher.cs
 │     └─ Protocol/
 │        └─ BridgeProtocol.cs
 │
@@ -34,27 +44,39 @@ This file maps what exists in the repository and what is only planned.
 │  ├─ README.md
 │  ├─ schemas/
 │  │  ├─ command.v0.schema.json
+│  │  ├─ hello.v0.schema.json
 │  │  └─ result.v0.schema.json
 │  └─ fixtures/
 │     ├─ editor-status.command.v0.json
-│     └─ editor-status.result.v0.json
+│     ├─ editor-status.result.v0.json
+│     ├─ hierarchy.command.v0.json
+│     └─ hierarchy.result.v0.json
 │
 └─ mcp-server/
    ├─ package.json
+   ├─ package-lock.json
    ├─ tsconfig.json
    ├─ src/
    │  ├─ index.ts
-   │  └─ protocol/
-   │     └─ bridge.ts
+   │  ├─ bridge/
+   │  │  └─ local-bridge-server.ts
+   │  ├─ protocol/
+   │  │  └─ bridge.ts
+   │  └─ dev/
+   │     ├─ verify-unity.ts
+   │     ├─ verify-mcp-unity.ts
+   │     ├─ verify-reconnect-unity.ts
+   │     └─ verify-hierarchy-unity.ts
    └─ tests/
-      └─ bridge-protocol.test.ts
+      ├─ bridge-protocol.test.ts
+      └─ local-bridge.test.ts
 ```
 
-The repository now has an initial source scaffold. It does **not** yet have a Unity WebSocket bridge, Unity command dispatcher, Unity tool handlers, remote gateway, provider integrations, or an end-to-end working MCP-to-Unity path.
+The tree above describes current repository paths on the Phase 1 hierarchy branch. `STATUS.md` distinguishes which paths are only implemented from which have real Unity verification.
 
 ## Documentation responsibilities
 
-- `STATUS.md` — what is actually implemented and verified
+- `STATUS.md` — actual implementation and verification state
 - `DESIGN.md` — durable detailed design / memory anchor
 - `DECISIONS.md` — architecture decision history and rationale
 - `ROADMAP.md` — public phases and exit gates
@@ -62,6 +84,7 @@ The repository now has an initial source scaffold. It does **not** yet have a Un
 - `AGENTS.md` — mandatory AI/contributor rules
 - `REFERENCES.md` — external research references; not proof of code reuse
 - `CHANGELOG.md` — notable project changes
+- `docs/TESTING.md` — repeatable automated/manual verification procedures
 - `llms.txt` — compact AI entrypoint
 
 ## Current source ownership
@@ -70,74 +93,56 @@ The repository now has an initial source scaffold. It does **not** yet have a Un
 
 Current implementation:
 
-- UPM package manifest,
-- Editor-only assembly definition,
-- bridge protocol/package version constants.
+- UPM package manifest and Editor-only assembly,
+- outbound local `ClientWebSocket` connection/reconnect loop,
+- protocol v0 hello/command/result handling,
+- explicit editor connection generations and stale-generation rejection,
+- Unity main-thread dispatcher,
+- `editor.status` read handler,
+- bounded `scene.hierarchy` read handler.
 
-Planned expansion:
+The heartbeat/status path is runtime-verified. The hierarchy source is implemented but remains subject to the verification state recorded in `STATUS.md`.
 
-```text
-Editor/
-├─ Connection/
-├─ Protocol/
-├─ Commands/
-├─ Dispatch/
-├─ Tools/
-├─ ObjectResolution/
-├─ Compilation/
-├─ Undo/
-└─ Tests/
-```
-
-Unity API operations, networking, dispatcher behavior, Undo handling, and tool handlers are not implemented yet.
+Planned later areas include object resolution for mutations, compilation helpers, Undo/dirty handling, and Unity EditMode tests.
 
 ### `bridge-protocol/`
 
 Current implementation:
 
-- protocol v0 command JSON Schema,
-- protocol v0 result JSON Schema,
-- initial editor-status request/result fixtures,
+- protocol v0 command, hello, and result JSON Schemas,
+- editor-status fixtures,
+- hierarchy request/result fixtures,
 - protocol documentation.
 
-This contract is separate from MCP so Unity transport details and provider integrations do not define Unity command semantics.
+The contract remains separate from MCP so Unity-facing command semantics do not depend on a particular AI provider or MCP transport.
 
 ### `mcp-server/`
 
 Current implementation:
 
-- pinned Node/TypeScript/MCP direct dependency configuration,
-- strict TypeScript compiler configuration,
-- minimal MCP v2 stdio server bootstrap,
-- bridge v0 TypeScript envelope types,
-- initial Node test-runner smoke tests.
+- pinned Node/TypeScript/MCP dependency graph and lockfile,
+- MCP v2 stdio server,
+- local loopback WebSocket bridge,
+- request/result correlation and route-generation handling,
+- `unity_get_status`,
+- `unity_get_hierarchy`,
+- TypeScript payload validation,
+- simulated local-bridge tests,
+- real-Unity verification helpers for bridge status, MCP status, reconnect, and hierarchy.
 
-Planned expansion:
-
-```text
-src/
-├─ tools/
-├─ protocol/
-├─ validation/
-├─ policy/
-├─ routing/
-├─ transport/
-└─ errors/
-```
-
-No Unity bridge connection, public Unity tools, routing, remote HTTP endpoint, or auth policy implementation exists yet.
+Remote Streamable HTTP, hosted auth/pairing, multi-user routing, and managed-service policy are not implemented here yet.
 
 ### Root build/configuration
 
 - `.nvmrc` pins the initial Node runtime.
-- root `package.json` delegates `build` and `test` to `mcp-server`.
+- root `package.json` delegates build/test to `mcp-server`.
+- `mcp-server/package-lock.json` pins the generated dependency graph.
+- GitHub Actions runs Node verification and Phase 1 local-bridge verification.
 - `.gitignore` excludes Node/TypeScript outputs and common generated Unity project data.
-
-A dependency lockfile has not yet been generated.
 
 ## Planned top-level areas
 
-These paths remain planned and must not be treated as existing:
+These paths remain planned and must not be treated as existing merely because the architecture mentions them:
 
 ```text
 integrations/
@@ -145,13 +150,10 @@ integrations/
 ├─ claude/
 └─ other/
 
-tests/
-├─ protocol/
-├─ integration/
-└─ e2e/
+additional test areas as needed for future remote/provider E2E coverage
 ```
 
-Cross-layer tests should be added when there is an actual cross-layer path to verify rather than as empty placeholder directories.
+Add directories when real implementation/tests need them rather than creating empty architectural placeholders.
 
 ## Private hosted infrastructure
 
