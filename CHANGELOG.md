@@ -11,7 +11,7 @@ The project is pre-alpha. Internal package version `0.0.1` does not represent a 
 - Adopted the **Apache License 2.0** for the public `unity-ai-bridge` repository.
 - Added the root `LICENSE` file using the standard Apache-2.0 license text.
 - Clarified that the separate private `unity-ai-mcp-infra` repository is not automatically licensed under the public core's Apache-2.0 license.
-- Closed the Phase 0 "project license selected" governance item; real Unity 6000.3.21f1 compile verification remains open.
+- Closed the Phase 0 "project license selected" governance item.
 
 ### Phase 1 — Local Unity Heartbeat / `editor.status` — In progress
 
@@ -42,13 +42,12 @@ The project is pre-alpha. Internal package version `0.0.1` does not represent a 
 
 #### Verification
 
-- Current Phase 1 code tree was re-verified on 2026-08-22 before the Apache-2.0 documentation rebase.
-- Node Verification run `32564186863`: **PASS**.
-- Phase 1 Local Bridge Verification run `32564186926`: **PASS**.
+- Node Verification and Phase 1 Local Bridge Verification are passing on the Phase 1 code tree.
 - Lockfile generation/refresh, `npm ci`, TypeScript build, and all Node tests: **PASS**.
 - Simulated Unity `hello -> editor.status -> structured result`: **PASS**.
 - Explicit no-editor failure path: **PASS**.
-- Real Unity 6000.3.21f1 package compile/connect: **Not yet verified**.
+- Unity 6000.3.21f1 package load/compile: **PASS (manual user verification, 2026-08-22; exact local checkout SHA not captured)**.
+- Real Unity WebSocket `hello` to the local bridge: **Not yet verified**.
 - Real MCP `unity_get_status` against a live Unity Editor: **Not yet verified**.
 - Domain reload/editor restart reconnection with a new connection generation: **Not yet verified**.
 
@@ -93,7 +92,7 @@ The project is pre-alpha. Internal package version `0.0.1` does not represent a 
 ### Verification at Phase 0 merge
 
 - Node/MCP dependency install, TypeScript build, and protocol smoke tests: **Verified by GitHub Actions**.
-- Unity 6000.3.21f1 package load/compile: **Not yet verified**.
+- Unity 6000.3.21f1 package load/compile: **Not yet verified at Phase 0 merge; later manually verified during Phase 1**.
 - Project license: **Not yet selected at Phase 0 merge; later resolved to Apache-2.0 in Unreleased**.
 
 ### Scope at Phase 0
