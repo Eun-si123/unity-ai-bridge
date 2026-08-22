@@ -11,7 +11,8 @@
     "test": "npm run build && node --test dist/tests/*.test.js",
     "start": "node dist/src/index.js",
     "verify:unity": "npm run build && node dist/src/dev/verify-unity.js",
-    "verify:mcp-unity": "npm run build && node dist/src/dev/verify-mcp-unity.js"
+    "verify:mcp-unity": "npm run build && node dist/src/dev/verify-mcp-unity.js",
+    "verify:reconnect": "npm run build && node dist/src/dev/verify-reconnect-unity.js"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "2.0.0",
