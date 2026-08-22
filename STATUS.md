@@ -17,7 +17,7 @@ Do not infer implementation from README examples, design diagrams, decisions, ro
 **Phase 1 — Minimal local end-to-end**  
 Overall status: **In progress**
 
-Phase 0 was squash-merged to `main` on 2026-08-22. Its Node/MCP checks are verified. The public repository license is now **Apache License 2.0**. Real Unity 6000.3.21f1 package compile/runtime verification remains open.
+Phase 0 was squash-merged to `main` on 2026-08-22. Its Node/MCP checks are verified. The public repository license is now **Apache License 2.0**. A manual Unity 6000.3.21f1 package load/compile check has now passed; real WebSocket/MCP runtime verification remains open.
 
 ## What exists now
 
@@ -26,8 +26,8 @@ Phase 0 was squash-merged to `main` on 2026-08-22. Its Node/MCP checks are verif
 | Public GitHub repository | Verified | Repository exists and accepts commits. |
 | Public-core license | Implemented | Root `LICENSE` is Apache License 2.0. The separate private `unity-ai-mcp-infra` repository is outside this repository's automatic license boundary. |
 | Core design/docs | Implemented | `AGENTS.md`, `DESIGN.md`, `DECISIONS.md`, `ROADMAP.md`, `CODEMAP.md`, `REFERENCES.md`. |
-| Unity Editor package scaffold | Implemented | UPM manifest, Editor asmdef, protocol constants, dispatcher, local connection, and status command source exist. Real Unity compile not yet recorded. |
-| Initial Unity target | Implemented | Unity 6000.3.21f1 initial target. Broader compatibility unverified. |
+| Unity Editor package scaffold | Verified manually | User reported successful Package Manager load and zero Unity AI Bridge compile errors in Unity 6000.3.21f1 on 2026-08-22. Exact local checkout SHA was not captured. |
+| Initial Unity target | Verified for compile | Unity 6000.3.21f1 loaded and compiled the current package in the manual check. Broader compatibility remains unverified. |
 | Bridge protocol v0 | Implemented | Command/result schemas plus v0 hello schema, TypeScript types, C# protocol version, and fixtures/source contracts. |
 | MCP/server scaffold | Verified | Phase 0 Node 24.19.0 install/build/tests passed in Actions run `32562797071`. |
 | Phase 1 dependency lockfile | Verified | `mcp-server/package-lock.json` includes exact `ws` 8.21.3 and `@types/ws` 8.18.1 pins and was successfully consumed by Phase 1 CI. |
@@ -61,7 +61,7 @@ Phase 0 implementation was merged because the scaffold is useful as the stable d
 - [x] bridge protocol v0 schema exists in source
 - [x] executable initial test/check commands exist
 - [x] Phase 0 dependency install/build/test recorded as passing
-- [ ] Unity package load/compile check recorded as passing
+- [x] Unity package load/compile check recorded as passing
 - [x] project license selected: Apache-2.0
 
 ## Phase 1 implementation target
@@ -88,7 +88,7 @@ Current narrow slice:
 - [x] MCP `unity_get_status` source implemented
 - [x] simulated Unity Node integration tests implemented
 - [x] Phase 1 Node build/tests recorded as passing
-- [ ] Unity package compiles in 6000.3.21f1
+- [x] Unity package compiles in 6000.3.21f1 (manual user verification; exact local SHA not captured)
 - [ ] real Unity hello observed by local bridge
 - [ ] real MCP `unity_get_status` result observed
 - [ ] domain reload/restart reconnection verified with new connection generation
@@ -119,12 +119,24 @@ Result: PASS
 Notes: earlier CI exposed and fixed a real ws callback contract bug where successful sends may report `null` rather than `undefined`.
 ```
 
-No real Unity package compile, real Unity WebSocket connection, or MCP-to-Unity runtime verification has been recorded yet.
+### 2026-08-22 — Unity package load/compile
+
+```text
+Revision under test: exact local checkout SHA not captured
+Environment: Windows, Unity 6000.3.21f1
+Action: open clean project -> Package Manager -> Add package from disk -> select unity-package/package.json -> allow compilation/domain reload
+Expected: package loads and Unity AI Bridge Editor assembly compiles with zero compile errors
+Observed: user reported steps 1-3 completed with no errors
+Result: PASS (manual user verification)
+Notes: runtime WebSocket connection and MCP end-to-end behavior were not part of this check.
+```
+
+No real Unity WebSocket connection or MCP-to-Unity runtime verification has been recorded yet.
 
 ## Known unknowns
 
 - long-term Unity support matrix beyond 6000.3.21f1,
-- actual Unity 6000.3.21f1 `ClientWebSocket` compile/runtime behavior,
+- actual Unity 6000.3.21f1 `ClientWebSocket` runtime behavior,
 - future multi-editor routing design,
 - remote authentication/pairing cryptography,
 - public hosting provider,
