@@ -32,7 +32,8 @@ This file maps what exists in the repository and what is only planned.
 │     ├─ UnityAiBridge.Editor.asmdef
 │     ├─ Commands/
 │     │  ├─ EditorStatusCommand.cs
-│     │  └─ HierarchyCommand.cs
+│     │  ├─ HierarchyCommand.cs
+│     │  └─ GameObjectCreateCommand.cs
 │     ├─ Connection/
 │     │  └─ LocalBridgeConnection.cs
 │     ├─ Dispatch/
@@ -50,7 +51,9 @@ This file maps what exists in the repository and what is only planned.
 │     ├─ editor-status.command.v0.json
 │     ├─ editor-status.result.v0.json
 │     ├─ hierarchy.command.v0.json
-│     └─ hierarchy.result.v0.json
+│     ├─ hierarchy.result.v0.json
+│     ├─ gameobject-create.command.v0.json
+│     └─ gameobject-create.result.v0.json
 │
 └─ mcp-server/
    ├─ package.json
@@ -66,13 +69,15 @@ This file maps what exists in the repository and what is only planned.
    │     ├─ verify-unity.ts
    │     ├─ verify-mcp-unity.ts
    │     ├─ verify-reconnect-unity.ts
-   │     └─ verify-hierarchy-unity.ts
+   │     ├─ verify-hierarchy-unity.ts
+   │     └─ verify-gameobject-create-unity.ts
    └─ tests/
       ├─ bridge-protocol.test.ts
-      └─ local-bridge.test.ts
+      ├─ local-bridge.test.ts
+      └─ gameobject-create.test.ts
 ```
 
-The tree above describes current repository paths on the Phase 1 hierarchy branch. `STATUS.md` distinguishes which paths are only implemented from which have real Unity verification.
+`STATUS.md` distinguishes implemented source from runtime-verified behavior.
 
 ## Documentation responsibilities
 
@@ -99,19 +104,20 @@ Current implementation:
 - explicit editor connection generations and stale-generation rejection,
 - Unity main-thread dispatcher,
 - `editor.status` read handler,
-- bounded `scene.hierarchy` read handler.
+- bounded `scene.hierarchy` read handler,
+- bounded `gameObject.create` write handler,
+- create-specific validation, Undo registration, dirty-state handling, `GlobalObjectId` result capture, and same-session mutation replay via `SessionState`.
 
-The heartbeat/status path is runtime-verified. The hierarchy source is implemented but remains subject to the verification state recorded in `STATUS.md`.
+Status, hierarchy, and the first GameObject-create write slice are runtime-verified on Windows / Unity 6000.3.21f1 as recorded in `STATUS.md`.
 
-Planned later areas include object resolution for mutations, compilation helpers, Undo/dirty handling, and Unity EditMode tests.
+Planned later areas include broader object resolution, compiler/Console diagnostics, generalized write transactions/readback, Undo/rollback policy, and Unity EditMode tests.
 
 ### `bridge-protocol/`
 
 Current implementation:
 
 - protocol v0 command, hello, and result JSON Schemas,
-- editor-status fixtures,
-- hierarchy request/result fixtures,
+- editor-status, hierarchy, and GameObject-create request/result fixtures,
 - protocol documentation.
 
 The contract remains separate from MCP so Unity-facing command semantics do not depend on a particular AI provider or MCP transport.
@@ -126,9 +132,11 @@ Current implementation:
 - request/result correlation and route-generation handling,
 - `unity_get_status`,
 - `unity_get_hierarchy`,
+- `unity_create_game_object`,
+- write-risk routing and mutation-id validation for the create slice,
 - TypeScript payload validation,
 - simulated local-bridge tests,
-- real-Unity verification helpers for bridge status, MCP status, reconnect, and hierarchy.
+- real-Unity verification helpers for bridge status, MCP status, reconnect, hierarchy, and GameObject create/dedup.
 
 Remote Streamable HTTP, hosted auth/pairing, multi-user routing, and managed-service policy are not implemented here yet.
 

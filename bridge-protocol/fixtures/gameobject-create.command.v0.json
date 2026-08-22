@@ -1,0 +1,15 @@
+{
+  "protocolVersion": "0",
+  "requestId": "req-create-001",
+  "operation": "gameObject.create",
+  "arguments": {
+    "name": "BridgeCreated",
+    "mutationId": "mutation-create-001"
+  },
+  "risk": "write",
+  "route": {
+    "editorId": "editor-example",
+    "connectionGeneration": 1234
+  },
+  "deadlineUnixMs": 1787440000000
+}

@@ -230,6 +230,12 @@ namespace UnityAiBridge.Editor.Connection
                 return;
             }
 
+            if (string.Equals(command.operation, "gameObject.create", StringComparison.Ordinal))
+            {
+                await HandleGameObjectCreateAsync(current, command, cancellationToken);
+                return;
+            }
+
             await SendErrorAsync(
                 current,
                 command.requestId,
@@ -321,6 +327,107 @@ namespace UnityAiBridge.Editor.Connection
                     command.requestId,
                     "unity_api",
                     "hierarchy_read_failed",
+                    exception.Message,
+                    cancellationToken);
+            }
+        }
+
+        private static async Task HandleGameObjectCreateAsync(
+            ClientWebSocket current,
+            BridgeCommandDto command,
+            CancellationToken cancellationToken)
+        {
+            if (!string.Equals(command.risk, "write", StringComparison.Ordinal))
+            {
+                await SendErrorAsync(
+                    current,
+                    command.requestId,
+                    "validation",
+                    "risk_mismatch",
+                    "gameObject.create requires risk='write'.",
+                    cancellationToken);
+                return;
+            }
+
+            var name = command.arguments != null ? command.arguments.name : null;
+            var mutationId = command.arguments != null ? command.arguments.mutationId : null;
+
+            try
+            {
+                GameObjectCreateCommand.ValidateArguments(name, mutationId);
+            }
+            catch (ArgumentException exception)
+            {
+                await SendErrorAsync(
+                    current,
+                    command.requestId,
+                    "validation",
+                    "invalid_arguments",
+                    exception.Message,
+                    cancellationToken);
+                return;
+            }
+
+            try
+            {
+                var result = await EditorMainThreadDispatcher.InvokeAsync(
+                    () => GameObjectCreateCommand.Execute(name, mutationId));
+                var response = new BridgeGameObjectCreateResultDto
+                {
+                    protocolVersion = BridgeProtocol.Version,
+                    requestId = command.requestId,
+                    ok = true,
+                    result = result,
+                    warnings = Array.Empty<string>(),
+                    changedTargets = result.replayed
+                        ? Array.Empty<BridgeChangedTargetDto>()
+                        : new[]
+                        {
+                            new BridgeChangedTargetDto
+                            {
+                                globalObjectId = result.globalObjectId,
+                                instanceId = result.instanceId,
+                                name = result.name,
+                            },
+                        },
+                    dirtyState = result.replayed ? "unchanged" : "dirty",
+                    undo = new BridgeUndoDto
+                    {
+                        available = !result.replayed,
+                        groupName = result.replayed ? string.Empty : "Unity AI Bridge: Create GameObject",
+                    },
+                    compileState = "idle",
+                };
+
+                await SendJsonAsync(current, JsonUtility.ToJson(response), cancellationToken);
+            }
+            catch (GameObjectCreateCompilingException exception)
+            {
+                await SendErrorAsync(
+                    current,
+                    command.requestId,
+                    "compile_reload",
+                    "editor_compiling",
+                    exception.Message,
+                    cancellationToken);
+            }
+            catch (GameObjectCreateMutationConflictException exception)
+            {
+                await SendErrorAsync(
+                    current,
+                    command.requestId,
+                    "validation",
+                    "mutation_id_conflict",
+                    exception.Message,
+                    cancellationToken);
+            }
+            catch (Exception exception)
+            {
+                await SendErrorAsync(
+                    current,
+                    command.requestId,
+                    "unity_api",
+                    "gameobject_create_failed",
                     exception.Message,
                     cancellationToken);
             }
@@ -466,10 +573,12 @@ namespace UnityAiBridge.Editor.Connection
         }
 
         [Serializable]
-        private sealed class HierarchyArgumentsDto
+        private sealed class CommandArgumentsDto
         {
             public int maxDepth;
             public int maxNodes;
+            public string name;
+            public string mutationId;
         }
 
         [Serializable]
@@ -478,7 +587,7 @@ namespace UnityAiBridge.Editor.Connection
             public string protocolVersion;
             public string requestId;
             public string operation;
-            public HierarchyArgumentsDto arguments;
+            public CommandArgumentsDto arguments;
             public string risk;
             public BridgeRouteDto route;
             public long deadlineUnixMs;
@@ -517,6 +626,35 @@ namespace UnityAiBridge.Editor.Connection
             public string[] warnings;
             public string dirtyState;
             public string compileState;
+        }
+
+        [Serializable]
+        private sealed class BridgeGameObjectCreateResultDto
+        {
+            public string protocolVersion;
+            public string requestId;
+            public bool ok;
+            public GameObjectCreatePayload result;
+            public string[] warnings;
+            public BridgeChangedTargetDto[] changedTargets;
+            public string dirtyState;
+            public BridgeUndoDto undo;
+            public string compileState;
+        }
+
+        [Serializable]
+        private sealed class BridgeChangedTargetDto
+        {
+            public string globalObjectId;
+            public int instanceId;
+            public string name;
+        }
+
+        [Serializable]
+        private sealed class BridgeUndoDto
+        {
+            public bool available;
+            public string groupName;
         }
 
         [Serializable]

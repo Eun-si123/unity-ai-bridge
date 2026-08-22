@@ -3,6 +3,7 @@ import { serveStdio } from "@modelcontextprotocol/server/stdio";
 
 import {
   LocalBridgeServer,
+  type GameObjectCreateOptions,
   type HierarchyOptions,
 } from "./bridge/local-bridge-server.js";
 import { BRIDGE_PROTOCOL_VERSION } from "./protocol/bridge.js";
@@ -27,6 +28,28 @@ const hierarchyInputSchema = fromJsonSchema({
       maximum: 500,
       default: 200,
       description: "Maximum number of GameObjects to return in preorder. Allowed range: 1..500.",
+    },
+  },
+  additionalProperties: false,
+});
+
+const createGameObjectInputSchema = fromJsonSchema({
+  type: "object",
+  required: ["name"],
+  properties: {
+    name: {
+      type: "string",
+      minLength: 1,
+      maxLength: 128,
+      description: "Name for a new empty root GameObject in the active scene. Whitespace-only names are rejected.",
+    },
+    mutationId: {
+      type: "string",
+      minLength: 1,
+      maxLength: 128,
+      pattern: "^[A-Za-z0-9._:-]+$",
+      description:
+        "Optional idempotency key. Reuse exactly the same mutationId only when retrying the same create after an ambiguous timeout/disconnect. If omitted, the bridge generates one.",
     },
   },
   additionalProperties: false,
@@ -100,6 +123,36 @@ serveStdio(() => {
         return {
           content: [{ type: "text", text: JSON.stringify(hierarchy) }],
           structuredContent: hierarchy,
+        };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return {
+          isError: true,
+          content: [{ type: "text", text: message }],
+        };
+      }
+    },
+  );
+
+  server.registerTool(
+    "unity_create_game_object",
+    {
+      description:
+        "Create one empty root GameObject in the active Unity scene. This is a write operation. Unity registers Undo, marks the scene dirty, and deduplicates repeated delivery when the same mutationId and arguments are reused. If a write fails ambiguously, retry only with the mutationId reported by the failed call.",
+      inputSchema: createGameObjectInputSchema,
+    },
+    async (args) => {
+      try {
+        const input = args as { name: string; mutationId?: string };
+        const options: GameObjectCreateOptions = { name: input.name };
+        if (input.mutationId !== undefined) {
+          options.mutationId = input.mutationId;
+        }
+
+        const result = await bridge.requestCreateGameObject(options);
+        return {
+          content: [{ type: "text", text: JSON.stringify(result) }],
+          structuredContent: result,
         };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
