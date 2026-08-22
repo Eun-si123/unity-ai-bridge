@@ -1,7 +1,10 @@
 import { McpServer, fromJsonSchema } from "@modelcontextprotocol/server";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 
-import { LocalBridgeServer } from "./bridge/local-bridge-server.js";
+import {
+  LocalBridgeServer,
+  type HierarchyOptions,
+} from "./bridge/local-bridge-server.js";
 import { BRIDGE_PROTOCOL_VERSION } from "./protocol/bridge.js";
 
 const bridge = new LocalBridgeServer();
@@ -85,10 +88,15 @@ serveStdio(() => {
     async (args) => {
       try {
         const input = args as { maxDepth?: number; maxNodes?: number };
-        const hierarchy = await bridge.requestHierarchy({
-          maxDepth: input.maxDepth,
-          maxNodes: input.maxNodes,
-        });
+        const options: HierarchyOptions = {};
+        if (input.maxDepth !== undefined) {
+          options.maxDepth = input.maxDepth;
+        }
+        if (input.maxNodes !== undefined) {
+          options.maxNodes = input.maxNodes;
+        }
+
+        const hierarchy = await bridge.requestHierarchy(options);
         return {
           content: [{ type: "text", text: JSON.stringify(hierarchy) }],
           structuredContent: hierarchy,
