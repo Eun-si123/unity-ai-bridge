@@ -8,6 +8,7 @@ import {
   type BridgeCommandEnvelope,
   type BridgeResultEnvelope,
   type BridgeRoute,
+  type RiskClass,
 } from "../protocol/bridge.js";
 
 export interface BridgeHello {
@@ -57,6 +58,23 @@ export interface HierarchyPayload {
   nodes: HierarchyNodePayload[];
 }
 
+export interface GameObjectCreateOptions {
+  name: string;
+  mutationId?: string;
+}
+
+export interface GameObjectCreatePayload {
+  mutationId: string;
+  replayed: boolean;
+  globalObjectId: string;
+  instanceId: number;
+  name: string;
+  hierarchyPath: string;
+  sceneName: string;
+  scenePath: string;
+  siblingIndex: number;
+}
+
 interface ActiveEditor {
   socket: WebSocket;
   hello: BridgeHello;
@@ -72,6 +90,9 @@ const DEFAULT_HIERARCHY_MAX_DEPTH = 8;
 const DEFAULT_HIERARCHY_MAX_NODES = 200;
 const MAX_HIERARCHY_DEPTH = 32;
 const MAX_HIERARCHY_NODES = 500;
+const MAX_GAMEOBJECT_NAME_LENGTH = 128;
+const MAX_MUTATION_ID_LENGTH = 128;
+const MUTATION_ID_PATTERN = /^[A-Za-z0-9._:-]+$/;
 
 export class LocalBridgeServer {
   private readonly server: WebSocketServer;
@@ -205,6 +226,53 @@ export class LocalBridgeServer {
     return result;
   }
 
+  public async requestCreateGameObject(
+    options: GameObjectCreateOptions,
+    timeoutMs = 5000,
+  ): Promise<GameObjectCreatePayload> {
+    const editor = this.requireActiveEditor();
+    const name = options.name;
+    const mutationId = options.mutationId ?? randomUUID();
+
+    if (typeof name !== "string" || name.trim().length === 0) {
+      throw new Error("name must contain at least one non-whitespace character.");
+    }
+    if (name.length > MAX_GAMEOBJECT_NAME_LENGTH) {
+      throw new Error(`name must be at most ${MAX_GAMEOBJECT_NAME_LENGTH} characters.`);
+    }
+    if (
+      typeof mutationId !== "string" ||
+      mutationId.length === 0 ||
+      mutationId.length > MAX_MUTATION_ID_LENGTH ||
+      !MUTATION_ID_PATTERN.test(mutationId)
+    ) {
+      throw new Error(
+        "mutationId must be 1..128 characters using only letters, digits, '-', '_', '.', and ':'.",
+      );
+    }
+
+    try {
+      const result = await this.requestOperation(
+        "gameObject.create",
+        { name, mutationId },
+        {
+          editorId: editor.hello.editorId,
+          connectionGeneration: editor.hello.connectionGeneration,
+        },
+        timeoutMs,
+        "write",
+      );
+
+      if (!isGameObjectCreatePayload(result)) {
+        throw new Error("Unity returned an invalid gameObject.create payload.");
+      }
+      return result;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`${message} mutationId=${mutationId}`);
+    }
+  }
+
   public async stop(): Promise<void> {
     for (const pending of this.pending.values()) {
       clearTimeout(pending.timer);
@@ -226,6 +294,7 @@ export class LocalBridgeServer {
     args: Record<string, unknown>,
     route: BridgeRoute,
     timeoutMs: number,
+    risk: RiskClass = "read",
   ): Promise<unknown> {
     const editor = this.requireActiveEditor();
     const requestId = randomUUID();
@@ -234,7 +303,7 @@ export class LocalBridgeServer {
       requestId,
       operation,
       arguments: args,
-      risk: "read",
+      risk,
       route,
       deadlineUnixMs: Date.now() + timeoutMs,
     };
@@ -430,6 +499,28 @@ function isHierarchyNodePayload(value: unknown): value is HierarchyNodePayload {
     isNonNegativeInteger(candidate.childCount) &&
     typeof candidate.activeSelf === "boolean" &&
     typeof candidate.activeInHierarchy === "boolean"
+  );
+}
+
+function isGameObjectCreatePayload(value: unknown): value is GameObjectCreatePayload {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.mutationId === "string" &&
+    candidate.mutationId.length > 0 &&
+    typeof candidate.replayed === "boolean" &&
+    typeof candidate.globalObjectId === "string" &&
+    candidate.globalObjectId.length > 0 &&
+    typeof candidate.instanceId === "number" &&
+    Number.isSafeInteger(candidate.instanceId) &&
+    typeof candidate.name === "string" &&
+    typeof candidate.hierarchyPath === "string" &&
+    typeof candidate.sceneName === "string" &&
+    typeof candidate.scenePath === "string" &&
+    isNonNegativeInteger(candidate.siblingIndex)
   );
 }
 
