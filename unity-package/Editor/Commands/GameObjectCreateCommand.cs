@@ -28,10 +28,15 @@ namespace UnityAiBridge.Editor.Commands
         private const string SessionKeyPrefix = "UnityAiBridge.Mutation.GameObjectCreate.";
         private const string UndoGroupName = "Unity AI Bridge: Create GameObject";
 
-        public static GameObjectCreatePayload Execute(string name, string mutationId)
+        public static void ValidateArguments(string name, string mutationId)
         {
             ValidateName(name);
             ValidateMutationId(mutationId);
+        }
+
+        public static GameObjectCreatePayload Execute(string name, string mutationId)
+        {
+            ValidateArguments(name, mutationId);
 
             var sessionKey = SessionKeyPrefix + mutationId;
             var cachedJson = SessionState.GetString(sessionKey, string.Empty);
