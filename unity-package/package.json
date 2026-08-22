@@ -1,0 +1,17 @@
+{
+  "name": "com.eunsung.unity-ai-bridge",
+  "version": "0.0.1",
+  "displayName": "Unity AI Bridge",
+  "description": "Editor-side foundation package for provider-neutral AI control of Unity.",
+  "unity": "6000.3",
+  "unityRelease": "21f1",
+  "keywords": [
+    "ai",
+    "mcp",
+    "editor",
+    "automation"
+  ],
+  "author": {
+    "name": "Eun-si123"
+  }
+}
