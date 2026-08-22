@@ -144,7 +144,8 @@ namespace UnityAiBridge.Editor.Commands
                 objects[index] = collected[index].gameObject;
             }
 
-            GlobalObjectId.GetGlobalObjectIdsSlow(objects, out var globalObjectIds);
+            var globalObjectIds = new GlobalObjectId[objects.Length];
+            GlobalObjectId.GetGlobalObjectIdsSlow(objects, globalObjectIds);
 
             var nodes = new HierarchyNodePayload[collected.Count];
             for (var index = 0; index < collected.Count; index++)
