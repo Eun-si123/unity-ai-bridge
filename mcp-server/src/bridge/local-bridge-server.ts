@@ -27,6 +27,36 @@ export interface EditorStatusPayload {
   isCompiling: boolean;
 }
 
+export interface HierarchyOptions {
+  maxDepth?: number;
+  maxNodes?: number;
+}
+
+export interface HierarchyNodePayload {
+  globalObjectId: string;
+  instanceId: number;
+  name: string;
+  hierarchyPath: string;
+  parentGlobalObjectId: string;
+  depth: number;
+  siblingIndex: number;
+  childCount: number;
+  activeSelf: boolean;
+  activeInHierarchy: boolean;
+}
+
+export interface HierarchyPayload {
+  sceneName: string;
+  scenePath: string;
+  rootCount: number;
+  returnedNodeCount: number;
+  maxDepth: number;
+  maxNodes: number;
+  truncatedByDepth: boolean;
+  truncatedByNodes: boolean;
+  nodes: HierarchyNodePayload[];
+}
+
 interface ActiveEditor {
   socket: WebSocket;
   hello: BridgeHello;
@@ -37,6 +67,11 @@ interface PendingRequest {
   reject: (error: Error) => void;
   timer: NodeJS.Timeout;
 }
+
+const DEFAULT_HIERARCHY_MAX_DEPTH = 8;
+const DEFAULT_HIERARCHY_MAX_NODES = 200;
+const MAX_HIERARCHY_DEPTH = 32;
+const MAX_HIERARCHY_NODES = 500;
 
 export class LocalBridgeServer {
   private readonly server: WebSocketServer;
@@ -132,44 +167,41 @@ export class LocalBridgeServer {
     route: BridgeRoute,
     timeoutMs = 5000,
   ): Promise<EditorStatusPayload> {
-    const editor = this.requireActiveEditor();
-    const requestId = randomUUID();
-    const command: BridgeCommandEnvelope = {
-      protocolVersion: BRIDGE_PROTOCOL_VERSION,
-      requestId,
-      operation: "editor.status",
-      arguments: {},
-      risk: "read",
-      route,
-      deadlineUnixMs: Date.now() + timeoutMs,
-    };
-
-    const result = await new Promise<unknown>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.pending.delete(requestId);
-        reject(new Error(`editor.status timed out after ${timeoutMs} ms.`));
-      }, timeoutMs);
-
-      this.pending.set(requestId, { resolve, reject, timer });
-
-      editor.socket.send(JSON.stringify(command), (error) => {
-        if (error == null) {
-          return;
-        }
-
-        const pending = this.pending.get(requestId);
-        if (pending !== undefined) {
-          clearTimeout(pending.timer);
-          this.pending.delete(requestId);
-          pending.reject(error);
-        }
-      });
-    });
-
+    const result = await this.requestOperation("editor.status", {}, route, timeoutMs);
     if (!isEditorStatusPayload(result)) {
       throw new Error("Unity returned an invalid editor.status payload.");
     }
+    return result;
+  }
 
+  public async requestHierarchy(
+    options: HierarchyOptions = {},
+    timeoutMs = 5000,
+  ): Promise<HierarchyPayload> {
+    const editor = this.requireActiveEditor();
+    const maxDepth = options.maxDepth ?? DEFAULT_HIERARCHY_MAX_DEPTH;
+    const maxNodes = options.maxNodes ?? DEFAULT_HIERARCHY_MAX_NODES;
+
+    if (!Number.isInteger(maxDepth) || maxDepth < 1 || maxDepth > MAX_HIERARCHY_DEPTH) {
+      throw new Error(`maxDepth must be an integer between 1 and ${MAX_HIERARCHY_DEPTH}.`);
+    }
+    if (!Number.isInteger(maxNodes) || maxNodes < 1 || maxNodes > MAX_HIERARCHY_NODES) {
+      throw new Error(`maxNodes must be an integer between 1 and ${MAX_HIERARCHY_NODES}.`);
+    }
+
+    const result = await this.requestOperation(
+      "scene.hierarchy",
+      { maxDepth, maxNodes },
+      {
+        editorId: editor.hello.editorId,
+        connectionGeneration: editor.hello.connectionGeneration,
+      },
+      timeoutMs,
+    );
+
+    if (!isHierarchyPayload(result)) {
+      throw new Error("Unity returned an invalid scene.hierarchy payload.");
+    }
     return result;
   }
 
@@ -186,6 +218,47 @@ export class LocalBridgeServer {
 
     await new Promise<void>((resolve) => {
       this.server.close(() => resolve());
+    });
+  }
+
+  private async requestOperation(
+    operation: string,
+    args: Record<string, unknown>,
+    route: BridgeRoute,
+    timeoutMs: number,
+  ): Promise<unknown> {
+    const editor = this.requireActiveEditor();
+    const requestId = randomUUID();
+    const command: BridgeCommandEnvelope = {
+      protocolVersion: BRIDGE_PROTOCOL_VERSION,
+      requestId,
+      operation,
+      arguments: args,
+      risk: "read",
+      route,
+      deadlineUnixMs: Date.now() + timeoutMs,
+    };
+
+    return await new Promise<unknown>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pending.delete(requestId);
+        reject(new Error(`${operation} timed out after ${timeoutMs} ms.`));
+      }, timeoutMs);
+
+      this.pending.set(requestId, { resolve, reject, timer });
+
+      editor.socket.send(JSON.stringify(command), (error) => {
+        if (error == null) {
+          return;
+        }
+
+        const pending = this.pending.get(requestId);
+        if (pending !== undefined) {
+          clearTimeout(pending.timer);
+          this.pending.delete(requestId);
+          pending.reject(error);
+        }
+      });
     });
   }
 
@@ -310,4 +383,60 @@ function isEditorStatusPayload(value: unknown): value is EditorStatusPayload {
     typeof candidate.isPlaying === "boolean" &&
     typeof candidate.isCompiling === "boolean"
   );
+}
+
+function isHierarchyPayload(value: unknown): value is HierarchyPayload {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  if (
+    typeof candidate.sceneName !== "string" ||
+    typeof candidate.scenePath !== "string" ||
+    !isNonNegativeInteger(candidate.rootCount) ||
+    !isNonNegativeInteger(candidate.returnedNodeCount) ||
+    !isPositiveInteger(candidate.maxDepth) ||
+    !isPositiveInteger(candidate.maxNodes) ||
+    typeof candidate.truncatedByDepth !== "boolean" ||
+    typeof candidate.truncatedByNodes !== "boolean" ||
+    !Array.isArray(candidate.nodes)
+  ) {
+    return false;
+  }
+
+  if (candidate.returnedNodeCount !== candidate.nodes.length) {
+    return false;
+  }
+
+  return candidate.nodes.every(isHierarchyNodePayload);
+}
+
+function isHierarchyNodePayload(value: unknown): value is HierarchyNodePayload {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.globalObjectId === "string" &&
+    typeof candidate.instanceId === "number" &&
+    Number.isSafeInteger(candidate.instanceId) &&
+    typeof candidate.name === "string" &&
+    typeof candidate.hierarchyPath === "string" &&
+    typeof candidate.parentGlobalObjectId === "string" &&
+    isNonNegativeInteger(candidate.depth) &&
+    isNonNegativeInteger(candidate.siblingIndex) &&
+    isNonNegativeInteger(candidate.childCount) &&
+    typeof candidate.activeSelf === "boolean" &&
+    typeof candidate.activeInHierarchy === "boolean"
+  );
+}
+
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
+}
+
+function isNonNegativeInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 }
