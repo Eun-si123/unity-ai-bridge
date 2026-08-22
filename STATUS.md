@@ -17,7 +17,7 @@ Do not infer implementation from README examples, design diagrams, decisions, ro
 **Phase 1 — Minimal local end-to-end**  
 Overall status: **In progress**
 
-Phase 0 was squash-merged to `main` on 2026-08-22. Its Node/MCP checks are verified. The public repository license is **Apache License 2.0**. Unity 6000.3.21f1 package compilation and the real local WebSocket `hello -> editor.status -> structured result` path are now manually verified. A real MCP `unity_get_status` call and domain-reload/restart reconnection verification remain open.
+Phase 0 was squash-merged to `main` on 2026-08-22. Its Node/MCP checks are verified. The public repository license is **Apache License 2.0**. Unity 6000.3.21f1 package compilation, the real local WebSocket `hello -> editor.status -> structured result` path, and a real MCP stdio `unity_get_status` call against live Unity are now manually verified. Domain-reload/restart reconnection and stale-generation lifecycle verification remain open.
 
 ## What exists now
 
@@ -27,16 +27,17 @@ Phase 0 was squash-merged to `main` on 2026-08-22. Its Node/MCP checks are verif
 | Public-core license | Implemented | Root `LICENSE` is Apache License 2.0. The separate private `unity-ai-mcp-infra` repository is outside this repository's automatic license boundary. |
 | Core design/docs | Implemented | `AGENTS.md`, `DESIGN.md`, `DECISIONS.md`, `ROADMAP.md`, `CODEMAP.md`, `REFERENCES.md`. |
 | Unity Editor package scaffold | Verified manually | Package Manager load and Unity AI Bridge Editor assembly compilation passed in Unity 6000.3.21f1 on Windows at revision `059727365c025eb1d18013371fe95e055517e570`. |
-| Initial Unity target | Verified for current Phase 1 slice | Unity 6000.3.21f1 compiled the package and completed a real WebSocket/status round trip. Broader compatibility remains unverified. |
+| Initial Unity target | Verified for current Phase 1 slice | Unity 6000.3.21f1 compiled the package and completed real WebSocket/status and MCP status round trips. Broader compatibility remains unverified. |
 | Bridge protocol v0 | Implemented | Command/result schemas plus v0 hello schema, TypeScript types, C# protocol version, and fixtures/source contracts. |
 | MCP/server scaffold | Verified | Phase 0 Node 24.19.0 install/build/tests passed in Actions run `32562797071`. |
-| Phase 1 dependency lockfile | Verified | `mcp-server/package-lock.json` includes exact `ws` 8.21.3 and `@types/ws` 8.18.1 pins and is consumed by passing Phase 1 CI. |
+| Phase 1 dependency lockfile | Verified | `mcp-server/package-lock.json` includes exact bridge/MCP verifier dependencies and is consumed by passing Phase 1 CI. |
 | Local WebSocket bridge server | Verified manually + CI | Node simulation passes, and a real Unity 6000.3.21f1 Editor connected to `127.0.0.1:5081`, sent protocol v0 `hello`, received `editor.status`, and returned a valid result at revision `059727365c025eb1d18013371fe95e055517e570`. |
 | Unity outbound WebSocket connection | Verified manually | Real `ClientWebSocket` connection and hello succeeded on Windows / Unity 6000.3.21f1. |
 | Unity main-thread dispatcher | Verified for `editor.status` path | The real status request completed through the dispatcher-backed handler and returned live Editor state. |
 | `editor.status` bridge operation | Verified manually | Returned Unity `6000.3.21f1`, active scene `Assets/Scenes/SampleScene.unity`, `isPlaying=false`, and `isCompiling=false` from the real test Editor. |
-| MCP `unity_get_status` | Implemented | Tool routes through the local bridge and only succeeds after a matching validated Unity result. A real MCP protocol call against live Unity is still pending. |
-| Node local-bridge integration tests | Verified | Protocol tests, simulated Unity hello/status round-trip, and no-editor failure pass under Node 24.19.0; current CI remains green. |
+| MCP `unity_get_status` | Verified manually | Official MCP TypeScript client completed stdio handshake, confirmed the tool was advertised, called `unity_get_status`, and received matching live Unity structured content on Windows / Unity 6000.3.21f1. Exact local checkout SHA for this manual command was not separately captured. |
+| Reconnect / stale-generation lifecycle | Implemented verifier, runtime verification pending | `verify:reconnect` records the initial generation, waits for a new generation, deliberately targets the old generation, requires `routing/stale_connection`, then requires a successful post-reconnect status. Real Unity result not yet recorded. |
+| Node local-bridge integration tests | Verified | Protocol tests, simulated Unity hello/status round-trip, explicit routed stale-generation error propagation, and no-editor failure are covered under Node 24.19.0; current-head CI must remain green after changes. |
 | GameObject mutation tools | Planned | Not implemented. |
 | Console/compiler tools beyond status | Planned | Not implemented. |
 | Undo integration | Planned | Not implemented. |
@@ -91,8 +92,10 @@ Current narrow slice:
 - [x] Unity package compiles in 6000.3.21f1
 - [x] real Unity hello observed by local bridge
 - [x] real bridge `editor.status` result observed and matched live Editor state
-- [ ] real MCP `unity_get_status` result observed
+- [x] real MCP stdio `unity_get_status` result observed and matched live Editor state
 - [ ] domain reload/restart reconnection verified with new connection generation
+- [ ] stale connection generation rejected in a real Editor lifecycle
+- [ ] post-reconnect status succeeds on the new generation
 
 The rest of the Phase 1 minimum (hierarchy, GameObject create, Console/compiler read) remains planned after this narrow status path is proven.
 
@@ -143,10 +146,20 @@ Result: PASS
 Notes: this verifies the real WebSocket/Unity command path, but the verifier calls LocalBridgeServer directly rather than invoking the MCP tool over MCP stdio.
 ```
 
+### 2026-08-22 — Real MCP stdio -> live Unity status
+
+```text
+Revision under test: Phase 1 branch containing verify:mcp-unity; exact local checkout SHA not separately captured
+Environment: Windows, Unity 6000.3.21f1, Node 24.x, official MCP TypeScript client 2.0.0
+Action: npm.cmd --prefix mcp-server run verify:mcp-unity
+Expected: MCP initialize handshake succeeds; unity_get_status is advertised; tool call reaches live Unity and returns current structured Editor state
+Observed: MCP handshake PASS; unity_get_status advertised; MCP unity_get_status PASS returned unityVersion=6000.3.21f1, projectName=My project (1), activeScene=Assets/Scenes/SampleScene.unity, isPlaying=false, isCompiling=false
+Result: PASS (manual user verification)
+```
+
 ## Known unknowns
 
 - long-term Unity support matrix beyond 6000.3.21f1,
-- real MCP stdio `unity_get_status` behavior against the live Unity Editor,
 - domain reload/restart reconnection behavior and stale-generation rejection in a real Editor,
 - future multi-editor routing design,
 - remote authentication/pairing cryptography,
