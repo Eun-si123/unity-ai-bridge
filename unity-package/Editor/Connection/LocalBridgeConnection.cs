@@ -230,6 +230,12 @@ namespace UnityAiBridge.Editor.Connection
                 return;
             }
 
+            if (string.Equals(command.operation, "scene.create_game_object", StringComparison.Ordinal))
+            {
+                await HandleCreateGameObjectAsync(current, command, cancellationToken);
+                return;
+            }
+
             await SendErrorAsync(
                 current,
                 command.requestId,
@@ -321,6 +327,96 @@ namespace UnityAiBridge.Editor.Connection
                     command.requestId,
                     "unity_api",
                     "hierarchy_read_failed",
+                    exception.Message,
+                    cancellationToken);
+            }
+        }
+
+        private static async Task HandleCreateGameObjectAsync(
+            ClientWebSocket current,
+            BridgeCommandDto command,
+            CancellationToken cancellationToken)
+        {
+            if (!string.Equals(command.risk, "write", StringComparison.Ordinal))
+            {
+                await SendErrorAsync(
+                    current,
+                    command.requestId,
+                    "policy",
+                    "risk_mismatch",
+                    "scene.create_game_object requires risk='write'.",
+                    cancellationToken);
+                return;
+            }
+
+            var name = command.arguments != null ? command.arguments.name : null;
+            var idempotencyKey = command.arguments != null ? command.arguments.idempotencyKey : null;
+            try
+            {
+                CreateGameObjectCommand.ValidateName(name);
+                CreateGameObjectCommand.ValidateIdempotencyKey(idempotencyKey);
+            }
+            catch (ArgumentException exception)
+            {
+                await SendErrorAsync(
+                    current,
+                    command.requestId,
+                    "validation",
+                    "create_game_object_arguments",
+                    exception.Message,
+                    cancellationToken);
+                return;
+            }
+
+            try
+            {
+                var result = await EditorMainThreadDispatcher.InvokeAsync(
+                    () => CreateGameObjectCommand.Execute(name, idempotencyKey));
+                var response = new BridgeCreateGameObjectResultDto
+                {
+                    protocolVersion = BridgeProtocol.Version,
+                    requestId = command.requestId,
+                    ok = true,
+                    result = result,
+                    warnings = Array.Empty<string>(),
+                    dirtyState = result.sceneDirty ? "dirty" : "unchanged",
+                    undo = new BridgeUndoMetadataDto
+                    {
+                        available = true,
+                        groupName = result.undoGroupName,
+                    },
+                    compileState = EditorApplication.isCompiling ? "compiling" : "idle",
+                };
+
+                await SendJsonAsync(current, JsonUtility.ToJson(response), cancellationToken);
+            }
+            catch (CreateGameObjectIdempotencyConflictException exception)
+            {
+                await SendErrorAsync(
+                    current,
+                    command.requestId,
+                    "validation",
+                    "idempotency_conflict",
+                    exception.Message,
+                    cancellationToken);
+            }
+            catch (CreateGameObjectStaleTargetException exception)
+            {
+                await SendErrorAsync(
+                    current,
+                    command.requestId,
+                    "stale_target",
+                    "idempotency_target_missing",
+                    exception.Message,
+                    cancellationToken);
+            }
+            catch (Exception exception)
+            {
+                await SendErrorAsync(
+                    current,
+                    command.requestId,
+                    "unity_api",
+                    "create_game_object_failed",
                     exception.Message,
                     cancellationToken);
             }
@@ -466,10 +562,12 @@ namespace UnityAiBridge.Editor.Connection
         }
 
         [Serializable]
-        private sealed class HierarchyArgumentsDto
+        private sealed class BridgeArgumentsDto
         {
             public int maxDepth;
             public int maxNodes;
+            public string name;
+            public string idempotencyKey;
         }
 
         [Serializable]
@@ -478,7 +576,7 @@ namespace UnityAiBridge.Editor.Connection
             public string protocolVersion;
             public string requestId;
             public string operation;
-            public HierarchyArgumentsDto arguments;
+            public BridgeArgumentsDto arguments;
             public string risk;
             public BridgeRouteDto route;
             public long deadlineUnixMs;
@@ -517,6 +615,26 @@ namespace UnityAiBridge.Editor.Connection
             public string[] warnings;
             public string dirtyState;
             public string compileState;
+        }
+
+        [Serializable]
+        private sealed class BridgeCreateGameObjectResultDto
+        {
+            public string protocolVersion;
+            public string requestId;
+            public bool ok;
+            public CreateGameObjectPayload result;
+            public string[] warnings;
+            public string dirtyState;
+            public BridgeUndoMetadataDto undo;
+            public string compileState;
+        }
+
+        [Serializable]
+        private sealed class BridgeUndoMetadataDto
+        {
+            public bool available;
+            public string groupName;
         }
 
         [Serializable]
