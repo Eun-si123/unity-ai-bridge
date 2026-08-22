@@ -17,7 +17,7 @@ Do not infer implementation from README examples, design diagrams, decisions, ro
 **Phase 1 — Minimal local end-to-end**  
 Overall status: **In progress**
 
-Phase 0 was squash-merged to `main` on 2026-08-22. Its foundation checks are verified and the public repository license is **Apache License 2.0**. The heartbeat/status slice is fully runtime-verified on Windows / Unity 6000.3.21f1. The hierarchy-read slice is also now runtime-verified on Windows / Unity 6000.3.21f1 after fixing a Unity 6000.3 `GlobalObjectId.GetGlobalObjectIdsSlow` signature mismatch discovered by the real compile check. GameObject create and Console/compiler read remain planned.
+Phase 0 was squash-merged to `main` on 2026-08-22. Its foundation checks are verified and the public repository license is **Apache License 2.0**. The heartbeat/status and hierarchy-read slices are fully runtime-verified on Windows / Unity 6000.3.21f1. The first write slice, root GameObject creation with Undo, dirty-state reporting, GlobalObjectId readback, and same-intent retry protection, is now **Implemented** on `feat/phase1-create-gameobject` with passing Node/bridge CI, but real Unity compile/runtime verification is still pending. Console/compiler read remains planned.
 
 ## What exists now
 
@@ -26,24 +26,26 @@ Phase 0 was squash-merged to `main` on 2026-08-22. Its foundation checks are ver
 | Public GitHub repository | Verified | Repository exists and accepts commits. |
 | Public-core license | Implemented | Root `LICENSE` is Apache License 2.0. The separate private `unity-ai-mcp-infra` repository is outside this repository's automatic license boundary. |
 | Core design/docs | Implemented | `AGENTS.md`, `DESIGN.md`, `DECISIONS.md`, `ROADMAP.md`, `CODEMAP.md`, `REFERENCES.md`. |
-| Unity Editor package scaffold | Verified manually | Package Manager load and Unity AI Bridge Editor assembly compilation passed in Unity 6000.3.21f1 on Windows at revision `059727365c025eb1d18013371fe95e055517e570`; the hierarchy additions were subsequently compiled successfully after the Unity 6000.3 API compatibility fix. |
-| Initial Unity target | Verified for current Phase 1 read slices | Unity 6000.3.21f1 compiled the package and completed real WebSocket/status, MCP status, reconnect lifecycle, and live hierarchy verification. Broader compatibility remains unverified. |
-| Bridge protocol v0 | Implemented | Command/result schemas, TypeScript/C# protocol types/constants, and editor-status/hierarchy fixtures exist. |
+| Unity Editor package scaffold | Verified manually | Package Manager load and Unity AI Bridge Editor assembly compilation passed in Unity 6000.3.21f1 on Windows at revision `059727365c025eb1d18013371fe95e055517e570`; hierarchy additions were subsequently compiled successfully after the Unity 6000.3 API compatibility fix. The create-mutation additions still require a fresh Unity compile check. |
+| Initial Unity target | Verified for current Phase 1 read slices | Unity 6000.3.21f1 completed real WebSocket/status, MCP status, reconnect lifecycle, and live hierarchy verification. The new create mutation is implemented against this target but not yet manually verified. |
+| Bridge protocol v0 | Implemented | Command/result schemas, TypeScript/C# protocol types/constants, editor-status/hierarchy/create fixtures, write risk, dirty metadata, and Undo metadata exist. |
 | MCP/server scaffold | Verified | Phase 0 Node 24.19.0 install/build/tests passed in Actions run `32562797071`. |
 | Phase 1 dependency lockfile | Verified | `mcp-server/package-lock.json` contains the pinned Phase 1 dependency graph and has been consumed by passing Phase 1 CI revisions. |
-| Local WebSocket bridge server | Verified for status and hierarchy | Status path is verified in real Unity. `scene.hierarchy` routing/result validation passed simulated Node coverage and the real MCP-to-Unity hierarchy verifier. |
+| Local WebSocket bridge server | Verified for status/hierarchy; create implemented | Status and hierarchy are verified in real Unity. `scene.create_game_object` write routing, result validation, and input validation pass Node simulation; real Unity mutation verification pending. |
 | Unity outbound WebSocket connection | Verified manually | Real `ClientWebSocket` connection, reconnect after domain reload, and renewed hello succeeded on Windows / Unity 6000.3.21f1. |
-| Unity main-thread dispatcher | Verified for `editor.status` and hierarchy read | Real status and hierarchy requests completed through the dispatcher-backed Unity main-thread path. |
+| Unity main-thread dispatcher | Verified for read paths; create uses same boundary | Real status and hierarchy requests completed through the dispatcher-backed Unity main-thread path. The create mutation is implemented through the same boundary and awaits real runtime verification. |
 | `editor.status` bridge operation | Verified manually | Returned Unity `6000.3.21f1`, active scene `Assets/Scenes/SampleScene.unity`, `isPlaying=false`, and `isCompiling=false` before and after reconnect. |
 | MCP `unity_get_status` | Verified manually | Official MCP TypeScript client completed stdio handshake, confirmed the tool was advertised, called `unity_get_status`, and received matching live Unity structured content. |
 | `scene.hierarchy` bridge operation | Verified manually | Live `SampleScene` returned three root GameObjects in sibling order with bounded preorder metadata, non-empty `GlobalObjectId` values, and no truncation under default limits. |
 | MCP `unity_get_hierarchy` | Verified manually | The real MCP stdio verifier returned the live active-scene hierarchy from Unity 6000.3.21f1 with `rootCount=3`, `returnedNodeCount=3`, `maxDepth=8`, `maxNodes=200`, and both truncation flags false. |
 | Hierarchy object identity | Verified for the tested saved scene | Each returned node had a Unity `GlobalObjectId` string plus transient `instanceId`; roots had empty parent IDs and sibling indices 0/1/2. Broader identity behavior for unsaved/new scene objects remains unverified. |
+| `scene.create_game_object` bridge operation | Implemented | Creates one root GameObject in the active scene, enforces `risk=write`, validates name/idempotency key, registers Undo, marks the scene dirty, captures a GlobalObjectId, reverse-resolves that ID before success, and stores same-session idempotency state. Real Unity result pending. |
+| MCP `unity_create_game_object` | Implemented | Requires `name` plus caller-supplied `idempotencyKey`; `verify:create` checks first-create semantics, same-key deduplication, and hierarchy readback uniqueness. Real Unity result pending. |
+| Mutation retry/dedup protection | Implemented for first create slice, runtime pending | A consumed key maps to the created GlobalObjectId using Unity `SessionState`, which survives domain reloads in the same Editor session. Same-key/different-argument calls are rejected; a missing original target is not blindly recreated. Cross-Editor-restart durability is not claimed. |
+| Undo integration | Implemented for first create slice, runtime pending | `Undo.RegisterCreatedObjectUndo` is used with group name `Unity AI Bridge: Create GameObject`; real Undo behavior still requires manual Unity verification. |
 | Reconnect / stale-generation lifecycle | Verified manually + CI support | Real domain reload preserved `editorId`, changed `connectionGeneration` from `1787395056602` to `1787395125304`, rejected an explicitly stale generation with `routing/stale_connection`, and succeeded on a new-generation `editor.status`. |
-| Node local-bridge integration tests | Verified | Coverage includes status round-trip, hierarchy request/result validation, hierarchy input limits, explicit routed stale-generation propagation, and no-editor failure. Node Verification run `32568901972` and Phase 1 Local Bridge Verification run `32568901982` passed at revision `2619472abe97ffe9149e05fbe826936f439d62e2`; later hierarchy commits changed only Unity C# compatibility and documentation. |
-| GameObject mutation tools | Planned | Not implemented. |
+| Node local-bridge integration tests | Verified | Coverage includes status round-trip, hierarchy request/result validation, hierarchy input limits, GameObject create write routing/input validation, explicit routed stale-generation propagation, and no-editor failure. Create-slice Node Verification run `32570170957` and Phase 1 Local Bridge Verification run `32570170947` passed at revision `648e3c472f20f6ed805be0d7d3c9e151f8a7b7d9`. |
 | Console/compiler tools beyond status | Planned | Not implemented. |
-| Undo integration | Planned | Not implemented. |
 | Remote gateway / Easy Connect | Planned | Not implemented. |
 | Pairing/authentication | Planned | Not implemented. |
 | Multi-user/editor routing | Planned | Local bridge intentionally supports one active editor only. |
@@ -108,13 +110,33 @@ Hierarchy slice:
 - [x] simulated bridge hierarchy round-trip test implemented
 - [x] invalid hierarchy limit tests implemented
 - [x] real `verify:hierarchy` MCP verifier implemented
-- [x] hierarchy Node/bridge CI recorded as passing on the latest Node/TypeScript revision (`2619472abe97ffe9149e05fbe826936f439d62e2`)
+- [x] hierarchy Node/bridge CI recorded as passing on revision `2619472abe97ffe9149e05fbe826936f439d62e2`
 - [x] Unity package compile with hierarchy source verified in 6000.3.21f1 after the API compatibility fix
 - [x] real MCP `unity_get_hierarchy` result observed and matched the live `SampleScene` root hierarchy
 
-Remaining Phase 1 minimum after hierarchy:
+GameObject create slice:
 
-- [ ] create a simple GameObject with write retry/dedup protection
+- [x] `scene.create_game_object` Unity mutation source implemented
+- [x] mutation command requires `risk=write`
+- [x] `name` and caller-supplied `idempotencyKey` validation implemented in Node and Unity
+- [x] same-key retry deduplication source implemented using `SessionState` + `GlobalObjectId`
+- [x] same-key/different-arguments conflict rejection implemented
+- [x] consumed-key/original-target-missing path rejects blind replay
+- [x] `Undo.RegisterCreatedObjectUndo` integration implemented
+- [x] explicit scene dirty marking implemented without implicit save
+- [x] created GlobalObjectId reverse-readback verification implemented before success
+- [x] MCP `unity_create_game_object` source implemented
+- [x] simulated bridge write-routing/input-validation tests implemented
+- [x] real `verify:create` MCP verifier implemented
+- [x] create-slice Node/bridge CI recorded as passing at revision `648e3c472f20f6ed805be0d7d3c9e151f8a7b7d9` (runs `32570170957` / `32570170947`)
+- [ ] Unity package compile with create source verified in 6000.3.21f1
+- [ ] real MCP first create returns `created=true`, dirty scene, and expected Undo metadata
+- [ ] same-key real retry returns the same GlobalObjectId with `deduplicated=true` and no duplicate object
+- [ ] hierarchy readback confirms exactly one object for the created GlobalObjectId
+- [ ] Unity Undo removes the created test object
+
+Remaining Phase 1 minimum after GameObject create:
+
 - [ ] read Console/compiler errors
 
 ## Verification log
@@ -218,8 +240,24 @@ Observed: initial pre-fix compile failed with CS1615 because Unity 6000.3 does n
 Result: PASS (manual user verification)
 ```
 
+### 2026-08-22 — GameObject create Node/bridge verification
+
+```text
+Revision under test: 648e3c472f20f6ed805be0d7d3c9e151f8a7b7d9
+Environment: GitHub Actions ubuntu-24.04, Node 24.19.0
+Action: dependency refresh -> npm ci -> TypeScript build -> Node tests
+Expected: existing read tests remain green; GameObject create validates inputs, routes with risk=write, and accepts the structured mutation result contract
+Observed: Node Verification run 32570170957 and Phase 1 Local Bridge Verification run 32570170947 completed successfully
+Result: PASS
+Notes: this verifies the Node/MCP/bridge contract only. Real Unity creation, Undo, dirty state, GlobalObjectId readback, and same-key deduplication remain unverified until the manual verifier passes.
+```
+
 ## Known unknowns
 
+- real Unity 6000.3.21f1 compile/runtime behavior for the new GameObject create mutation,
+- whether the tested new unsaved scene object receives/resolves the expected GlobalObjectId shape in Unity 6000.3.21f1,
+- real Undo behavior for the create slice,
+- mutation idempotency beyond the current Editor session (`SessionState` intentionally does not claim cross-restart durability),
 - exact `GlobalObjectId` behavior for unsaved/new scene objects and unusual object cases,
 - long-term Unity support matrix beyond 6000.3.21f1,
 - future multi-editor routing design,
