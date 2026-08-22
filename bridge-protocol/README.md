@@ -22,20 +22,32 @@ Version `0` is pre-stable. Breaking changes are allowed while Phase 0/1 is under
 - optional routing identity
 - optional deadline metadata
 
+`requestId` identifies one transport request/response exchange. Mutation operations may additionally carry an operation-specific idempotency identity so an ambiguous transport retry does not blindly re-execute a Unity write.
+
 Current implemented operations include:
 
 - `editor.status` — read current Unity/editor state,
-- `scene.hierarchy` — read a bounded preorder snapshot of the active scene hierarchy.
+- `scene.hierarchy` — read a bounded preorder snapshot of the active scene hierarchy,
+- `gameObject.create` — create one empty root GameObject in the active scene with write-risk metadata and mutation deduplication.
 
 `scene.hierarchy` currently accepts `maxDepth` and `maxNodes` arguments. The implementation defaults to depth 8 / 200 nodes and rejects values beyond depth 32 / 500 nodes. Returned hierarchy paths are informational; `InstanceID` is transient and is not the sole durable identity. The result also carries `GlobalObjectId` strings for scene objects where Unity can provide them.
 
-Example request/result fixtures live in `fixtures/editor-status.*` and `fixtures/hierarchy.*`.
+`gameObject.create` accepts:
+
+- `name` — 1..128 characters and not whitespace-only,
+- `mutationId` — 1..128 characters using letters, digits, `-`, `_`, `.`, or `:`.
+
+The Node bridge generates a mutation id when the MCP caller omits one. Unity stores completed `gameObject.create` mutation results in Editor `SessionState`; a repeated delivery using the same `mutationId` and the same `name` replays the prior result rather than creating another object. Reusing the same mutation id with different arguments is rejected. This is Phase 1 retry protection, not a general-purpose durable transaction log across full Editor restarts.
+
+Example request/result fixtures live in `fixtures/editor-status.*`, `fixtures/hierarchy.*`, and `fixtures/gameobject-create.*`.
 
 ## Result envelope
 
 `schemas/result.v0.schema.json` defines structured completion/failure results, warnings, dirty/undo/compile metadata, changed-target hints, and categorized errors.
 
 A successful network delivery is not sufficient for `ok: true`; callers should use `ok: true` only when the requested contract has been observed as completed.
+
+For a first-time `gameObject.create`, Unity reports the scene as dirty and includes Undo metadata. A deduplicated replay reports `replayed: true` in the operation result and does not perform a second mutation.
 
 ## Transport
 
