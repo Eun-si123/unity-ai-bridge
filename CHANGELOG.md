@@ -25,14 +25,18 @@ The project is pre-alpha. Internal package version `0.0.1` does not represent a 
 - MCP `unity_get_status` tool wired through the local bridge.
 - Request ID correlation, deadlines/timeouts, disconnect handling, stale-generation rejection, bounded payloads, and serialized Unity-side sends.
 - Simulated Unity WebSocket integration tests covering hello/status round-trip and the no-editor failure path.
+- Simulated explicit-route test covering propagation of `routing/stale_connection`.
 - Phase 1 design document and CI workflow.
 - `docs/TESTING.md` with repeatable Node, Unity compile, real bridge, MCP end-to-end, and reconnect verification procedures.
 - `verify:unity` developer command that waits for a real Unity Editor hello and performs a real `editor.status` round trip.
+- `verify:mcp-unity` developer command using the official MCP TypeScript client over stdio to call the real `unity_get_status` tool against live Unity.
+- `verify:reconnect` developer command that checks stable editor identity, changed connection generation, stale-generation rejection, and successful post-reconnect status.
 
 #### Dependencies
 
 - Added exact `ws` `8.21.3` runtime dependency.
 - Added exact `@types/ws` `8.18.1` development dependency.
+- Added exact `@modelcontextprotocol/client` `2.0.0` development dependency for the MCP verifier.
 - Refreshed `mcp-server/package-lock.json` with the Phase 1 dependency graph.
 
 #### Fixed
@@ -43,15 +47,17 @@ The project is pre-alpha. Internal package version `0.0.1` does not represent a 
 
 #### Verification
 
-- Node Verification and Phase 1 Local Bridge Verification are passing on the Phase 1 code tree.
-- Lockfile generation/refresh, `npm ci`, TypeScript build, and all Node tests: **PASS**.
+- Node Verification and Phase 1 Local Bridge Verification are passing on the previously verified Phase 1 code tree; current-head CI is required after each new verifier/test change.
+- Lockfile generation/refresh, `npm ci`, TypeScript build, and Node tests have passed on prior Phase 1 revisions.
 - Simulated Unity `hello -> editor.status -> structured result`: **PASS**.
 - Explicit no-editor failure path: **PASS**.
 - Unity 6000.3.21f1 package load/compile at revision `059727365c025eb1d18013371fe95e055517e570`: **PASS (manual Windows verification, 2026-08-22)**.
 - Real Unity WebSocket protocol v0 `hello` to `127.0.0.1:5081`: **PASS**.
 - Real bridge `editor.status` round trip: **PASS**; returned Unity 6000.3.21f1, `Assets/Scenes/SampleScene.unity`, `isPlaying=false`, `isCompiling=false`.
-- Real MCP stdio `unity_get_status` against the live Unity Editor: **Not yet verified**.
-- Domain reload/editor restart reconnection with a new connection generation: **Not yet verified**.
+- Real MCP stdio `unity_get_status` against the live Unity Editor: **PASS (manual Windows verification, 2026-08-22)**; official MCP client handshake succeeded, the tool was advertised, and structured live Unity state was returned.
+- Domain reload/editor restart reconnection with a new connection generation: **Not yet verified in real Unity**.
+- Real stale-generation rejection after reconnect: **Not yet verified in real Unity**.
+- Successful post-reconnect status on the new generation: **Not yet verified in real Unity**.
 
 ## Phase 0 — Foundation Runtime Scaffold — 2026-08-22
 
