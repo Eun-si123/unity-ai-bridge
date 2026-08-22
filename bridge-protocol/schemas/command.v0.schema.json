@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Unity AI Bridge Command v0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "protocolVersion",
+    "requestId",
+    "operation",
+    "arguments",
+    "risk"
+  ],
+  "properties": {
+    "protocolVersion": {
+      "const": "0"
+    },
+    "requestId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "operation": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "arguments": {
+      "type": "object"
+    },
+    "risk": {
+      "type": "string",
+      "enum": [
+        "read",
+        "write",
+        "destructive",
+        "privileged"
+      ]
+    },
+    "route": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "editorId",
+        "connectionGeneration"
+      ],
+      "properties": {
+        "editorId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "connectionGeneration": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "deadlineUnixMs": {
+      "type": "integer",
+      "minimum": 0
+    }
+  }
+}
