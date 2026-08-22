@@ -13,7 +13,8 @@
     "verify:unity": "npm run build && node dist/src/dev/verify-unity.js",
     "verify:mcp-unity": "npm run build && node dist/src/dev/verify-mcp-unity.js",
     "verify:reconnect": "npm run build && node dist/src/dev/verify-reconnect-unity.js",
-    "verify:hierarchy": "npm run build && node dist/src/dev/verify-hierarchy-unity.js"
+    "verify:hierarchy": "npm run build && node dist/src/dev/verify-hierarchy-unity.js",
+    "verify:create": "npm run build && node dist/src/dev/verify-create-gameobject-unity.js"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "2.0.0",
