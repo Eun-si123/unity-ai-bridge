@@ -71,17 +71,23 @@ Managed production identity, storage, rate limiting, monitoring, deployment, and
 - Primarily Editor-side automation code.
 - Unity API mutations execute through a controlled main-thread boundary.
 - Network callbacks do not directly mutate Unity objects.
-- Exact Unity support matrix is not selected yet.
+- Initial development target: Unity **6000.3.21f1** (`unity: 6000.3`, `unityRelease: 21f1` in the package manifest).
+- The broader/long-term Unity support matrix is unresolved and must be verified rather than inferred from the initial target.
 
 ### MCP/server side
 
-Initial direction:
+Initial implementation baseline:
 
 - TypeScript,
 - official MCP TypeScript SDK v2 line,
+- Node.js **24.19.0 LTS** initial runtime pin,
+- `@modelcontextprotocol/server` **2.0.0**,
+- TypeScript **7.0.2**,
+- `@types/node` **24.13.3**,
 - Streamable HTTP for remote MCP,
-- web-standard-compatible server code where practical,
-- exact Node/dependency versions pinned only when manifests/lockfiles are committed.
+- web-standard-compatible server code where practical.
+
+The current direct versions are pinned in source. A generated dependency lockfile is still required before the dependency graph can be treated as fully frozen.
 
 ### Unity bridge transport
 
@@ -154,7 +160,7 @@ If self-hosters need a behavior for basic Unity/MCP operation, it strongly belon
 
 MCP-facing tools and Unity-facing commands are separate contracts.
 
-A command envelope needs concepts equivalent to:
+Protocol v0 now defines source schemas for concepts equivalent to:
 
 ```text
 protocolVersion
@@ -163,10 +169,10 @@ routed editor/connection identity
 operation
 arguments
 deadline/timeout metadata
-risk metadata where applicable
+risk metadata
 ```
 
-A result needs concepts equivalent to:
+A result defines concepts equivalent to:
 
 ```text
 protocolVersion
@@ -181,7 +187,7 @@ compile state when applicable
 error { category, code, message, details }
 ```
 
-Exact field names are **not accepted API** until schemas exist in source.
+The v0 field names are now source-defined in `bridge-protocol/schemas/`. Version `0` is pre-stable and may change during early implementation, but schema/type/fixture changes must move together.
 
 ## 8. Request identity and retry safety
 
@@ -445,7 +451,7 @@ Treat these as independent compatibility surfaces:
 
 Do not collapse them into one implicit version.
 
-The bridge protocol should be explicitly versioned from the first real implementation. Breaking public schema changes need migration notes.
+The bridge protocol is explicitly versioned from its first source implementation as v0. Breaking public schema changes need migration notes once external consumers depend on a versioned contract.
 
 ## 22. Expansion after the core
 

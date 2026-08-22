@@ -38,11 +38,11 @@ These roadmap markers describe milestone progress only. `STATUS.md` is authorita
 - ✅ Architecture decisions recorded
 - ✅ Third-party provenance rules established
 - ✅ Public roadmap created
-- ⬜ Select and pin initial Unity support target
-- ⬜ Scaffold initial source tree
-- ⬜ Pin TypeScript/runtime/dependency versions
-- ⬜ Define bridge protocol v0 schema
-- ⬜ Define first automated test commands
+- 🟨 Select and pin initial Unity support target — 6000.3.21f1 is pinned; runtime compatibility check pending
+- 🟨 Scaffold initial source tree — package/protocol/server scaffold exists; runtime verification pending
+- 🟨 Pin TypeScript/runtime/dependency versions — runtime/direct pins exist; generated lockfile pending
+- 🟨 Define bridge protocol v0 schema — source schemas/types/fixtures exist; compatibility verification pending
+- 🟨 Define first automated test commands — build/test scripts exist; passing run not yet recorded
 - ⬜ Select project license
 
 ### Exit gate

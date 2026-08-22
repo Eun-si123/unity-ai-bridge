@@ -1,0 +1,18 @@
+# Node / TypeScript
+node_modules/
+dist/
+*.tsbuildinfo
+npm-debug.log*
+
+# Unity generated project data (if a test project is added later)
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Ll]ogs/
+[Uu]ser[Ss]ettings/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

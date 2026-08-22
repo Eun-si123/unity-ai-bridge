@@ -1,0 +1,54 @@
+name: Node Verification
+
+on:
+  pull_request:
+    branches: [main, feat/phase0-runtime-scaffold]
+  push:
+    branches: [feat/phase0-runtime-scaffold]
+
+permissions:
+  contents: write
+
+jobs:
+  node-verify:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'push' && github.ref_name || github.event.pull_request.head.ref }}
+
+      - name: Setup Node 24.19.0
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.19.0
+
+      - name: Generate lockfile
+        run: npm install --package-lock-only --prefix mcp-server
+
+      - name: Install dependencies from lockfile
+        run: npm ci --prefix mcp-server
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test
+
+      - name: Commit generated lockfile
+        if: github.event_name == 'push'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add mcp-server/package-lock.json
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: refresh MCP server lockfile"
+            git push
+          fi
+
+      - name: Upload generated lockfile
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcp-server-package-lock
+          path: mcp-server/package-lock.json
+          if-no-files-found: error

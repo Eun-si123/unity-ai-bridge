@@ -8,6 +8,9 @@ This file maps what exists in the repository and what is only planned.
 
 ```text
 /
+├─ .gitignore
+├─ .nvmrc
+├─ package.json
 ├─ README.md
 ├─ AGENTS.md
 ├─ STATUS.md
@@ -18,10 +21,36 @@ This file maps what exists in the repository and what is only planned.
 ├─ CODEMAP.md
 ├─ REFERENCES.md
 ├─ CHANGELOG.md
-└─ llms.txt
+├─ llms.txt
+│
+├─ unity-package/
+│  ├─ package.json
+│  └─ Editor/
+│     ├─ UnityAiBridge.Editor.asmdef
+│     └─ Protocol/
+│        └─ BridgeProtocol.cs
+│
+├─ bridge-protocol/
+│  ├─ README.md
+│  ├─ schemas/
+│  │  ├─ command.v0.schema.json
+│  │  └─ result.v0.schema.json
+│  └─ fixtures/
+│     ├─ editor-status.command.v0.json
+│     └─ editor-status.result.v0.json
+│
+└─ mcp-server/
+   ├─ package.json
+   ├─ tsconfig.json
+   ├─ src/
+   │  ├─ index.ts
+   │  └─ protocol/
+   │     └─ bridge.ts
+   └─ tests/
+      └─ bridge-protocol.test.ts
 ```
 
-At this stage the repository contains documentation only. No Unity package, MCP/server runtime, bridge protocol source, gateway runtime, or client integration source tree exists yet.
+The repository now has an initial source scaffold. It does **not** yet have a Unity WebSocket bridge, Unity command dispatcher, Unity tool handlers, remote gateway, provider integrations, or an end-to-end working MCP-to-Unity path.
 
 ## Documentation responsibilities
 
@@ -35,97 +64,96 @@ At this stage the repository contains documentation only. No Unity package, MCP/
 - `CHANGELOG.md` — notable project changes
 - `llms.txt` — compact AI entrypoint
 
-## Planned source layout
-
-The following is the current target, not current code:
-
-```text
-/
-├─ unity-package/
-│  ├─ package.json
-│  ├─ Editor/
-│  │  ├─ Connection/
-│  │  ├─ Protocol/
-│  │  ├─ Commands/
-│  │  ├─ Dispatch/
-│  │  ├─ Tools/
-│  │  ├─ ObjectResolution/
-│  │  ├─ Compilation/
-│  │  ├─ Undo/
-│  │  └─ Tests/
-│  └─ Documentation~/
-│
-├─ bridge-protocol/
-│  ├─ schemas/
-│  ├─ fixtures/
-│  └─ README.md
-│
-├─ mcp-server/
-│  ├─ package.json
-│  ├─ src/
-│  │  ├─ tools/
-│  │  ├─ protocol/
-│  │  ├─ validation/
-│  │  ├─ policy/
-│  │  ├─ routing/
-│  │  ├─ transport/
-│  │  └─ errors/
-│  └─ tests/
-│
-├─ integrations/
-│  ├─ chatgpt/
-│  ├─ claude/
-│  └─ other/
-│
-└─ tests/
-   ├─ protocol/
-   ├─ integration/
-   └─ e2e/
-```
-
-Exact paths may change during Phase 0 scaffolding. Routine folder-name adjustments do not need an architecture decision unless they change subsystem ownership or contracts.
-
-## Planned ownership boundaries
+## Current source ownership
 
 ### `unity-package/`
 
-Unity Editor-side implementation:
+Current implementation:
 
-- connection lifecycle,
-- command queue/main-thread dispatcher,
-- target/object resolution,
-- Unity tool handlers,
-- Undo/dirty-state handling,
-- compile/domain-reload lifecycle,
-- Unity-side tests.
+- UPM package manifest,
+- Editor-only assembly definition,
+- bridge protocol/package version constants.
+
+Planned expansion:
+
+```text
+Editor/
+├─ Connection/
+├─ Protocol/
+├─ Commands/
+├─ Dispatch/
+├─ Tools/
+├─ ObjectResolution/
+├─ Compilation/
+├─ Undo/
+└─ Tests/
+```
+
+Unity API operations, networking, dispatcher behavior, Undo handling, and tool handlers are not implemented yet.
 
 ### `bridge-protocol/`
 
-Explicit, versioned Unity-facing command/result schemas and fixtures. This contract is separate from MCP so Unity transport details can evolve without redefining every public tool semantic.
+Current implementation:
+
+- protocol v0 command JSON Schema,
+- protocol v0 result JSON Schema,
+- initial editor-status request/result fixtures,
+- protocol documentation.
+
+This contract is separate from MCP so Unity transport details and provider integrations do not define Unity command semantics.
 
 ### `mcp-server/`
 
-Provider-neutral MCP/server core:
+Current implementation:
 
-- MCP tool schemas,
-- validation/risk policy,
-- bridge adaptation,
-- request/result correlation,
-- reusable routing abstractions,
-- structured errors,
-- local/self-host behavior.
+- pinned Node/TypeScript/MCP direct dependency configuration,
+- strict TypeScript compiler configuration,
+- minimal MCP v2 stdio server bootstrap,
+- bridge v0 TypeScript envelope types,
+- initial Node test-runner smoke tests.
 
-Initial design direction is TypeScript with the official MCP TypeScript SDK v2 line. No dependency/runtime code exists yet.
+Planned expansion:
 
-### `integrations/`
+```text
+src/
+├─ tools/
+├─ protocol/
+├─ validation/
+├─ policy/
+├─ routing/
+├─ transport/
+└─ errors/
+```
 
-Thin provider/client-specific metadata/adapters. Provider-specific behavior should not leak into Unity command logic without a documented interoperability reason.
+No Unity bridge connection, public Unity tools, routing, remote HTTP endpoint, or auth policy implementation exists yet.
 
-### `tests/`
+### Root build/configuration
 
-Cross-layer protocol/integration/end-to-end verification that does not naturally belong to one package.
+- `.nvmrc` pins the initial Node runtime.
+- root `package.json` delegates `build` and `test` to `mcp-server`.
+- `.gitignore` excludes Node/TypeScript outputs and common generated Unity project data.
 
-### Private hosted infrastructure
+A dependency lockfile has not yet been generated.
+
+## Planned top-level areas
+
+These paths remain planned and must not be treated as existing:
+
+```text
+integrations/
+├─ chatgpt/
+├─ claude/
+└─ other/
+
+tests/
+├─ protocol/
+├─ integration/
+└─ e2e/
+```
+
+Cross-layer tests should be added when there is an actual cross-layer path to verify rather than as empty placeholder directories.
+
+## Private hosted infrastructure
 
 `unity-ai-mcp-infra` is intended for managed-service composition/deployment: production auth/database/provider wiring, rate limits/abuse controls, monitoring, deployment pipelines, and private operations.
 

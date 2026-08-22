@@ -1,0 +1,14 @@
+{
+  "protocolVersion": "0",
+  "requestId": "00000000-0000-4000-8000-000000000001",
+  "ok": true,
+  "result": {
+    "unityVersion": "6000.3.21f1",
+    "activeScene": "SampleScene",
+    "isPlaying": false,
+    "isCompiling": false
+  },
+  "warnings": [],
+  "dirtyState": "unchanged",
+  "compileState": "idle"
+}
