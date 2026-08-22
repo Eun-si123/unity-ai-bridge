@@ -87,10 +87,10 @@ Minimum capabilities:
 - ✅ Unity/editor status
 - ✅ Active scene information
 - ✅ Hierarchy read — verified through real MCP stdio against Unity 6000.3.21f1 with bounded traversal and `GlobalObjectId` metadata
-- ⬜ Create a simple GameObject
+- 🟨 Create a simple GameObject — implementation and Node/bridge CI pass; real Unity create/dedup/Undo verification pending on `feat/phase1-create-gameobject`
 - ⬜ Read Console/compiler errors
 - ✅ Structured error model for the current read/routing path
-- 🟨 Request IDs and write retry protection — request IDs/routing are verified; mutation dedup/retry protection awaits the first write tool
+- 🟨 Request IDs and write retry protection — request IDs/routing are verified; the first write tool now has fail-closed same-session idempotency protection, with real Unity verification and cross-restart durability still pending
 
 ### Exit gate
 
@@ -102,19 +102,19 @@ A clean test project can perform the minimum capabilities repeatedly with reprod
 
 **Goal:** make AI changes recoverable and resilient to normal Unity lifecycle events.
 
-**State:** ⬜ Planned as a full phase; some connection-lifecycle groundwork was completed early in Phase 1
+**State:** ⬜ Planned as a full phase; some connection-lifecycle and first-mutation groundwork was completed early in Phase 1
 
-- 🟨 Main-thread dispatcher hardened — verified for the current `editor.status` and hierarchy read paths; broader write/tool coverage pending
+- 🟨 Main-thread dispatcher hardened — verified for `editor.status` and hierarchy read paths; first write path implemented but pending real runtime verification
 - ⬜ Serialized conflicting writes
 - ⬜ Stable object resolver
-- ⬜ Undo integration
-- ⬜ Scene/asset dirty-state reporting
+- 🟨 Undo integration — implemented for first GameObject-create mutation; real Unity Undo verification pending
+- 🟨 Scene/asset dirty-state reporting — scene dirty reporting implemented for first create mutation; real Unity verification pending
 - ⬜ Explicit save behavior
 - ⬜ Compilation watcher
 - ✅ Domain reload recovery — verified for the local connection/status lifecycle
 - ✅ Reconnection and connection generations — verified for the local single-editor lifecycle
 - 🟨 Timeout/cancellation behavior — request deadlines/timeouts exist; broader cancellation semantics pending
-- ⬜ Duplicate/replayed request protection for mutations
+- 🟨 Duplicate/replayed request protection for mutations — first create operation consumes caller idempotency identity before state change and deduplicates via `SessionState`; real Unity and cross-restart durability remain pending
 - ⬜ Unity EditMode test coverage for core execution
 
 ### Exit gate
