@@ -27,6 +27,7 @@ The project is pre-alpha. Internal package version `0.0.1` does not represent a 
 - Simulated Unity WebSocket integration tests covering hello/status round-trip and the no-editor failure path.
 - Phase 1 design document and CI workflow.
 - `docs/TESTING.md` with repeatable Node, Unity compile, real bridge, MCP end-to-end, and reconnect verification procedures.
+- `verify:unity` developer command that waits for a real Unity Editor hello and performs a real `editor.status` round trip.
 
 #### Dependencies
 
@@ -46,9 +47,10 @@ The project is pre-alpha. Internal package version `0.0.1` does not represent a 
 - Lockfile generation/refresh, `npm ci`, TypeScript build, and all Node tests: **PASS**.
 - Simulated Unity `hello -> editor.status -> structured result`: **PASS**.
 - Explicit no-editor failure path: **PASS**.
-- Unity 6000.3.21f1 package load/compile: **PASS (manual user verification, 2026-08-22; exact local checkout SHA not captured)**.
-- Real Unity WebSocket `hello` to the local bridge: **Not yet verified**.
-- Real MCP `unity_get_status` against a live Unity Editor: **Not yet verified**.
+- Unity 6000.3.21f1 package load/compile at revision `059727365c025eb1d18013371fe95e055517e570`: **PASS (manual Windows verification, 2026-08-22)**.
+- Real Unity WebSocket protocol v0 `hello` to `127.0.0.1:5081`: **PASS**.
+- Real bridge `editor.status` round trip: **PASS**; returned Unity 6000.3.21f1, `Assets/Scenes/SampleScene.unity`, `isPlaying=false`, `isCompiling=false`.
+- Real MCP stdio `unity_get_status` against the live Unity Editor: **Not yet verified**.
 - Domain reload/editor restart reconnection with a new connection generation: **Not yet verified**.
 
 ## Phase 0 — Foundation Runtime Scaffold — 2026-08-22
