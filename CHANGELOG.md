@@ -27,7 +27,7 @@ The project is pre-alpha. Internal package version `0.0.1` does not represent a 
 - Simulated Unity WebSocket integration tests covering hello/status round-trip and the no-editor failure path.
 - Simulated explicit-route test covering propagation of `routing/stale_connection`.
 - Phase 1 design document and CI workflow.
-- `docs/TESTING.md` with repeatable Node, Unity compile, real bridge, MCP end-to-end, and reconnect verification procedures.
+- `docs/TESTING.md` with repeatable Node, Unity compile, real bridge, MCP end-to-end, and reconnect verification procedures, including a simple C# compile/reload trigger.
 - `verify:unity` developer command that waits for a real Unity Editor hello and performs a real `editor.status` round trip.
 - `verify:mcp-unity` developer command using the official MCP TypeScript client over stdio to call the real `unity_get_status` tool against live Unity.
 - `verify:reconnect` developer command that checks stable editor identity, changed connection generation, stale-generation rejection, and successful post-reconnect status.
