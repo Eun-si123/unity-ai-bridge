@@ -45,18 +45,32 @@ export interface BridgeUndoMetadata {
   groupName?: string;
 }
 
-export interface BridgeResultEnvelope<TResult = unknown> {
+interface BridgeResultCommon<TResult> {
   protocolVersion: BridgeProtocolVersion;
   requestId: string;
-  ok: boolean;
   result?: TResult;
   warnings: string[];
   changedTargets?: Array<Record<string, unknown>>;
   dirtyState?: DirtyState;
   undo?: BridgeUndoMetadata;
   compileState?: CompileState;
-  error?: BridgeError;
 }
+
+export interface BridgeSuccessResult<TResult = unknown>
+  extends BridgeResultCommon<TResult> {
+  ok: true;
+  error?: never;
+}
+
+export interface BridgeFailureResult<TResult = unknown>
+  extends BridgeResultCommon<TResult> {
+  ok: false;
+  error: BridgeError;
+}
+
+export type BridgeResultEnvelope<TResult = unknown> =
+  | BridgeSuccessResult<TResult>
+  | BridgeFailureResult<TResult>;
 
 export function isBridgeProtocolVersion(value: unknown): value is BridgeProtocolVersion {
   return value === BRIDGE_PROTOCOL_VERSION;
