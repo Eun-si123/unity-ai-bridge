@@ -10,6 +10,37 @@ At this stage, Unity AI Bridge contains no recorded copied or substantially adap
 
 If third-party code is ever actually incorporated, review the exact source revision and license first, preserve all required notices, and add the appropriate license/notice material at that time.
 
+## Authoritative implementation references
+
+### Model Context Protocol TypeScript SDK v2
+
+- Documentation: `https://ts.sdk.modelcontextprotocol.io/v2/`
+- Server API: `https://ts.sdk.modelcontextprotocol.io/v2/api/%40modelcontextprotocol/server/`
+- Checked: 2026-08-22.
+- Use here: confirmed the v2 stable SDK line, split `@modelcontextprotocol/server` package, stdio bootstrap shape, and TypeScript/Node typing guidance used by the initial server scaffold.
+- Source copied into this project: **No implementation source copied.** Public API usage follows the official SDK documentation.
+
+### Node.js releases
+
+- Download/releases: `https://nodejs.org/en/download`
+- Checked: 2026-08-22.
+- Use here: confirmed Node 24.19.0 as the current Node 24 LTS release used for the initial runtime pin.
+- Source copied into this project: **No.**
+
+### Unity 6000.3.21f1 release
+
+- Release page: `https://unity.com/releases/editor/whats-new/6000.3.21f1`
+- Checked: 2026-08-22.
+- Use here: confirmed the exact initial Unity development target exists and was released on 2026-07-29.
+- Source copied into this project: **No.**
+
+### Unity package manifest documentation
+
+- Documentation: `https://docs.unity3d.com/Manual/upm-manifestPkg.html`
+- Checked: 2026-08-22.
+- Use here: confirmed `unity` uses the major/minor form and `unityRelease` can identify a specific Unity patch/release in a package manifest.
+- Source copied into this project: **No.**
+
 ## Research references
 
 ### CoplayDev — MCP for Unity
