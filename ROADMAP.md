@@ -56,7 +56,7 @@ These roadmap markers describe milestone progress only. `STATUS.md` is authorita
 
 **Goal:** prove complete requests can travel from MCP to Unity and back correctly, then establish the minimum useful local tool slice.
 
-**State:** 🟨 In progress
+**State:** 🟨 In progress — only Console/compiler diagnostics remain in the minimum gate
 
 Target flow:
 
@@ -87,10 +87,10 @@ Minimum capabilities:
 - ✅ Unity/editor status
 - ✅ Active scene information
 - ✅ Hierarchy read — verified through real MCP stdio against Unity 6000.3.21f1 with bounded traversal and `GlobalObjectId` metadata
-- ⬜ Create a simple GameObject
-- ⬜ Read Console/compiler errors
-- ✅ Structured error model for the current read/routing path
-- 🟨 Request IDs and write retry protection — request IDs/routing are verified; mutation dedup/retry protection awaits the first write tool
+- ✅ Create a simple GameObject — verified through real MCP stdio with Undo/dirty metadata and duplicate-retry protection
+- ⬜ Read Console/compiler errors/diagnostics
+- ✅ Structured error model for current read/write/routing paths
+- ✅ First mutation request identity and retry protection — `gameObject.create` reuses the same mutation ID and does not duplicate the object on identical retry
 
 ### Exit gate
 
@@ -102,24 +102,26 @@ A clean test project can perform the minimum capabilities repeatedly with reprod
 
 **Goal:** make AI changes recoverable and resilient to normal Unity lifecycle events.
 
-**State:** ⬜ Planned as a full phase; some connection-lifecycle groundwork was completed early in Phase 1
+**State:** ⬜ Planned as a full phase; some lifecycle/write groundwork was completed early in Phase 1
 
-- 🟨 Main-thread dispatcher hardened — verified for the current `editor.status` and hierarchy read paths; broader write/tool coverage pending
+- 🟨 Main-thread dispatcher hardened — verified for status, hierarchy, and the first GameObject-create write path; broader tool coverage pending
 - ⬜ Serialized conflicting writes
 - ⬜ Stable object resolver
-- ⬜ Undo integration
-- ⬜ Scene/asset dirty-state reporting
+- 🟨 Undo integration — verified for the bounded GameObject-create slice; generalized policy pending
+- 🟨 Scene/asset dirty-state reporting — scene dirty reporting exercised by the first create slice; generalized behavior pending
 - ⬜ Explicit save behavior
 - ⬜ Compilation watcher
 - ✅ Domain reload recovery — verified for the local connection/status lifecycle
 - ✅ Reconnection and connection generations — verified for the local single-editor lifecycle
 - 🟨 Timeout/cancellation behavior — request deadlines/timeouts exist; broader cancellation semantics pending
-- ⬜ Duplicate/replayed request protection for mutations
+- 🟨 Duplicate/replayed request protection for mutations — verified for immediate same-session `gameObject.create`; generalized mutation semantics and post-Undo/deletion readback pending
+- ⬜ Native readback + semantic verification for writes
+- ⬜ Rollback verification on failed mutations
 - ⬜ Unity EditMode test coverage for core execution
 
 ### Exit gate
 
-Normal disconnects, compilation, domain reload, and retry scenarios do not silently duplicate mutations, lose routing identity, or report false success.
+Normal disconnects, compilation, domain reload, retry, and failed-write scenarios do not silently duplicate mutations, lose routing identity, or report false success.
 
 ---
 
@@ -131,13 +133,13 @@ Normal disconnects, compilation, domain reload, and retry scenarios do not silen
 
 Target tool families:
 
-- ⬜ GameObject create/read/update/delete
+- ⬜ GameObject create/read/update/delete beyond the verified Phase 1 empty-root create primitive
 - ⬜ Transform editing
 - ⬜ Component inspect/add/remove/edit
 - ⬜ Asset search/inspect
 - ⬜ Prefab inspect/create/apply workflows
 - ⬜ Script read/write workflows
-- ⬜ Console/compiler diagnostics
+- ⬜ Console/compiler diagnostics beyond the Phase 1 minimum
 - ⬜ Play Mode control
 - ⬜ Unity Test Runner integration
 - ⬜ Undo/recovery tools
