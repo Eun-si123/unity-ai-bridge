@@ -6,6 +6,7 @@ import { WebSocket } from "ws";
 import {
   LocalBridgeServer,
   type BridgeHello,
+  type CreateGameObjectPayload,
   type EditorStatusPayload,
   type HierarchyPayload,
 } from "../src/bridge/local-bridge-server.js";
@@ -63,6 +64,21 @@ const hierarchy: HierarchyPayload = {
       activeInHierarchy: true,
     },
   ],
+};
+
+const createdGameObject: CreateGameObjectPayload = {
+  globalObjectId: "GlobalObjectId_V1-2-created-0-0",
+  instanceId: 222,
+  name: "Bridge Created",
+  sceneName: "SampleScene",
+  scenePath: "Assets/Scenes/SampleScene.unity",
+  siblingIndex: 3,
+  activeSelf: true,
+  activeInHierarchy: true,
+  sceneDirty: true,
+  created: true,
+  deduplicated: false,
+  undoGroupName: "Unity AI Bridge: Create GameObject",
 };
 
 test("local bridge registers a Unity hello and completes editor.status", async () => {
@@ -194,6 +210,94 @@ test("local bridge rejects invalid hierarchy limits before sending a command", a
     await assert.rejects(
       bridge.requestHierarchy({ maxDepth: 3, maxNodes: 501 }),
       /maxNodes must be an integer between 1 and 500/,
+    );
+  } finally {
+    await bridge.stop();
+    if (client.readyState !== WebSocket.CLOSED) {
+      client.terminate();
+    }
+  }
+});
+
+test("local bridge sends GameObject creation as a write with idempotency identity", async () => {
+  const bridge = new LocalBridgeServer("127.0.0.1", 0);
+  const port = await bridge.start();
+  const client = new WebSocket(`ws://127.0.0.1:${port}`);
+
+  try {
+    await waitForOpen(client);
+    client.send(JSON.stringify(hello));
+    await bridge.waitForEditor();
+
+    client.on("message", (data) => {
+      const command = JSON.parse(data.toString()) as {
+        protocolVersion: string;
+        requestId: string;
+        operation: string;
+        arguments: { name: string; idempotencyKey: string };
+        risk: string;
+        route: { editorId: string; connectionGeneration: number };
+      };
+
+      assert.equal(command.protocolVersion, BRIDGE_PROTOCOL_VERSION);
+      assert.equal(command.operation, "scene.create_game_object");
+      assert.deepEqual(command.arguments, {
+        name: "Bridge Created",
+        idempotencyKey: "create-test-0001",
+      });
+      assert.equal(command.risk, "write");
+      assert.equal(command.route.editorId, hello.editorId);
+      assert.equal(command.route.connectionGeneration, hello.connectionGeneration);
+
+      client.send(
+        JSON.stringify({
+          protocolVersion: BRIDGE_PROTOCOL_VERSION,
+          requestId: command.requestId,
+          ok: true,
+          result: createdGameObject,
+          warnings: [],
+          dirtyState: "dirty",
+          undo: {
+            available: true,
+            groupName: "Unity AI Bridge: Create GameObject",
+          },
+          compileState: "idle",
+        }),
+      );
+    });
+
+    assert.deepEqual(
+      await bridge.requestCreateGameObject({
+        name: "Bridge Created",
+        idempotencyKey: "create-test-0001",
+      }),
+      createdGameObject,
+    );
+  } finally {
+    await bridge.stop();
+    if (client.readyState !== WebSocket.CLOSED) {
+      client.terminate();
+    }
+  }
+});
+
+test("local bridge rejects invalid GameObject create inputs before mutation routing", async () => {
+  const bridge = new LocalBridgeServer("127.0.0.1", 0);
+  const port = await bridge.start();
+  const client = new WebSocket(`ws://127.0.0.1:${port}`);
+
+  try {
+    await waitForOpen(client);
+    client.send(JSON.stringify(hello));
+    await bridge.waitForEditor();
+
+    await assert.rejects(
+      bridge.requestCreateGameObject({ name: "   ", idempotencyKey: "create-test-0002" }),
+      /name must contain at least one non-whitespace character/,
+    );
+    await assert.rejects(
+      bridge.requestCreateGameObject({ name: "Valid", idempotencyKey: "bad key" }),
+      /idempotencyKey must be 8..128 characters|idempotencyKey may contain only/,
     );
   } finally {
     await bridge.stop();
