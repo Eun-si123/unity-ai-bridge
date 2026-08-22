@@ -24,12 +24,14 @@ The project is pre-alpha; the initial scaffold uses internal package version `0.
 - Initial `mcp-server/` TypeScript MCP v2 stdio bootstrap.
 - Strict TypeScript build configuration and Node test-runner protocol smoke tests.
 - Root build/test delegation, Node 24.19.0 runtime pin, and repository ignore rules.
+- GitHub Actions Phase 0 Node verification workflow.
+- Generated `mcp-server/package-lock.json` dependency lockfile.
 
 ### Changed
 
 - Moved the project from documentation-only foundation work to an initial runtime/source scaffold.
 - Pinned the initial direct MCP/server toolchain to Node 24.19.0, `@modelcontextprotocol/server` 2.0.0, TypeScript 7.0.2, and `@types/node` 24.13.3.
-- Clarified that direct dependency pins are present but a generated dependency lockfile and recorded passing build/test run are still pending.
+- Recorded successful CI verification for lockfile generation, `npm ci`, TypeScript build, and protocol smoke tests.
 - Clarified that a public GitHub repository is **not** an open-source license; the project license remains undecided.
 - Separated accepted design decisions from implementation status in `STATUS.md`.
 - Reduced mandatory AI reading overhead: new/lost-context sessions load the core truth/design context, while routine changes load only relevant documents.
@@ -42,6 +44,6 @@ The project is pre-alpha; the initial scaffold uses internal package version `0.
 
 ### Important
 
-- The Unity package scaffold, protocol source, and MCP server bootstrap are implemented but **not runtime-verified yet**.
+- The Node/MCP scaffold dependency install, TypeScript build, and protocol smoke tests are verified by GitHub Actions.
+- The Unity package scaffold and protocol source exist, but Unity 6000.3.21f1 package load/compile has not yet been recorded as passing.
 - No Unity WebSocket bridge, Unity command dispatcher, Unity tool handlers, remote gateway, pairing service, or ChatGPT integration is claimed by this changelog.
-- No dependency install, TypeScript build/test, Unity package load/compile, or MCP-to-Unity end-to-end result is claimed as passing yet.
