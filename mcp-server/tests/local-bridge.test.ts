@@ -87,6 +87,57 @@ test("local bridge registers a Unity hello and completes editor.status", async (
   }
 });
 
+test("local bridge preserves an explicit route and surfaces stale-generation rejection", async () => {
+  const bridge = new LocalBridgeServer("127.0.0.1", 0);
+  const port = await bridge.start();
+  const client = new WebSocket(`ws://127.0.0.1:${port}`);
+
+  try {
+    await waitForOpen(client);
+    client.send(JSON.stringify(hello));
+    await bridge.waitForEditor();
+
+    const staleRoute = {
+      editorId: hello.editorId,
+      connectionGeneration: hello.connectionGeneration - 1,
+    };
+
+    client.on("message", (data) => {
+      const command = JSON.parse(data.toString()) as {
+        requestId: string;
+        route: { editorId: string; connectionGeneration: number };
+      };
+
+      assert.deepEqual(command.route, staleRoute);
+      client.send(
+        JSON.stringify({
+          protocolVersion: BRIDGE_PROTOCOL_VERSION,
+          requestId: command.requestId,
+          ok: false,
+          error: {
+            category: "routing",
+            code: "stale_connection",
+            message: "Command targets a different editor connection generation.",
+          },
+          warnings: [],
+          dirtyState: "unchanged",
+          compileState: "idle",
+        }),
+      );
+    });
+
+    await assert.rejects(
+      bridge.requestEditorStatusForRoute(staleRoute),
+      /routing\/stale_connection/,
+    );
+  } finally {
+    await bridge.stop();
+    if (client.readyState !== WebSocket.CLOSED) {
+      client.terminate();
+    }
+  }
+});
+
 test("local bridge rejects status requests when no editor is connected", async () => {
   const bridge = new LocalBridgeServer("127.0.0.1", 0);
   await bridge.start();
