@@ -1,0 +1,40 @@
+name: Phase 0 Node Verification
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [feat/phase0-runtime-scaffold]
+
+jobs:
+  node-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 24.19.0
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.19.0
+          cache: npm
+          cache-dependency-path: mcp-server/package-lock.json
+
+      - name: Generate lockfile
+        run: npm install --package-lock-only --prefix mcp-server
+
+      - name: Install dependencies from lockfile
+        run: npm ci --prefix mcp-server
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test
+
+      - name: Upload generated lockfile
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcp-server-package-lock
+          path: mcp-server/package-lock.json
+          if-no-files-found: error
