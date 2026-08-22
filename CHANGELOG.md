@@ -30,13 +30,15 @@ The project is pre-alpha. Internal package version `0.0.1` does not represent a 
 #### Fixed during implementation
 
 - First hierarchy CI build exposed `exactOptionalPropertyTypes` rejecting explicitly forwarded `undefined` option fields. The MCP handler now omits absent option properties before calling the bridge.
+- Real Unity 6000.3.21f1 compilation exposed a `GlobalObjectId.GetGlobalObjectIdsSlow` signature mismatch: the current target requires a preallocated output array without the C# `out` modifier. `HierarchyCommand` now allocates `GlobalObjectId[]` and passes it directly. This fix remains pending a fresh Unity compile/runtime verification.
 
 #### Verification
 
 - Initial revision `7ccc84b8f3f3176ed04b6662293a5a7ce1741780`: **FAIL at TypeScript build** due to the optional-property issue above; tests did not run.
 - Subsequent Phase 1 Local Bridge Verification after the fix: **PASS**.
-- Current latest-head Node/bridge CI: pending final documentation commits.
-- Unity 6000.3.21f1 compile/runtime for the hierarchy source: **Not yet verified**.
+- Current latest-head Node/bridge CI: pending after the Unity 6000.3 compatibility fix/documentation commit.
+- Unity 6000.3.21f1 hierarchy compile before compatibility fix: **FAIL** with CS1615 at `GetGlobalObjectIdsSlow(..., out ...)`.
+- Unity 6000.3.21f1 compile/runtime after compatibility fix: **Not yet verified**.
 - Real MCP `unity_get_hierarchy` against live Unity: **Not yet verified**.
 
 ### Phase 1 — Local Unity Heartbeat / `editor.status` — Verified slice
