@@ -68,27 +68,24 @@ This helper verifies the real Unity WebSocket/bridge path. It does not by itself
 
 ## 4. Real MCP `unity_get_status` end-to-end check
 
-Start the normal MCP/server process:
+With the Unity project still open, refresh dependencies and run the MCP verifier from the repository root:
 
 ```text
-npm --prefix mcp-server run build
-npm --prefix mcp-server start
+npm --prefix mcp-server ci
+npm --prefix mcp-server run verify:mcp-unity
 ```
 
-The process should report:
+The verifier uses the official MCP TypeScript client over stdio. It launches the normal Unity AI Bridge MCP server as a child process, completes the MCP initialize handshake, confirms `unity_get_status` is advertised, waits for the real Unity Editor to connect to the server's local WebSocket bridge, then calls `unity_get_status` through MCP and validates its structured result.
+
+Expected success output includes:
 
 ```text
-[Unity AI Bridge] Local bridge listening on ws://127.0.0.1:5081
+[Unity AI Bridge] MCP handshake PASS; unity_get_status is advertised.
+[Unity AI Bridge] MCP unity_get_status PASS:
+...
 ```
 
-With a real Unity Editor connected, invoke MCP tool `unity_get_status` from an MCP client and:
-
-1. confirm the bridge emits an `editor.status` command with a unique request ID,
-2. confirm Unity executes the status read on the Editor main thread,
-3. compare returned Unity version, project name, active scene, Play Mode state, and compilation state with the actual Editor state,
-4. repeat after changing the active scene or Play Mode state where practical.
-
-PASS requires the MCP result to match re-read Editor state.
+Compare the returned Unity version, project name, active scene, Play Mode state, and compilation state with the actual Editor state. PASS requires the real MCP tool result to match live Unity state; a direct `LocalBridgeServer` call alone is insufficient for this gate.
 
 ## 5. Reconnect / domain reload check
 
