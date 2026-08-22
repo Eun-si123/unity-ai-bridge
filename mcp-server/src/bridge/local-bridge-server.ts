@@ -8,6 +8,7 @@ import {
   type BridgeCommandEnvelope,
   type BridgeResultEnvelope,
   type BridgeRoute,
+  type RiskClass,
 } from "../protocol/bridge.js";
 
 export interface BridgeHello {
@@ -57,6 +58,26 @@ export interface HierarchyPayload {
   nodes: HierarchyNodePayload[];
 }
 
+export interface CreateGameObjectOptions {
+  name: string;
+  idempotencyKey: string;
+}
+
+export interface CreateGameObjectPayload {
+  globalObjectId: string;
+  instanceId: number;
+  name: string;
+  sceneName: string;
+  scenePath: string;
+  siblingIndex: number;
+  activeSelf: boolean;
+  activeInHierarchy: boolean;
+  sceneDirty: boolean;
+  created: boolean;
+  deduplicated: boolean;
+  undoGroupName: string;
+}
+
 interface ActiveEditor {
   socket: WebSocket;
   hello: BridgeHello;
@@ -72,6 +93,10 @@ const DEFAULT_HIERARCHY_MAX_DEPTH = 8;
 const DEFAULT_HIERARCHY_MAX_NODES = 200;
 const MAX_HIERARCHY_DEPTH = 32;
 const MAX_HIERARCHY_NODES = 500;
+const MAX_GAME_OBJECT_NAME_LENGTH = 128;
+const MIN_IDEMPOTENCY_KEY_LENGTH = 8;
+const MAX_IDEMPOTENCY_KEY_LENGTH = 128;
+const IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9._:-]+$/;
 
 export class LocalBridgeServer {
   private readonly server: WebSocketServer;
@@ -167,7 +192,13 @@ export class LocalBridgeServer {
     route: BridgeRoute,
     timeoutMs = 5000,
   ): Promise<EditorStatusPayload> {
-    const result = await this.requestOperation("editor.status", {}, route, timeoutMs);
+    const result = await this.requestOperation(
+      "editor.status",
+      {},
+      route,
+      "read",
+      timeoutMs,
+    );
     if (!isEditorStatusPayload(result)) {
       throw new Error("Unity returned an invalid editor.status payload.");
     }
@@ -196,11 +227,38 @@ export class LocalBridgeServer {
         editorId: editor.hello.editorId,
         connectionGeneration: editor.hello.connectionGeneration,
       },
+      "read",
       timeoutMs,
     );
 
     if (!isHierarchyPayload(result)) {
       throw new Error("Unity returned an invalid scene.hierarchy payload.");
+    }
+    return result;
+  }
+
+  public async requestCreateGameObject(
+    options: CreateGameObjectOptions,
+    timeoutMs = 5000,
+  ): Promise<CreateGameObjectPayload> {
+    validateCreateGameObjectOptions(options);
+    const editor = this.requireActiveEditor();
+    const result = await this.requestOperation(
+      "scene.create_game_object",
+      {
+        name: options.name,
+        idempotencyKey: options.idempotencyKey,
+      },
+      {
+        editorId: editor.hello.editorId,
+        connectionGeneration: editor.hello.connectionGeneration,
+      },
+      "write",
+      timeoutMs,
+    );
+
+    if (!isCreateGameObjectPayload(result)) {
+      throw new Error("Unity returned an invalid scene.create_game_object payload.");
     }
     return result;
   }
@@ -225,6 +283,7 @@ export class LocalBridgeServer {
     operation: string,
     args: Record<string, unknown>,
     route: BridgeRoute,
+    risk: RiskClass,
     timeoutMs: number,
   ): Promise<unknown> {
     const editor = this.requireActiveEditor();
@@ -234,7 +293,7 @@ export class LocalBridgeServer {
       requestId,
       operation,
       arguments: args,
-      risk: "read",
+      risk,
       route,
       deadlineUnixMs: Date.now() + timeoutMs,
     };
@@ -430,6 +489,58 @@ function isHierarchyNodePayload(value: unknown): value is HierarchyNodePayload {
     isNonNegativeInteger(candidate.childCount) &&
     typeof candidate.activeSelf === "boolean" &&
     typeof candidate.activeInHierarchy === "boolean"
+  );
+}
+
+function validateCreateGameObjectOptions(options: CreateGameObjectOptions): void {
+  if (typeof options.name !== "string" || options.name.trim().length === 0) {
+    throw new Error("name must contain at least one non-whitespace character.");
+  }
+  if (options.name.length > MAX_GAME_OBJECT_NAME_LENGTH) {
+    throw new Error(`name must be at most ${MAX_GAME_OBJECT_NAME_LENGTH} characters.`);
+  }
+  if (options.name.includes("\0")) {
+    throw new Error("name must not contain NUL characters.");
+  }
+
+  if (
+    typeof options.idempotencyKey !== "string" ||
+    options.idempotencyKey.length < MIN_IDEMPOTENCY_KEY_LENGTH ||
+    options.idempotencyKey.length > MAX_IDEMPOTENCY_KEY_LENGTH
+  ) {
+    throw new Error(
+      `idempotencyKey must be ${MIN_IDEMPOTENCY_KEY_LENGTH}..${MAX_IDEMPOTENCY_KEY_LENGTH} characters.`,
+    );
+  }
+  if (!IDEMPOTENCY_KEY_PATTERN.test(options.idempotencyKey)) {
+    throw new Error(
+      "idempotencyKey may contain only letters, digits, '-', '_', '.', and ':'.",
+    );
+  }
+}
+
+function isCreateGameObjectPayload(value: unknown): value is CreateGameObjectPayload {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.globalObjectId === "string" &&
+    candidate.globalObjectId.length > 0 &&
+    typeof candidate.instanceId === "number" &&
+    Number.isSafeInteger(candidate.instanceId) &&
+    typeof candidate.name === "string" &&
+    typeof candidate.sceneName === "string" &&
+    typeof candidate.scenePath === "string" &&
+    isNonNegativeInteger(candidate.siblingIndex) &&
+    typeof candidate.activeSelf === "boolean" &&
+    typeof candidate.activeInHierarchy === "boolean" &&
+    typeof candidate.sceneDirty === "boolean" &&
+    typeof candidate.created === "boolean" &&
+    typeof candidate.deduplicated === "boolean" &&
+    typeof candidate.undoGroupName === "string" &&
+    candidate.undoGroupName.length > 0
   );
 }
 
