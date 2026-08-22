@@ -21,6 +21,8 @@ Current automated coverage should verify at minimum:
 - simulated structured result correlation,
 - bounded `scene.hierarchy` request/result propagation,
 - hierarchy input-limit validation,
+- `scene.create_game_object` routes as `risk: write`,
+- GameObject create name/idempotency-key validation before mutation routing,
 - explicit failure when no Unity Editor is connected,
 - explicit stale-generation error propagation.
 
@@ -134,24 +136,49 @@ Expected success output includes:
 ```text
 [Unity AI Bridge] MCP handshake PASS; unity_get_hierarchy is advertised.
 [Unity AI Bridge] MCP unity_get_hierarchy PASS:
-{
-  "sceneName": "...",
-  "scenePath": "...",
-  "rootCount": 0,
-  "returnedNodeCount": 0,
-  "maxDepth": 8,
-  "maxNodes": 200,
-  "truncatedByDepth": false,
-  "truncatedByNodes": false,
-  "nodes": []
-}
+...
 ```
 
 The exact counts and node list depend on the live scene. For PASS, compare the returned scene name/path, root GameObject names, parent/child ordering, and active states with the actual Unity Hierarchy. Every returned node should contain a `globalObjectId` string and a transient `instanceId`. `hierarchyPath` and `instanceId` are informational/session-scoped aids and must not be treated as sole durable identity.
 
 If the scene exceeds the requested bounds, `truncatedByDepth` or `truncatedByNodes` may legitimately be true. That is not a failure by itself.
 
-## 7. Evidence format
+## 7. Real MCP `unity_create_game_object` write/idempotency check
+
+Use a disposable or otherwise safe test scene. The verifier intentionally creates one unsaved root GameObject and leaves it in the scene so the user can inspect it and exercise Unity Undo afterward.
+
+First pull the current create branch and wait for Unity compilation to finish with zero Unity AI Bridge compile errors. Then run:
+
+```text
+npm --prefix mcp-server ci
+npm --prefix mcp-server run verify:create
+```
+
+The verifier:
+
+1. launches the normal MCP server over stdio,
+2. confirms `unity_create_game_object` and `unity_get_hierarchy` are advertised,
+3. generates one unique name and one unique `idempotencyKey`,
+4. calls `unity_create_game_object`, requiring `created=true`, `deduplicated=false`, `sceneDirty=true`, and the expected Undo group name,
+5. repeats the same tool call with the same key and requires `created=false`, `deduplicated=true`, and the same `GlobalObjectId`,
+6. calls `unity_get_hierarchy` and requires exactly one node with that `GlobalObjectId`.
+
+Expected ending:
+
+```text
+[Unity AI Bridge] First create PASS:
+...
+[Unity AI Bridge] Same-key deduplication PASS.
+[Unity AI Bridge] Hierarchy readback PASS; exactly one created object exists.
+[Unity AI Bridge] Create + idempotency verification PASS.
+[Unity AI Bridge] The test object is intentionally left unsaved; use Unity Undo once to remove it.
+```
+
+After the command completes, verify in the Unity Hierarchy that exactly one test GameObject exists. Use **Edit -> Undo** (or the normal Undo shortcut) once and confirm that the created object disappears. Do not save the test scene merely to complete this verification.
+
+Current idempotency storage uses Unity `SessionState`, so same-key protection survives script/domain reloads within the same Editor session but is not yet a durable cross-Editor-restart ledger. That stronger guarantee belongs to later reliability work and must not be inferred from this test.
+
+## 8. Evidence format
 
 Every real verification entry added to `STATUS.md` should record:
 
