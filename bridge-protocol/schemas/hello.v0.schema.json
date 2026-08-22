@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://unity-ai-bridge.local/schemas/hello.v0.schema.json",
+  "title": "Unity AI Bridge hello v0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "type",
+    "protocolVersion",
+    "editorId",
+    "connectionGeneration",
+    "unityVersion",
+    "projectName"
+  ],
+  "properties": {
+    "type": { "const": "hello" },
+    "protocolVersion": { "const": "0" },
+    "editorId": { "type": "string", "minLength": 1 },
+    "connectionGeneration": { "type": "integer", "minimum": 0 },
+    "unityVersion": { "type": "string", "minLength": 1 },
+    "projectName": { "type": "string" }
+  }
+}
