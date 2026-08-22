@@ -13,6 +13,39 @@ The project is pre-alpha. Internal package version `0.0.1` does not represent a 
 - Clarified that the separate private `unity-ai-mcp-infra` repository is not automatically licensed under the public core's Apache-2.0 license.
 - Closed the Phase 0 "project license selected" governance item.
 
+### Phase 1 — GameObject Create / Mutation Retry Protection — Verified slice
+
+#### Added
+
+- Unity `gameObject.create` write operation for one empty root GameObject in the active scene.
+- MCP `unity_create_game_object` tool with bounded name validation and `risk=write` routing.
+- Explicit `mutationId` idempotency key for ambiguous retry protection; the MCP side generates one when omitted and returns it in ambiguous failure text.
+- Unity `SessionState` storage of completed create results so the same mutation ID survives domain reload during the Editor session.
+- Reuse protection: same mutation ID + same arguments replays the prior result; same mutation ID + different arguments is rejected.
+- Unity Undo registration, active-scene dirty marking, and structured result metadata including `GlobalObjectId`, transient `instanceId`, scene, hierarchy path, and sibling index.
+- Node bridge tests for write-risk routing, explicit mutation-ID reuse, and pre-delivery input validation.
+- `verify:create` using the official MCP TypeScript client to wait for Unity, create once, repeat the same mutation ID, and verify via hierarchy readback that only one matching object exists.
+- Protocol v0 GameObject-create command/result fixtures and operation documentation.
+
+#### Fixed during verification
+
+- The first real verifier attempt called `unity_create_game_object` immediately after MCP startup, before Unity had connected, and failed with `No Unity Editor is connected to the local bridge.`
+- The verifier now polls `unity_get_status` for up to 30 seconds before the first write.
+- Retryable connection/timeout/stale-route ambiguity reuses the **same** mutation ID instead of creating a fresh write identity.
+
+#### Verification
+
+- Revision `2969bcfa379f10498d4b5bac69fb085f209d499d`: Node Verification run `32606458264` **PASS** and Phase 1 Local Bridge Verification run `32606458269` **PASS**.
+- Real Unity 6000.3.21f1 / Windows `npm.cmd --prefix mcp-server run verify:create`: **PASS (manual verification, 2026-08-23)**.
+- First create returned `replayed=false` and `GlobalObjectId_V1-2-99c9720ab356a0642a771bea13969a05-1399885475-0`.
+- Identical retry returned `replayed=true` with the same mutation ID and same `GlobalObjectId`.
+- Live `unity_get_hierarchy` readback reported `hierarchyMatches=1`; the Unity Hierarchy visibly contained one generated `MCP_Create_Verify_1787442917163` object.
+- Scene dirty state was visible and the create is registered with Unity Undo.
+
+#### Known limitation
+
+- Current duplicate replay trusts the cached same-session result. If the created object is manually deleted or undone before a later replay, the cached replay is not yet revalidated against native Unity state. Phase 2 native readback/verification will close this gap.
+
 ### Phase 1 — Active Scene Hierarchy Read — Verified slice
 
 #### Added
