@@ -1,0 +1,26 @@
+{
+  "protocolVersion": "0",
+  "requestId": "create-game-object-fixture-001",
+  "ok": true,
+  "result": {
+    "globalObjectId": "GlobalObjectId_V1-2-fixture-123-0",
+    "instanceId": 12345,
+    "name": "Fixture Object",
+    "sceneName": "SampleScene",
+    "scenePath": "Assets/Scenes/SampleScene.unity",
+    "siblingIndex": 3,
+    "activeSelf": true,
+    "activeInHierarchy": true,
+    "sceneDirty": true,
+    "created": true,
+    "deduplicated": false,
+    "undoGroupName": "Unity AI Bridge: Create GameObject"
+  },
+  "warnings": [],
+  "dirtyState": "dirty",
+  "undo": {
+    "available": true,
+    "groupName": "Unity AI Bridge: Create GameObject"
+  },
+  "compileState": "idle"
+}
