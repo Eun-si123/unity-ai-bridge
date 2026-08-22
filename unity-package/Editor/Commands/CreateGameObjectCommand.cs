@@ -72,6 +72,17 @@ namespace UnityAiBridge.Editor.Commands
                 throw new InvalidOperationException("The active Unity scene is not valid and loaded.");
             }
 
+            // Consume the mutation key before changing Unity state. If Unity reloads or throws
+            // after the object is created but before target identity is recorded, a retry must
+            // fail closed instead of blindly creating a duplicate.
+            var startedRecord = new IdempotencyRecord
+            {
+                requestedName = requestedName,
+                globalObjectId = string.Empty,
+                scenePath = scene.path ?? string.Empty,
+            };
+            SessionState.SetString(cacheKey, JsonUtility.ToJson(startedRecord));
+
             Undo.IncrementCurrentGroup();
             var undoGroup = Undo.GetCurrentGroup();
             Undo.SetCurrentGroupName(UndoGroupName);
@@ -83,24 +94,26 @@ namespace UnityAiBridge.Editor.Commands
             }
 
             Undo.RegisterCreatedObjectUndo(gameObject, UndoGroupName);
-            EditorSceneManager.MarkSceneDirty(scene);
+            if (!EditorSceneManager.MarkSceneDirty(scene))
+            {
+                throw new InvalidOperationException("Unity did not mark the active scene dirty after GameObject creation.");
+            }
 
             var globalObjectId = GlobalObjectId.GetGlobalObjectIdSlow(gameObject);
             var resolved = GlobalObjectId.GlobalObjectIdentifierToObjectSlow(globalObjectId);
             if (!ReferenceEquals(resolved, gameObject))
             {
-                UnityEngine.Object.DestroyImmediate(gameObject);
                 throw new InvalidOperationException(
                     "Created GameObject could not be verified through GlobalObjectId readback.");
             }
 
-            var record = new IdempotencyRecord
+            var completedRecord = new IdempotencyRecord
             {
                 requestedName = requestedName,
                 globalObjectId = globalObjectId.ToString(),
                 scenePath = scene.path ?? string.Empty,
             };
-            SessionState.SetString(cacheKey, JsonUtility.ToJson(record));
+            SessionState.SetString(cacheKey, JsonUtility.ToJson(completedRecord));
             Undo.CollapseUndoOperations(undoGroup);
 
             return BuildPayload(gameObject, created: true, deduplicated: false);
@@ -121,16 +134,22 @@ namespace UnityAiBridge.Editor.Commands
                     $"Stored idempotency state is unreadable: {exception.Message}");
             }
 
-            if (record == null || string.IsNullOrEmpty(record.globalObjectId))
+            if (record == null)
             {
                 throw new CreateGameObjectStaleTargetException(
-                    "Stored idempotency state does not contain a valid target identity.");
+                    "Stored idempotency state is missing.");
             }
 
             if (!string.Equals(record.requestedName, requestedName, StringComparison.Ordinal))
             {
                 throw new CreateGameObjectIdempotencyConflictException(
                     "The supplied idempotencyKey was already used with different create arguments. Use a new key for a new mutation intent.");
+            }
+
+            if (string.IsNullOrEmpty(record.globalObjectId))
+            {
+                throw new CreateGameObjectStaleTargetException(
+                    "The idempotency key was already consumed but the original mutation did not record a completed target identity. The mutation state is ambiguous, so it will not be replayed automatically.");
             }
 
             GlobalObjectId globalObjectId;
