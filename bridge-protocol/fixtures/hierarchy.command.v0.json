@@ -1,0 +1,15 @@
+{
+  "protocolVersion": "0",
+  "requestId": "11111111-2222-3333-4444-555555555555",
+  "operation": "scene.hierarchy",
+  "arguments": {
+    "maxDepth": 8,
+    "maxNodes": 200
+  },
+  "risk": "read",
+  "route": {
+    "editorId": "example-editor",
+    "connectionGeneration": 1234567890
+  },
+  "deadlineUnixMs": 2000000000000
+}

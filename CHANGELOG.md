@@ -13,7 +13,35 @@ The project is pre-alpha. Internal package version `0.0.1` does not represent a 
 - Clarified that the separate private `unity-ai-mcp-infra` repository is not automatically licensed under the public core's Apache-2.0 license.
 - Closed the Phase 0 "project license selected" governance item.
 
-### Phase 1 — Local Unity Heartbeat / `editor.status` — In progress
+### Phase 1 — Active Scene Hierarchy Read — Verified slice
+
+#### Added
+
+- Unity `scene.hierarchy` read operation running through the existing Editor main-thread dispatcher.
+- MCP `unity_get_hierarchy` tool with bounded `maxDepth` / `maxNodes` inputs.
+- Flat preorder hierarchy result containing Unity `GlobalObjectId`, transient `instanceId`, parent identity, depth, sibling index, child count, active state, and informational hierarchy path.
+- Default traversal bounds of depth 8 / 200 nodes and hard bounds of depth 32 / 500 nodes.
+- `truncatedByDepth` and `truncatedByNodes` result flags.
+- Batched `GlobalObjectId.GetGlobalObjectIdsSlow` lookup instead of per-node conversion calls.
+- Simulated Node bridge tests for hierarchy routing/result validation and invalid limit rejection.
+- `verify:hierarchy` command using the official MCP TypeScript client to call `unity_get_hierarchy` against a live Unity Editor.
+- Protocol v0 hierarchy request/result fixtures.
+
+#### Fixed during implementation
+
+- First hierarchy CI build exposed `exactOptionalPropertyTypes` rejecting explicitly forwarded `undefined` option fields. The MCP handler now omits absent option properties before calling the bridge.
+- Real Unity 6000.3.21f1 compilation exposed a `GlobalObjectId.GetGlobalObjectIdsSlow` signature mismatch: the current target requires a preallocated output array without the C# `out` modifier. `HierarchyCommand` now allocates `GlobalObjectId[]` and passes it directly.
+
+#### Verification
+
+- Initial revision `7ccc84b8f3f3176ed04b6662293a5a7ce1741780`: **FAIL at TypeScript build** due to the optional-property issue above; tests did not run.
+- Node Verification run `32568901972` and Phase 1 Local Bridge Verification run `32568901982` at revision `2619472abe97ffe9149e05fbe826936f439d62e2`: **PASS**.
+- Unity 6000.3.21f1 hierarchy compile before compatibility fix: **FAIL** with CS1615 at `GetGlobalObjectIdsSlow(..., out ...)`.
+- Unity 6000.3.21f1 compile after compatibility fix `005327886b6ed40f35c8338559e721d256d900b6`: **PASS (manual Windows verification, 2026-08-22)**.
+- Real MCP `unity_get_hierarchy` against live Unity 6000.3.21f1: **PASS (manual Windows verification, 2026-08-22)**.
+- Returned live `SampleScene` hierarchy: `rootCount=3`, `returnedNodeCount=3`, default depth/node limits 8/200, no truncation, and roots `Main Camera`, `Directional Light`, `Global Volume` in sibling order 0/1/2 with non-empty `GlobalObjectId` values.
+
+### Phase 1 — Local Unity Heartbeat / `editor.status` — Verified slice
 
 #### Added
 
@@ -47,20 +75,18 @@ The project is pre-alpha. Internal package version `0.0.1` does not represent a 
 
 #### Verification
 
-- Current-head Node Verification and Phase 1 Local Bridge Verification are passing.
+- Node Verification and Phase 1 Local Bridge Verification: **PASS** on the merged heartbeat/status slice.
 - TypeScript build and Node tests: **PASS**.
 - Simulated Unity `hello -> editor.status -> structured result`: **PASS**.
 - Explicit no-editor failure path: **PASS**.
 - Simulated stale-generation error propagation: **PASS**.
 - Unity 6000.3.21f1 package load/compile at revision `059727365c025eb1d18013371fe95e055517e570`: **PASS (manual Windows verification, 2026-08-22)**.
 - Real Unity WebSocket protocol v0 `hello` to `127.0.0.1:5081`: **PASS**.
-- Real bridge `editor.status` round trip: **PASS**; returned Unity 6000.3.21f1, `Assets/Scenes/SampleScene.unity`, `isPlaying=false`, `isCompiling=false`.
-- Real MCP stdio `unity_get_status` against the live Unity Editor: **PASS (manual Windows verification, 2026-08-22)**; official MCP client handshake succeeded, the tool was advertised, and structured live Unity state was returned.
-- Real domain reload reconnection: **PASS (manual Windows verification, 2026-08-22)**; the same `editorId` reconnected with a new `connectionGeneration` (`1787395056602` -> `1787395125304`).
-- Real stale-generation rejection after reconnect: **PASS**; an `editor.status` command routed to the old generation was rejected with `routing/stale_connection`.
-- Successful post-reconnect `editor.status` on the new generation: **PASS**; live Unity state matched the Editor after reconnect.
-
-The heartbeat/status slice is therefore runtime-verified end-to-end. The broader Phase 1 minimum still has planned hierarchy, GameObject-create, and Console/compiler-read capabilities.
+- Real bridge `editor.status` round trip: **PASS**.
+- Real MCP stdio `unity_get_status` against the live Unity Editor: **PASS**.
+- Real domain reload reconnection: **PASS**; same `editorId`, new `connectionGeneration` (`1787395056602` -> `1787395125304`).
+- Real stale-generation rejection after reconnect: **PASS** with `routing/stale_connection`.
+- Successful post-reconnect `editor.status` on the new generation: **PASS**.
 
 ## Phase 0 — Foundation Runtime Scaffold — 2026-08-22
 
@@ -98,14 +124,10 @@ The heartbeat/status slice is therefore runtime-verified end-to-end. The broader
 
 ### Removed
 
-- Premature `THIRD_PARTY_NOTICES.md` reference log. A real third-party notice/license file should be added only when incorporated dependencies/material actually require one.
+- Premature `THIRD_PARTY_NOTICES.md` reference log. A real third-party notice/license file should be added only when incorporated material actually requires one.
 
 ### Verification at Phase 0 merge
 
 - Node/MCP dependency install, TypeScript build, and protocol smoke tests: **Verified by GitHub Actions**.
 - Unity 6000.3.21f1 package load/compile: **Not yet verified at Phase 0 merge; later manually verified during Phase 1**.
 - Project license: **Not yet selected at Phase 0 merge; later resolved to Apache-2.0 in Unreleased**.
-
-### Scope at Phase 0
-
-Phase 0 does **not** claim a working Unity WebSocket bridge, Unity command dispatcher, Unity tool handlers, remote gateway, pairing service, or ChatGPT integration. Those belong to later phases.

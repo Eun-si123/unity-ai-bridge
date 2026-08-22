@@ -218,18 +218,32 @@ namespace UnityAiBridge.Editor.Connection
                 return;
             }
 
-            if (!string.Equals(command.operation, "editor.status", StringComparison.Ordinal))
+            if (string.Equals(command.operation, "editor.status", StringComparison.Ordinal))
             {
-                await SendErrorAsync(
-                    current,
-                    command.requestId,
-                    "unsupported",
-                    "operation_not_supported",
-                    $"Operation '{command.operation}' is not implemented.",
-                    cancellationToken);
+                await HandleEditorStatusAsync(current, command, cancellationToken);
                 return;
             }
 
+            if (string.Equals(command.operation, "scene.hierarchy", StringComparison.Ordinal))
+            {
+                await HandleHierarchyAsync(current, command, cancellationToken);
+                return;
+            }
+
+            await SendErrorAsync(
+                current,
+                command.requestId,
+                "unsupported",
+                "operation_not_supported",
+                $"Operation '{command.operation}' is not implemented.",
+                cancellationToken);
+        }
+
+        private static async Task HandleEditorStatusAsync(
+            ClientWebSocket current,
+            BridgeCommandDto command,
+            CancellationToken cancellationToken)
+        {
             try
             {
                 var status = await EditorMainThreadDispatcher.InvokeAsync(EditorStatusCommand.Execute);
@@ -253,6 +267,60 @@ namespace UnityAiBridge.Editor.Connection
                     command.requestId,
                     "unity_api",
                     "editor_status_failed",
+                    exception.Message,
+                    cancellationToken);
+            }
+        }
+
+        private static async Task HandleHierarchyAsync(
+            ClientWebSocket current,
+            BridgeCommandDto command,
+            CancellationToken cancellationToken)
+        {
+            var maxDepth = command.arguments != null && command.arguments.maxDepth > 0
+                ? command.arguments.maxDepth
+                : HierarchyCommand.DefaultMaxDepth;
+            var maxNodes = command.arguments != null && command.arguments.maxNodes > 0
+                ? command.arguments.maxNodes
+                : HierarchyCommand.DefaultMaxNodes;
+
+            if (maxDepth < 1 || maxDepth > HierarchyCommand.MaximumMaxDepth ||
+                maxNodes < 1 || maxNodes > HierarchyCommand.MaximumMaxNodes)
+            {
+                await SendErrorAsync(
+                    current,
+                    command.requestId,
+                    "validation",
+                    "hierarchy_limits",
+                    $"Hierarchy limits must satisfy maxDepth=1..{HierarchyCommand.MaximumMaxDepth} and maxNodes=1..{HierarchyCommand.MaximumMaxNodes}.",
+                    cancellationToken);
+                return;
+            }
+
+            try
+            {
+                var hierarchy = await EditorMainThreadDispatcher.InvokeAsync(
+                    () => HierarchyCommand.Execute(maxDepth, maxNodes));
+                var response = new BridgeHierarchyResultDto
+                {
+                    protocolVersion = BridgeProtocol.Version,
+                    requestId = command.requestId,
+                    ok = true,
+                    result = hierarchy,
+                    warnings = Array.Empty<string>(),
+                    dirtyState = "unchanged",
+                    compileState = EditorApplication.isCompiling ? "compiling" : "idle",
+                };
+
+                await SendJsonAsync(current, JsonUtility.ToJson(response), cancellationToken);
+            }
+            catch (Exception exception)
+            {
+                await SendErrorAsync(
+                    current,
+                    command.requestId,
+                    "unity_api",
+                    "hierarchy_read_failed",
                     exception.Message,
                     cancellationToken);
             }
@@ -398,11 +466,19 @@ namespace UnityAiBridge.Editor.Connection
         }
 
         [Serializable]
+        private sealed class HierarchyArgumentsDto
+        {
+            public int maxDepth;
+            public int maxNodes;
+        }
+
+        [Serializable]
         private sealed class BridgeCommandDto
         {
             public string protocolVersion;
             public string requestId;
             public string operation;
+            public HierarchyArgumentsDto arguments;
             public string risk;
             public BridgeRouteDto route;
             public long deadlineUnixMs;
@@ -426,6 +502,18 @@ namespace UnityAiBridge.Editor.Connection
             public string requestId;
             public bool ok;
             public EditorStatusPayload result;
+            public string[] warnings;
+            public string dirtyState;
+            public string compileState;
+        }
+
+        [Serializable]
+        private sealed class BridgeHierarchyResultDto
+        {
+            public string protocolVersion;
+            public string requestId;
+            public bool ok;
+            public HierarchyPayload result;
             public string[] warnings;
             public string dirtyState;
             public string compileState;

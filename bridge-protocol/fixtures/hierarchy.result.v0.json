@@ -1,0 +1,44 @@
+{
+  "protocolVersion": "0",
+  "requestId": "11111111-2222-3333-4444-555555555555",
+  "ok": true,
+  "result": {
+    "sceneName": "SampleScene",
+    "scenePath": "Assets/Scenes/SampleScene.unity",
+    "rootCount": 1,
+    "returnedNodeCount": 2,
+    "maxDepth": 8,
+    "maxNodes": 200,
+    "truncatedByDepth": false,
+    "truncatedByNodes": false,
+    "nodes": [
+      {
+        "globalObjectId": "GlobalObjectId_V1-2-example-root-0-0",
+        "instanceId": 100,
+        "name": "Root",
+        "hierarchyPath": "Root",
+        "parentGlobalObjectId": "",
+        "depth": 0,
+        "siblingIndex": 0,
+        "childCount": 1,
+        "activeSelf": true,
+        "activeInHierarchy": true
+      },
+      {
+        "globalObjectId": "GlobalObjectId_V1-2-example-child-0-0",
+        "instanceId": 101,
+        "name": "Child",
+        "hierarchyPath": "Root/Child",
+        "parentGlobalObjectId": "GlobalObjectId_V1-2-example-root-0-0",
+        "depth": 1,
+        "siblingIndex": 0,
+        "childCount": 0,
+        "activeSelf": true,
+        "activeInHierarchy": true
+      }
+    ]
+  },
+  "warnings": [],
+  "dirtyState": "unchanged",
+  "compileState": "idle"
+}

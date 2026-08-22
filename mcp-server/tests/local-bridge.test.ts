@@ -7,6 +7,7 @@ import {
   LocalBridgeServer,
   type BridgeHello,
   type EditorStatusPayload,
+  type HierarchyPayload,
 } from "../src/bridge/local-bridge-server.js";
 import { BRIDGE_PROTOCOL_VERSION } from "../src/protocol/bridge.js";
 
@@ -25,6 +26,43 @@ const status: EditorStatusPayload = {
   activeScene: "Assets/Scenes/SampleScene.unity",
   isPlaying: false,
   isCompiling: false,
+};
+
+const hierarchy: HierarchyPayload = {
+  sceneName: "SampleScene",
+  scenePath: "Assets/Scenes/SampleScene.unity",
+  rootCount: 1,
+  returnedNodeCount: 2,
+  maxDepth: 3,
+  maxNodes: 25,
+  truncatedByDepth: false,
+  truncatedByNodes: false,
+  nodes: [
+    {
+      globalObjectId: "GlobalObjectId_V1-2-root-0-0",
+      instanceId: 100,
+      name: "Root",
+      hierarchyPath: "Root",
+      parentGlobalObjectId: "",
+      depth: 0,
+      siblingIndex: 0,
+      childCount: 1,
+      activeSelf: true,
+      activeInHierarchy: true,
+    },
+    {
+      globalObjectId: "GlobalObjectId_V1-2-child-0-0",
+      instanceId: 101,
+      name: "Child",
+      hierarchyPath: "Root/Child",
+      parentGlobalObjectId: "GlobalObjectId_V1-2-root-0-0",
+      depth: 1,
+      siblingIndex: 0,
+      childCount: 0,
+      activeSelf: true,
+      activeInHierarchy: true,
+    },
+  ],
 };
 
 test("local bridge registers a Unity hello and completes editor.status", async () => {
@@ -79,6 +117,84 @@ test("local bridge registers a Unity hello and completes editor.status", async (
   } catch (error) {
     const detail = error instanceof Error ? error.stack ?? error.message : String(error);
     throw new Error(`Local bridge test failed during '${phase}': ${detail}`);
+  } finally {
+    await bridge.stop();
+    if (client.readyState !== WebSocket.CLOSED) {
+      client.terminate();
+    }
+  }
+});
+
+test("local bridge requests a bounded scene hierarchy and validates the result", async () => {
+  const bridge = new LocalBridgeServer("127.0.0.1", 0);
+  const port = await bridge.start();
+  const client = new WebSocket(`ws://127.0.0.1:${port}`);
+
+  try {
+    await waitForOpen(client);
+    client.send(JSON.stringify(hello));
+    await bridge.waitForEditor();
+
+    client.on("message", (data) => {
+      const command = JSON.parse(data.toString()) as {
+        protocolVersion: string;
+        requestId: string;
+        operation: string;
+        arguments: { maxDepth: number; maxNodes: number };
+        risk: string;
+        route: { editorId: string; connectionGeneration: number };
+      };
+
+      assert.equal(command.protocolVersion, BRIDGE_PROTOCOL_VERSION);
+      assert.equal(command.operation, "scene.hierarchy");
+      assert.deepEqual(command.arguments, { maxDepth: 3, maxNodes: 25 });
+      assert.equal(command.risk, "read");
+      assert.equal(command.route.editorId, hello.editorId);
+      assert.equal(command.route.connectionGeneration, hello.connectionGeneration);
+
+      client.send(
+        JSON.stringify({
+          protocolVersion: BRIDGE_PROTOCOL_VERSION,
+          requestId: command.requestId,
+          ok: true,
+          result: hierarchy,
+          warnings: [],
+          dirtyState: "unchanged",
+          compileState: "idle",
+        }),
+      );
+    });
+
+    assert.deepEqual(
+      await bridge.requestHierarchy({ maxDepth: 3, maxNodes: 25 }),
+      hierarchy,
+    );
+  } finally {
+    await bridge.stop();
+    if (client.readyState !== WebSocket.CLOSED) {
+      client.terminate();
+    }
+  }
+});
+
+test("local bridge rejects invalid hierarchy limits before sending a command", async () => {
+  const bridge = new LocalBridgeServer("127.0.0.1", 0);
+  const port = await bridge.start();
+  const client = new WebSocket(`ws://127.0.0.1:${port}`);
+
+  try {
+    await waitForOpen(client);
+    client.send(JSON.stringify(hello));
+    await bridge.waitForEditor();
+
+    await assert.rejects(
+      bridge.requestHierarchy({ maxDepth: 0, maxNodes: 25 }),
+      /maxDepth must be an integer between 1 and 32/,
+    );
+    await assert.rejects(
+      bridge.requestHierarchy({ maxDepth: 3, maxNodes: 501 }),
+      /maxNodes must be an integer between 1 and 500/,
+    );
   } finally {
     await bridge.stop();
     if (client.readyState !== WebSocket.CLOSED) {
