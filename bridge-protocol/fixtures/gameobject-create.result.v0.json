@@ -1,0 +1,30 @@
+{
+  "protocolVersion": "0",
+  "requestId": "req-create-001",
+  "ok": true,
+  "result": {
+    "mutationId": "mutation-create-001",
+    "replayed": false,
+    "globalObjectId": "GlobalObjectId_V1-2-example-0-0",
+    "instanceId": 777,
+    "name": "BridgeCreated",
+    "hierarchyPath": "BridgeCreated",
+    "sceneName": "SampleScene",
+    "scenePath": "Assets/Scenes/SampleScene.unity",
+    "siblingIndex": 3
+  },
+  "warnings": [],
+  "changedTargets": [
+    {
+      "globalObjectId": "GlobalObjectId_V1-2-example-0-0",
+      "instanceId": 777,
+      "name": "BridgeCreated"
+    }
+  ],
+  "dirtyState": "dirty",
+  "undo": {
+    "available": true,
+    "groupName": "Unity AI Bridge: Create GameObject"
+  },
+  "compileState": "idle"
+}
