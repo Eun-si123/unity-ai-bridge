@@ -1,0 +1,17 @@
+{
+  "protocolVersion": "0",
+  "requestId": "req-scene-save-1",
+  "operation": "scene.save",
+  "arguments": {
+    "expectedScenePath": "Assets/Scenes/SampleScene.unity",
+    "mutationId": "save-example-1",
+    "expectedStateEpoch": "epoch-example",
+    "expectedStateRevision": 12
+  },
+  "risk": "destructive",
+  "route": {
+    "editorId": "editor-example",
+    "connectionGeneration": 123456789
+  },
+  "deadlineUnixMs": 1787458000000
+}
