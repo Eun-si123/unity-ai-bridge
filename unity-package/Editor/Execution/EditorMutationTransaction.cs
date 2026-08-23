@@ -4,12 +4,21 @@ using UnityEngine.SceneManagement;
 
 namespace UnityAiBridge.Editor.Execution
 {
+    internal enum EditorMutationPreflightFailure
+    {
+        Compiling,
+        ActiveSceneUnavailable,
+    }
+
     internal sealed class EditorMutationPreflightException : InvalidOperationException
     {
-        public EditorMutationPreflightException(string message)
+        public EditorMutationPreflightException(EditorMutationPreflightFailure failure, string message)
             : base(message)
         {
+            Failure = failure;
         }
+
+        public EditorMutationPreflightFailure Failure { get; }
     }
 
     internal sealed class EditorMutationBusyException : InvalidOperationException
@@ -134,6 +143,7 @@ namespace UnityAiBridge.Editor.Execution
             if (EditorApplication.isCompiling)
             {
                 throw new EditorMutationPreflightException(
+                    EditorMutationPreflightFailure.Compiling,
                     $"Unity is compiling; {operation} was not executed.");
             }
 
@@ -141,6 +151,7 @@ namespace UnityAiBridge.Editor.Execution
             if (!scene.IsValid() || !scene.isLoaded)
             {
                 throw new EditorMutationPreflightException(
+                    EditorMutationPreflightFailure.ActiveSceneUnavailable,
                     $"The active Unity scene is not valid and loaded; {operation} was not executed.");
             }
 
