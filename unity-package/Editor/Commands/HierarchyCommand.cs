@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using UnityAiBridge.Editor.Execution;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -26,6 +27,8 @@ namespace UnityAiBridge.Editor.Commands
     {
         public string sceneName;
         public string scenePath;
+        public string stateEpoch;
+        public long stateRevision;
         public int rootCount;
         public int returnedNodeCount;
         public int maxDepth;
@@ -80,6 +83,7 @@ namespace UnityAiBridge.Editor.Commands
                 throw new InvalidOperationException("The active Unity scene is not valid and loaded.");
             }
 
+            var state = EditorStateRevision.Capture();
             var roots = new List<GameObject>(Math.Max(scene.rootCount, 0));
             scene.GetRootGameObjects(roots);
 
@@ -173,6 +177,8 @@ namespace UnityAiBridge.Editor.Commands
             {
                 sceneName = scene.name,
                 scenePath = scene.path ?? string.Empty,
+                stateEpoch = state.epoch,
+                stateRevision = state.revision,
                 rootCount = roots.Count,
                 returnedNodeCount = nodes.Length,
                 maxDepth = maxDepth,
