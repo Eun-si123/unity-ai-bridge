@@ -1,0 +1,15 @@
+{
+  "protocolVersion": "0",
+  "requestId": "fixture-asset-inspect",
+  "operation": "asset.inspect",
+  "arguments": {
+    "path": "Assets/Scenes/SampleScene.unity",
+    "maxDependencies": 64
+  },
+  "risk": "read",
+  "route": {
+    "editorId": "fixture-editor",
+    "connectionGeneration": 1
+  },
+  "deadlineUnixMs": 4102444800000
+}
