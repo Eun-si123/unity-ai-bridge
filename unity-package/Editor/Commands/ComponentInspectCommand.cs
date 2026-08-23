@@ -120,13 +120,19 @@ namespace UnityAiBridge.Editor.Commands
             var returnedCount = Math.Min(nativeComponents.Length, maxComponents);
             var entries = new ComponentInspectEntryPayload[returnedCount];
             var missingScriptCount = 0;
+            for (var index = 0; index < nativeComponents.Length; index++)
+            {
+                if (nativeComponents[index] == null)
+                {
+                    missingScriptCount++;
+                }
+            }
 
             for (var index = 0; index < returnedCount; index++)
             {
                 var component = nativeComponents[index];
                 if (component == null)
                 {
-                    missingScriptCount++;
                     entries[index] = new ComponentInspectEntryPayload
                     {
                         index = index,
@@ -296,8 +302,11 @@ namespace UnityAiBridge.Editor.Commands
                     break;
 
                 case SerializedPropertyType.ObjectReference:
-                case SerializedPropertyType.ExposedReference:
                     CaptureObjectReference(property.objectReferenceValue, payload);
+                    break;
+
+                case SerializedPropertyType.ExposedReference:
+                    CaptureObjectReference(property.exposedReferenceValue, payload);
                     break;
 
                 case SerializedPropertyType.Vector2:
