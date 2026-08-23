@@ -19,6 +19,10 @@ namespace UnityAiBridge.Editor.Commands
         public string sceneName;
         public string scenePath;
         public int siblingIndex;
+        public string expectedStateEpoch;
+        public long expectedStateRevision;
+        public string stateEpoch;
+        public long stateRevision;
     }
 
     internal sealed class GameObjectCreateMutationConflictException : InvalidOperationException
@@ -63,13 +67,32 @@ namespace UnityAiBridge.Editor.Commands
 
         public static void ValidateArguments(string name, string mutationId)
         {
+            ValidateArguments(name, mutationId, string.Empty, 0);
+        }
+
+        public static void ValidateArguments(
+            string name,
+            string mutationId,
+            string expectedStateEpoch,
+            long expectedStateRevision)
+        {
             ValidateName(name);
             ValidateMutationId(mutationId);
+            EditorStateRevision.ValidateExpectation(expectedStateEpoch, expectedStateRevision);
         }
 
         public static GameObjectCreatePayload Execute(string name, string mutationId)
         {
-            ValidateArguments(name, mutationId);
+            return Execute(name, mutationId, string.Empty, 0);
+        }
+
+        public static GameObjectCreatePayload Execute(
+            string name,
+            string mutationId,
+            string expectedStateEpoch,
+            long expectedStateRevision)
+        {
+            ValidateArguments(name, mutationId, expectedStateEpoch, expectedStateRevision);
 
             // Preserve the Phase 1 fail-closed behavior for replay checks while compilation is active.
             if (EditorApplication.isCompiling)
@@ -78,6 +101,7 @@ namespace UnityAiBridge.Editor.Commands
                     "Unity is compiling; gameObject.create was not executed.");
             }
 
+            var normalizedExpectedEpoch = expectedStateEpoch ?? string.Empty;
             var sessionKey = SessionKeyPrefix + mutationId;
             var cachedJson = SessionState.GetString(sessionKey, string.Empty);
             if (!string.IsNullOrEmpty(cachedJson))
@@ -88,15 +112,23 @@ namespace UnityAiBridge.Editor.Commands
                     throw new InvalidOperationException("The cached mutation result is invalid.");
                 }
 
-                if (!string.Equals(cached.name, name, StringComparison.Ordinal))
+                if (!string.Equals(cached.name, name, StringComparison.Ordinal) ||
+                    !string.Equals(
+                        cached.expectedStateEpoch ?? string.Empty,
+                        normalizedExpectedEpoch,
+                        StringComparison.Ordinal) ||
+                    cached.expectedStateRevision != expectedStateRevision)
                 {
                     throw new GameObjectCreateMutationConflictException(
-                        "mutationId was already used for gameObject.create with different arguments.");
+                        "mutationId was already used for gameObject.create with different arguments or state preconditions.");
                 }
 
                 var replayReadback = ObjectResolverCommand.Execute(cached.globalObjectId);
                 EnsureReplayStillMatches(cached, replayReadback);
                 RefreshFromReadback(cached, replayReadback);
+                var replayState = EditorStateRevision.Capture();
+                cached.stateEpoch = replayState.epoch;
+                cached.stateRevision = replayState.revision;
                 cached.replayed = true;
                 SessionState.SetString(sessionKey, JsonUtility.ToJson(cached));
                 return cached;
@@ -108,6 +140,8 @@ namespace UnityAiBridge.Editor.Commands
                 mutationState = EditorMutationTransaction.Execute(
                     "gameObject.create",
                     UndoGroupName,
+                    normalizedExpectedEpoch,
+                    expectedStateRevision,
                     context => CreateNativeObject(context, name),
                     (context, state) => VerifyNativeObject(context, state, name));
             }
@@ -122,6 +156,7 @@ namespace UnityAiBridge.Editor.Commands
             }
 
             var readback = mutationState.readback;
+            var stateAfter = EditorStateRevision.Capture();
             var result = new GameObjectCreatePayload
             {
                 mutationId = mutationId,
@@ -133,6 +168,10 @@ namespace UnityAiBridge.Editor.Commands
                 sceneName = readback.sceneName,
                 scenePath = readback.scenePath,
                 siblingIndex = readback.siblingIndex,
+                expectedStateEpoch = normalizedExpectedEpoch,
+                expectedStateRevision = expectedStateRevision,
+                stateEpoch = stateAfter.epoch,
+                stateRevision = stateAfter.revision,
             };
 
             SessionState.SetString(sessionKey, JsonUtility.ToJson(result));
