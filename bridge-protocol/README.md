@@ -36,6 +36,8 @@ Current implemented operations include:
 - `component.add` — add one exact concrete Component type with Unity Undo and native identity/type/owner verification,
 - `component.remove` — remove one exact Component identity with Unity Undo, native absence verification, and restoration-aware replay protection,
 - `component.property.set` — set one exact visible supported `SerializedProperty` on one exact non-Transform Component with Undo, semantic readback, rollback verification, and replay protection,
+- `asset.search` — search Unity AssetDatabase with explicit folder scope and bounded deterministic results,
+- `asset.inspect` — inspect one exact Unity asset file for GUID/type/importer/labels/dependency hash and bounded direct dependencies,
 - `transform.get` — read local/world Transform state for one GameObject target,
 - `transform.set` — atomically set the complete local position/Euler rotation/scale tuple with Undo, native verification, rollback verification, stale-state protection, and mutation replay protection,
 - `scene.save` — explicitly persist the active scene to its existing `.unity` asset path with destructive-risk metadata and stale-state protection,
@@ -95,6 +97,16 @@ Unity resolves the requested type from its loaded Component type set, rejects ab
 
 The generic property mutation enumerates `NextVisible` and only accepts a path present in that visible surface. It rejects hidden paths, `m_Script`, read-only properties, Transform/RectTransform targets, unsupported serialized types, non-finite numeric/vector input, and value-kind/type mismatches rather than coercing values. Unity applies the value through `SerializedObject.ApplyModifiedProperties`, re-resolves the same Component/property, and verifies the requested native value. On failed semantic verification the common transaction reverts Unity Undo and the property-specific rollback verifier checks the original typed value plus Component identity/owner/type/index/scene. A same-id replay re-reads native state; if the property was Undone or otherwise changed, replay fails with `stale_target/mutation_replay_stale` instead of reapplying it. See [`COMPONENT_PROPERTY_EDIT.md`](COMPONENT_PROPERTY_EDIT.md).
 
+`asset.search` accepts:
+
+- `filter` — Unity AssetDatabase search expression up to 256 characters; empty is allowed,
+- `searchInFolders` — 1..16 valid AssetDatabase folders under `Assets` or `Packages`,
+- `maxResults` — 1..200.
+
+The Agent uses `AssetDatabase.FindAssets` rather than recursively scanning raw files. Matching GUIDs are converted to current AssetDatabase paths, summarized with main asset type/folder metadata, path-sorted deterministically, and truncated to the requested bound with explicit total/returned/truncated fields. The MCP layer defaults to `searchInFolders=["Assets"]` and `maxResults=50`; packages are included only when the caller explicitly asks for them.
+
+`asset.inspect` accepts an exact project-relative asset file path plus `maxDependencies=0..256`. Folder paths are rejected with `stale_target/asset_unavailable`. A successful result includes the asset GUID/current path, main asset type and transient InstanceID/name, importer type when Unity exposes one, sorted labels, `GetAssetDependencyHash` observation, and bounded direct dependencies from `GetDependencies(path, false)`. GUID remains the durable asset identity; dependency hash is an imported-state observation for future concurrency design and is not a replacement GUID. The scene `stateRevision` is deliberately not presented as asset-state metadata. See [`ASSET_INSPECTION.md`](ASSET_INSPECTION.md).
+
 `transform.get` accepts one `globalObjectId` and currently requires that identity to resolve directly to a `GameObject`. It does not silently reinterpret a Component identity as its owner. The result returns:
 
 - canonical GameObject `globalObjectId` plus transient `instanceId`,
@@ -139,7 +151,7 @@ A completed `scene.save` may replay under the same `mutationId` only while the a
 
 Diagnostics results include current Console error/warning/log counts, recent captured Console messages, latest compiler warning/error messages, compilation state, truncation flags, and explicit coverage strings. Recent Console text is captured from the current domain load forward; the implementation does not depend on unsupported/internal `UnityEditor.LogEntries`. Compiler messages are observed through Unity's compilation pipeline and include source file/line/column metadata when Unity provides them.
 
-Example request/result fixtures live in `fixtures/editor-status.*`, `fixtures/hierarchy.*`, `fixtures/object-resolve.*`, `fixtures/gameobject-create.*`, `fixtures/gameobject-update.*`, `fixtures/gameobject-delete.*`, `fixtures/component-inspect.*`, `fixtures/component-add.*`, `fixtures/component-remove.*`, `fixtures/component-property-set.*`, `fixtures/transform-get.*`, `fixtures/transform-set.*`, `fixtures/scene-save.*`, and `fixtures/diagnostics.*`.
+Example request/result fixtures live in `fixtures/editor-status.*`, `fixtures/hierarchy.*`, `fixtures/object-resolve.*`, `fixtures/gameobject-create.*`, `fixtures/gameobject-update.*`, `fixtures/gameobject-delete.*`, `fixtures/component-inspect.*`, `fixtures/component-add.*`, `fixtures/component-remove.*`, `fixtures/component-property-set.*`, `fixtures/asset-search.*`, `fixtures/asset-inspect.*`, `fixtures/transform-get.*`, `fixtures/transform-set.*`, `fixtures/scene-save.*`, and `fixtures/diagnostics.*`.
 
 ## Result envelope
 
@@ -156,6 +168,8 @@ A first-time `gameObject.delete` reports verified target deletion plus an availa
 A successful first-time `component.add` reports the created Component target, a dirty scene, and an available Undo group. `component.remove` reports verified target absence and an Undo group but no changed target identity because the Component no longer exists after completion.
 
 A changed first-time `component.property.set` reports the Component target, `changed=true`, a dirty scene, and an available Undo group. A native no-op reports `changed=false` with no new Undo group. A same-id replay reports `replayed=true` and does not create another write/Undo record.
+
+Successful `asset.search` and `asset.inspect` results are read-only: they report `dirtyState: "unchanged"` and do not create Undo metadata. Asset search truncation and asset dependency truncation are operation-level result fields rather than implicit transport truncation.
 
 A successful first-time `transform.set` reports the target as changed, the scene as dirty, and an available Undo group. A replay reports `replayed: true`, no new changed target, and no new Undo group because no second mutation was executed.
 
