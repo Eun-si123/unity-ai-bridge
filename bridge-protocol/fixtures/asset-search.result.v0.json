@@ -1,0 +1,26 @@
+{
+  "protocolVersion": "0",
+  "requestId": "fixture-asset-search",
+  "ok": true,
+  "result": {
+    "filter": "t:Scene",
+    "searchInFolders": ["Assets"],
+    "maxResults": 20,
+    "totalMatches": 1,
+    "returnedCount": 1,
+    "truncated": false,
+    "assets": [
+      {
+        "guid": "0123456789abcdef0123456789abcdef",
+        "path": "Assets/Scenes/SampleScene.unity",
+        "name": "SampleScene",
+        "extension": ".unity",
+        "mainTypeName": "UnityEditor.SceneAsset",
+        "isFolder": false
+      }
+    ]
+  },
+  "warnings": [],
+  "dirtyState": "unchanged",
+  "compileState": "idle"
+}
