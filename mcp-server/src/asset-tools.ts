@@ -5,6 +5,8 @@ import {
   AssetBridgeServer,
   type AssetInspectOptions,
   type AssetSearchOptions,
+  type PrefabInspectOptions,
+  type PrefabInstantiateOptions,
 } from "./bridge/asset-bridge-server.js";
 
 const searchInputSchema = fromJsonSchema({
@@ -22,11 +24,7 @@ const searchInputSchema = fromJsonSchema({
       minItems: 1,
       maxItems: 16,
       default: ["Assets"],
-      items: {
-        type: "string",
-        minLength: 1,
-        maxLength: 512,
-      },
+      items: { type: "string", minLength: 1, maxLength: 512 },
       description:
         "Project-relative Unity folders to search recursively. Paths must be under Assets or Packages and use forward slashes.",
     },
@@ -64,6 +62,79 @@ const inspectInputSchema = fromJsonSchema({
   additionalProperties: false,
 });
 
+const prefabInspectInputSchema = fromJsonSchema({
+  type: "object",
+  required: ["path"],
+  properties: {
+    path: {
+      type: "string",
+      minLength: 1,
+      maxLength: 512,
+      description: "Exact project-relative Prefab Asset path under Assets or Packages.",
+    },
+    maxDepth: {
+      type: "integer",
+      minimum: 0,
+      maximum: 32,
+      default: 8,
+      description: "Maximum Prefab hierarchy depth to return, with the Prefab root at depth 0.",
+    },
+    maxNodes: {
+      type: "integer",
+      minimum: 1,
+      maximum: 500,
+      default: 100,
+      description: "Maximum Prefab hierarchy nodes to return in deterministic preorder.",
+    },
+  },
+  additionalProperties: false,
+});
+
+const prefabInstantiateInputSchema = fromJsonSchema({
+  type: "object",
+  required: [
+    "prefabPath",
+    "expectedPrefabDependencyHash",
+    "expectedStateEpoch",
+    "expectedStateRevision",
+  ],
+  properties: {
+    prefabPath: {
+      type: "string",
+      minLength: 1,
+      maxLength: 512,
+      description: "Exact Prefab Asset path from a recent prefab/asset inspection.",
+    },
+    expectedPrefabDependencyHash: {
+      type: "string",
+      minLength: 1,
+      maxLength: 128,
+      description:
+        "Exact dependencyHash from a recent inspection of the same Prefab Asset. The write fails if the Prefab changed before execution.",
+    },
+    mutationId: {
+      type: "string",
+      minLength: 1,
+      maxLength: 128,
+      pattern: "^[A-Za-z0-9._:-]+$",
+      description:
+        "Optional retry identity. Reuse only for an ambiguous retry of this exact instantiate intent. If omitted, the bridge generates one.",
+    },
+    expectedStateEpoch: {
+      type: "string",
+      minLength: 1,
+      maxLength: 128,
+      description: "Required active-scene state epoch from a recent Unity observation.",
+    },
+    expectedStateRevision: {
+      type: "integer",
+      minimum: 1,
+      description: "Required active-scene state revision from the same observation.",
+    },
+  },
+  additionalProperties: false,
+});
+
 export function registerAssetTools(server: McpServer, bridge: AssetBridgeServer): void {
   server.registerTool(
     "unity_search_assets",
@@ -74,22 +145,14 @@ export function registerAssetTools(server: McpServer, bridge: AssetBridgeServer)
     },
     async (args) => {
       try {
-        const input = args as {
-          filter?: string;
-          searchInFolders?: string[];
-          maxResults?: number;
-        };
+        const input = args as { filter?: string; searchInFolders?: string[]; maxResults?: number };
         const options: AssetSearchOptions = {};
         if (input.filter !== undefined) options.filter = input.filter;
         if (input.searchInFolders !== undefined) options.searchInFolders = input.searchInFolders;
         if (input.maxResults !== undefined) options.maxResults = input.maxResults;
-
         await preflight(bridge, "asset.search");
         const result = await bridge.requestSearchAssets(options);
-        return {
-          content: [{ type: "text", text: JSON.stringify(result) }],
-          structuredContent: result,
-        };
+        return success(result);
       } catch (error) {
         return toolError(error);
       }
@@ -100,23 +163,71 @@ export function registerAssetTools(server: McpServer, bridge: AssetBridgeServer)
     "unity_inspect_asset",
     {
       description:
-        "Inspect one exact Unity asset file through AssetDatabase. Returns GUID/path/main asset type and identity, importer type, labels, Unity dependency hash, and a bounded list of direct asset dependencies. This first slice is read-only and does not expose importer mutation.",
+        "Inspect one exact Unity asset file through AssetDatabase. Returns GUID/path/main asset type and identity, importer type, labels, Unity dependency hash, and a bounded list of direct asset dependencies. This surface is read-only.",
       inputSchema: inspectInputSchema,
     },
     async (args) => {
       try {
         const input = args as { path: string; maxDependencies?: number };
         const options: AssetInspectOptions = { path: input.path };
-        if (input.maxDependencies !== undefined) {
-          options.maxDependencies = input.maxDependencies;
-        }
-
+        if (input.maxDependencies !== undefined) options.maxDependencies = input.maxDependencies;
         await preflight(bridge, "asset.inspect");
         const result = await bridge.requestInspectAsset(options);
-        return {
-          content: [{ type: "text", text: JSON.stringify(result) }],
-          structuredContent: result,
+        return success(result);
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    "unity_inspect_prefab",
+    {
+      description:
+        "Inspect one exact Prefab Asset without instantiating it. Returns GUID/dependencyHash/Prefab asset type/root name and a bounded preorder hierarchy with component type names. Use the dependencyHash as the Prefab precondition for unity_instantiate_prefab.",
+      inputSchema: prefabInspectInputSchema,
+    },
+    async (args) => {
+      try {
+        const input = args as { path: string; maxDepth?: number; maxNodes?: number };
+        const options: PrefabInspectOptions = { path: input.path };
+        if (input.maxDepth !== undefined) options.maxDepth = input.maxDepth;
+        if (input.maxNodes !== undefined) options.maxNodes = input.maxNodes;
+        await preflight(bridge, "prefab.inspect");
+        const result = await bridge.requestInspectPrefab(options);
+        return success(result);
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    "unity_instantiate_prefab",
+    {
+      description:
+        "Instantiate one exact Prefab Asset as a root GameObject in the active scene while preserving its Prefab connection. Requires both a fresh active-scene state token and the Prefab dependencyHash observed by inspection. Unity records Undo, verifies native Prefab linkage, enforces the execution deadline, and protects ambiguous retries with mutationId replay rules.",
+      inputSchema: prefabInstantiateInputSchema,
+    },
+    async (args) => {
+      try {
+        const input = args as {
+          prefabPath: string;
+          expectedPrefabDependencyHash: string;
+          mutationId?: string;
+          expectedStateEpoch: string;
+          expectedStateRevision: number;
         };
+        const options: PrefabInstantiateOptions = {
+          prefabPath: input.prefabPath,
+          expectedPrefabDependencyHash: input.expectedPrefabDependencyHash,
+          expectedStateEpoch: input.expectedStateEpoch,
+          expectedStateRevision: input.expectedStateRevision,
+        };
+        if (input.mutationId !== undefined) options.mutationId = input.mutationId;
+        await preflight(bridge, "prefab.instantiate", "state.revision.v1");
+        const result = await bridge.requestInstantiatePrefab(options);
+        return success(result);
       } catch (error) {
         return toolError(error);
       }
@@ -124,9 +235,18 @@ export function registerAssetTools(server: McpServer, bridge: AssetBridgeServer)
   );
 }
 
-async function preflight(bridge: AssetBridgeServer, capability: string): Promise<void> {
+async function preflight(bridge: AssetBridgeServer, ...capabilities: string[]): Promise<void> {
   const status = await bridge.requestEditorStatus();
-  requireAgentCapability(status, capability);
+  for (const capability of capabilities) {
+    requireAgentCapability(status, capability);
+  }
+}
+
+function success(result: object) {
+  return {
+    content: [{ type: "text" as const, text: JSON.stringify(result) }],
+    structuredContent: result,
+  };
 }
 
 function toolError(error: unknown): {
