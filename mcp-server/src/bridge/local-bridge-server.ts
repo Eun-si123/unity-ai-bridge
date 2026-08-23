@@ -58,6 +58,54 @@ export interface HierarchyPayload {
   nodes: HierarchyNodePayload[];
 }
 
+export interface DiagnosticsOptions {
+  maxEntries?: number;
+  minimumSeverity?: "error" | "warning" | "log";
+}
+
+export interface ConsoleCountsPayload {
+  errors: number;
+  warnings: number;
+  logs: number;
+}
+
+export interface ConsoleDiagnosticPayload {
+  timestampUnixMs: number;
+  severity: "error" | "warning" | "log";
+  message: string;
+  stackTrace: string;
+}
+
+export interface CompilerDiagnosticPayload {
+  severity: "error" | "warning";
+  message: string;
+  file: string;
+  line: number;
+  column: number;
+  assemblyPath: string;
+}
+
+export interface CompilationSnapshotPayload {
+  sequence: number;
+  completedUnixMs: number;
+  truncated: boolean;
+  messages: CompilerDiagnosticPayload[];
+}
+
+export interface DiagnosticsPayload {
+  consoleCounts: ConsoleCountsPayload;
+  isCompiling: boolean;
+  captureStartedUnixMs: number;
+  minimumSeverity: "error" | "warning" | "log";
+  maxEntries: number;
+  consoleEntryCoverage: string;
+  compilerCoverage: string;
+  consoleEntriesTruncated: boolean;
+  compilerMessagesTruncated: boolean;
+  recentConsoleEntries: ConsoleDiagnosticPayload[];
+  latestCompilation: CompilationSnapshotPayload;
+}
+
 export interface GameObjectCreateOptions {
   name: string;
   mutationId?: string;
@@ -90,6 +138,10 @@ const DEFAULT_HIERARCHY_MAX_DEPTH = 8;
 const DEFAULT_HIERARCHY_MAX_NODES = 200;
 const MAX_HIERARCHY_DEPTH = 32;
 const MAX_HIERARCHY_NODES = 500;
+const DEFAULT_DIAGNOSTICS_MAX_ENTRIES = 100;
+const MAX_DIAGNOSTICS_ENTRIES = 200;
+const DEFAULT_DIAGNOSTICS_MINIMUM_SEVERITY = "warning" as const;
+const DIAGNOSTICS_SEVERITIES = new Set(["error", "warning", "log"]);
 const MAX_GAMEOBJECT_NAME_LENGTH = 128;
 const MAX_MUTATION_ID_LENGTH = 128;
 const MUTATION_ID_PATTERN = /^[A-Za-z0-9._:-]+$/;
@@ -222,6 +274,37 @@ export class LocalBridgeServer {
 
     if (!isHierarchyPayload(result)) {
       throw new Error("Unity returned an invalid scene.hierarchy payload.");
+    }
+    return result;
+  }
+
+  public async requestDiagnostics(
+    options: DiagnosticsOptions = {},
+    timeoutMs = 5000,
+  ): Promise<DiagnosticsPayload> {
+    const editor = this.requireActiveEditor();
+    const maxEntries = options.maxEntries ?? DEFAULT_DIAGNOSTICS_MAX_ENTRIES;
+    const minimumSeverity = options.minimumSeverity ?? DEFAULT_DIAGNOSTICS_MINIMUM_SEVERITY;
+
+    if (!Number.isInteger(maxEntries) || maxEntries < 1 || maxEntries > MAX_DIAGNOSTICS_ENTRIES) {
+      throw new Error(`maxEntries must be an integer between 1 and ${MAX_DIAGNOSTICS_ENTRIES}.`);
+    }
+    if (!DIAGNOSTICS_SEVERITIES.has(minimumSeverity)) {
+      throw new Error("minimumSeverity must be one of 'error', 'warning', or 'log'.");
+    }
+
+    const result = await this.requestOperation(
+      "editor.diagnostics",
+      { maxEntries, minimumSeverity },
+      {
+        editorId: editor.hello.editorId,
+        connectionGeneration: editor.hello.connectionGeneration,
+      },
+      timeoutMs,
+    );
+
+    if (!isDiagnosticsPayload(result)) {
+      throw new Error("Unity returned an invalid editor.diagnostics payload.");
     }
     return result;
   }
@@ -499,6 +582,86 @@ function isHierarchyNodePayload(value: unknown): value is HierarchyNodePayload {
     isNonNegativeInteger(candidate.childCount) &&
     typeof candidate.activeSelf === "boolean" &&
     typeof candidate.activeInHierarchy === "boolean"
+  );
+}
+
+function isDiagnosticsPayload(value: unknown): value is DiagnosticsPayload {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  return (
+    isConsoleCountsPayload(candidate.consoleCounts) &&
+    typeof candidate.isCompiling === "boolean" &&
+    isNonNegativeInteger(candidate.captureStartedUnixMs) &&
+    (candidate.minimumSeverity === "error" ||
+      candidate.minimumSeverity === "warning" ||
+      candidate.minimumSeverity === "log") &&
+    isPositiveInteger(candidate.maxEntries) &&
+    typeof candidate.consoleEntryCoverage === "string" &&
+    typeof candidate.compilerCoverage === "string" &&
+    typeof candidate.consoleEntriesTruncated === "boolean" &&
+    typeof candidate.compilerMessagesTruncated === "boolean" &&
+    Array.isArray(candidate.recentConsoleEntries) &&
+    candidate.recentConsoleEntries.every(isConsoleDiagnosticPayload) &&
+    isCompilationSnapshotPayload(candidate.latestCompilation)
+  );
+}
+
+function isConsoleCountsPayload(value: unknown): value is ConsoleCountsPayload {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const candidate = value as Record<string, unknown>;
+  return (
+    isNonNegativeInteger(candidate.errors) &&
+    isNonNegativeInteger(candidate.warnings) &&
+    isNonNegativeInteger(candidate.logs)
+  );
+}
+
+function isConsoleDiagnosticPayload(value: unknown): value is ConsoleDiagnosticPayload {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const candidate = value as Record<string, unknown>;
+  return (
+    isNonNegativeInteger(candidate.timestampUnixMs) &&
+    (candidate.severity === "error" ||
+      candidate.severity === "warning" ||
+      candidate.severity === "log") &&
+    typeof candidate.message === "string" &&
+    typeof candidate.stackTrace === "string"
+  );
+}
+
+function isCompilationSnapshotPayload(value: unknown): value is CompilationSnapshotPayload {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const candidate = value as Record<string, unknown>;
+  return (
+    isNonNegativeInteger(candidate.sequence) &&
+    isNonNegativeInteger(candidate.completedUnixMs) &&
+    typeof candidate.truncated === "boolean" &&
+    Array.isArray(candidate.messages) &&
+    candidate.messages.every(isCompilerDiagnosticPayload)
+  );
+}
+
+function isCompilerDiagnosticPayload(value: unknown): value is CompilerDiagnosticPayload {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const candidate = value as Record<string, unknown>;
+  return (
+    (candidate.severity === "error" || candidate.severity === "warning") &&
+    typeof candidate.message === "string" &&
+    typeof candidate.file === "string" &&
+    isNonNegativeInteger(candidate.line) &&
+    isNonNegativeInteger(candidate.column) &&
+    typeof candidate.assemblyPath === "string"
   );
 }
 
