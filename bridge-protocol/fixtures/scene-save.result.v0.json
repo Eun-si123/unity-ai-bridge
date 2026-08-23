@@ -1,0 +1,27 @@
+{
+  "protocolVersion": "0",
+  "requestId": "req-scene-save-1",
+  "ok": true,
+  "result": {
+    "mutationId": "save-example-1",
+    "replayed": false,
+    "saved": true,
+    "alreadyClean": false,
+    "sceneName": "SampleScene",
+    "scenePath": "Assets/Scenes/SampleScene.unity",
+    "wasDirty": true,
+    "isDirty": false,
+    "expectedScenePath": "Assets/Scenes/SampleScene.unity",
+    "expectedStateEpoch": "epoch-example",
+    "expectedStateRevision": 12,
+    "stateEpoch": "epoch-example",
+    "stateRevision": 13
+  },
+  "warnings": [],
+  "dirtyState": "clean",
+  "undo": {
+    "available": false,
+    "groupName": ""
+  },
+  "compileState": "idle"
+}
