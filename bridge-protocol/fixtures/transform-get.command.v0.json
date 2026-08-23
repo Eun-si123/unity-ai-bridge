@@ -1,0 +1,10 @@
+{
+  "protocolVersion": "0",
+  "requestId": "transform-get-1",
+  "operation": "transform.get",
+  "arguments": {
+    "globalObjectId": "GlobalObjectId_V1-2-00000000000000000000000000000000-1-0"
+  },
+  "risk": "read",
+  "deadlineUnixMs": 1787461000000
+}

@@ -32,6 +32,8 @@ namespace UnityAiBridge.Editor.Commands
             "object.resolve",
             "gameObject.create",
             "scene.save",
+            "transform.get",
+            "transform.set",
             "state.revision.v1",
         };
 

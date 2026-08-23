@@ -9,6 +9,10 @@ const expectedCapabilities = [
   "editor.diagnostics",
   "object.resolve",
   "gameObject.create",
+  "scene.save",
+  "transform.get",
+  "transform.set",
+  "state.revision.v1",
 ] as const;
 
 const client = new Client({
@@ -26,7 +30,12 @@ try {
   await client.connect(transport);
 
   const { tools } = await client.listTools();
-  for (const required of ["unity_get_status", "unity_get_hierarchy"]) {
+  for (const required of [
+    "unity_get_status",
+    "unity_get_hierarchy",
+    "unity_get_transform",
+    "unity_set_transform",
+  ]) {
     if (!tools.some((tool) => tool.name === required)) {
       throw new Error(`MCP server did not advertise ${required}.`);
     }

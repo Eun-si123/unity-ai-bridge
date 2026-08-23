@@ -1,0 +1,47 @@
+{
+  "protocolVersion": "0",
+  "requestId": "transform-set-1",
+  "ok": true,
+  "result": {
+    "mutationId": "transform-example-1",
+    "replayed": false,
+    "requestedGlobalObjectId": "GlobalObjectId_V1-2-00000000000000000000000000000000-1-0",
+    "requestedLocalPosition": { "x": 1.25, "y": -2.5, "z": 3.75 },
+    "requestedLocalEulerAngles": { "x": 15, "y": 30, "z": 45 },
+    "requestedLocalScale": { "x": 1.5, "y": 0.75, "z": 2 },
+    "expectedStateEpoch": "example-editor-session",
+    "expectedStateRevision": 12,
+    "transform": {
+      "globalObjectId": "GlobalObjectId_V1-2-00000000000000000000000000000000-1-0",
+      "instanceId": 101,
+      "name": "Target",
+      "sceneName": "SampleScene",
+      "scenePath": "Assets/Scenes/SampleScene.unity",
+      "hierarchyPath": "Target",
+      "sceneIsDirty": true,
+      "localPosition": { "x": 1.25, "y": -2.5, "z": 3.75 },
+      "localEulerAngles": { "x": 15, "y": 30, "z": 45 },
+      "localRotation": { "x": 0.018283, "y": 0.28532, "z": 0.33527, "w": 0.89769 },
+      "localScale": { "x": 1.5, "y": 0.75, "z": 2 },
+      "worldPosition": { "x": 1.25, "y": -2.5, "z": 3.75 },
+      "worldRotation": { "x": 0.018283, "y": 0.28532, "z": 0.33527, "w": 0.89769 },
+      "lossyScale": { "x": 1.5, "y": 0.75, "z": 2 },
+      "stateEpoch": "example-editor-session",
+      "stateRevision": 13
+    }
+  },
+  "warnings": [],
+  "changedTargets": [
+    {
+      "globalObjectId": "GlobalObjectId_V1-2-00000000000000000000000000000000-1-0",
+      "instanceId": 101,
+      "name": "Target"
+    }
+  ],
+  "dirtyState": "dirty",
+  "undo": {
+    "available": true,
+    "groupName": "Unity AI Bridge: Set Transform"
+  },
+  "compileState": "idle"
+}

@@ -20,7 +20,8 @@
     "verify:resolver": "npm run build && node dist/src/dev/verify-object-resolver-unity.js",
     "verify:capabilities": "npm run build && node dist/src/dev/verify-agent-capabilities-unity.js",
     "verify:state-revision": "npm run build && node dist/src/dev/verify-state-revision-unity.js",
-    "verify:save": "npm run build && node dist/src/dev/verify-scene-save-unity.js"
+    "verify:save": "npm run build && node dist/src/dev/verify-scene-save-unity.js",
+    "verify:transform": "npm run build && node dist/src/dev/verify-transform-unity.js"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "2.0.0",
