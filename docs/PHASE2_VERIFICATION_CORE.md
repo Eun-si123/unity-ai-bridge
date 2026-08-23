@@ -99,4 +99,4 @@ Real `gameObject.create` regression via `verify:resolver`:
 
 The rollback probe started from a clean scene but the scene remained dirty after verified object rollback (`sceneWasDirty=False`, `sceneIsDirty=True`). Therefore `rollbackVerified=true` currently means the operation-specific native state was restored; it does not imply that Editor dirty metadata was restored.
 
-The project must not silently save merely to clear a dirty flag. Dirty-state/save policy is a separate Reliability Core concern.
+Current documented Unity 6 `EditorSceneManager` APIs expose `MarkSceneDirty` and scene save operations, but the documented API surface does not provide a simple public inverse that clears an existing scene dirty flag without saving. The project must not silently save merely to clear this flag. Dirty-state/save policy is therefore a separate Reliability Core concern.
