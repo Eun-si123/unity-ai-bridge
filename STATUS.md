@@ -56,6 +56,7 @@ Broader Unity/OS compatibility is not implied.
 | Component property edit | Verified | PR #26; 45/45 EditMode; visible Boolean/Integer/Float/String/Vector3 serialized-property writes with semantic readback and Undo/replay protection. |
 | Asset search/inspect | Verified | PR #27; 50/50 EditMode; bounded `AssetDatabase` search and exact GUID/type/importer/dependency inspection. |
 | Prefab inspect/instantiate | Verified | PR #28; 56/56 EditMode; bounded Prefab Asset hierarchy inspect, dependency-hash precondition, linked `PrefabUtility.InstantiatePrefab`, native linkage readback, same-id replay, Undo, stale-replay rejection. |
+| Prefab Asset creation | Verified | PR #29; 62/62 EditMode; create-only `SaveAsPrefabAsset`, source unchanged, GUID/dependencyHash/root readback, same-id replay, manual asset removal followed by stale-replay rejection. |
 | Remote gateway / Easy Connect | Planned | Not implemented. |
 | Pairing/authentication | Planned | Not implemented. |
 | Multi-user/editor routing | Planned | Current local bridge supports one active editor. |
@@ -119,30 +120,30 @@ Current objective: provide a small but genuinely useful Unity editing/inspection
 5. **Component property edit — PR #26** — **45/45 EditMode**
 6. **Asset search/inspect — PR #27** — **50/50 EditMode**
 7. **Prefab inspect/instantiate — PR #28** — **56/56 EditMode**
+8. **Prefab Asset creation — PR #29** — **62/62 EditMode**
 
-### Prefab inspect/instantiate verification — PR #28
+### Prefab Asset creation verification — PR #29
 
 ```text
 Environment: Windows + Unity 6000.3.21f1
-EditMode: 56 Passed / 0 Failed
-Fixture: Packages/com.eunsung.unity-ai-bridge/Tests/Editor/Fixtures/PrefabWorkflowFixture.prefab
-Fixture GUID: 8a7f7a7f8c15476ebf7a50b5c9049f11
-Observed dependencyHash: 96c743320b7ca458a88fd17b33aaa607
-Returned prefab nodes: 1
-Linked Prefab instantiate: PASS
-Native GlobalObjectId/linkage readback: PASS
+EditMode: 62 Passed / 0 Failed
+Destination: Assets/UnityAiBridge_Prefab_Create_Verify_1787477543534_2a6032058e974734b6d7eda5b7cb5512.prefab
+Created GUID: 9620866f03a86444897f7edef5652f8a
+Observed dependencyHash: 54acfe634f8153a9f4f5b8c06cb4d17b
+Source scene GameObject unchanged: PASS
+Native Prefab Asset inspect/readback: PASS
 Immediate same-id replay: PASS
-Undo removed created instance: PASS
-Retry after Undo -> stale_target/mutation_replay_stale: PASS
-Temporary instance removed: PASS
+Manual Project-window asset removal observed: PASS
+Retry after removal -> stale_target/mutation_replay_stale: PASS
+Temporary source GameObject removed: PASS
 Result: PASS
 ```
 
-During real verification the branch also fixed a verifier reconnect race, a corrupt hand-authored fixture that used Unity's reserved fileID `100100000`, and Unity 6000.3 `InstanceIDToObject` deprecation by re-resolving the canonical `GlobalObjectId` instead.
+Real verification also caught two useful contract/verifier issues: fixed destinations could collide with a prior local test artifact, so the verifier now uses a unique path; and Prefab root verification no longer assumes the saved root name must equal the source scene GameObject name when Unity derives the asset root from a different destination filename.
 
 ### Current next candidates
 
-1. Prefab Asset creation / save-as-Prefab and bounded Apply Overrides workflow,
+1. bounded Prefab Apply Overrides workflow,
 2. script read/write workflows,
 3. Play Mode and Test Runner controls,
 4. diagnostics extensions where they unlock real workflows,
@@ -158,8 +159,9 @@ No arbitrary C# execution fallback is planned.
 - An already-started Unity API call is not force-cancelled when its deadline later expires.
 - Component property edit supports only the explicitly bounded first-slice value kinds; complex serialized forms remain future work.
 - Component add deliberately rejects Transform/RectTransform in the current contract.
-- Asset search/inspection remains read-only; importer mutation and generic asset move/rename/delete are not implemented.
-- Prefab inspection and linked scene instantiation are verified; Prefab Asset creation, Apply/Revert Overrides, unpacking, variant authoring, and asset deletion are not yet implemented.
+- Asset search/inspection remains read-only; generic importer mutation and generic asset move/rename/delete are not implemented.
+- Prefab Asset creation is create-only under `Assets`, never overwrites an existing asset, and is a persistent disk write without Unity Undo.
+- Prefab Apply/Revert Overrides, unpacking, variant authoring, and generic asset deletion are not yet implemented.
 - Asset `dependencyHash` is an imported-state observation used as the current Prefab asset precondition; it is not a replacement for GUID identity or a general asset transaction token.
 - Recent Console text covers only the current domain-load capture window.
 - Unity support beyond 6000.3.21f1 is unverified.
