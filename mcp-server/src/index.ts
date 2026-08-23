@@ -3,6 +3,7 @@ import { serveStdio } from "@modelcontextprotocol/server/stdio";
 
 import {
   LocalBridgeServer,
+  type DiagnosticsOptions,
   type GameObjectCreateOptions,
   type HierarchyOptions,
 } from "./bridge/local-bridge-server.js";
@@ -28,6 +29,26 @@ const hierarchyInputSchema = fromJsonSchema({
       maximum: 500,
       default: 200,
       description: "Maximum number of GameObjects to return in preorder. Allowed range: 1..500.",
+    },
+  },
+  additionalProperties: false,
+});
+
+const diagnosticsInputSchema = fromJsonSchema({
+  type: "object",
+  properties: {
+    maxEntries: {
+      type: "integer",
+      minimum: 1,
+      maximum: 200,
+      default: 100,
+      description: "Maximum recent Console entries and compiler diagnostics to return after filtering. Allowed range: 1..200.",
+    },
+    minimumSeverity: {
+      type: "string",
+      enum: ["error", "warning", "log"],
+      default: "warning",
+      description: "Minimum severity to return. 'error' returns errors only, 'warning' returns errors and warnings, and 'log' also includes ordinary Console logs.",
     },
   },
   additionalProperties: false,
@@ -123,6 +144,42 @@ serveStdio(() => {
         return {
           content: [{ type: "text", text: JSON.stringify(hierarchy) }],
           structuredContent: hierarchy,
+        };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return {
+          isError: true,
+          content: [{ type: "text", text: message }],
+        };
+      }
+    },
+  );
+
+  server.registerTool(
+    "unity_get_diagnostics",
+    {
+      description:
+        "Read bounded Unity diagnostics using public Unity APIs. Returns current Console error/warning/log counts, recent Console messages captured since the current script-domain load, and the latest compilation messages observed through Unity's CompilationPipeline. The result explicitly reports coverage because public Unity APIs expose current Console counts but not a supported full historical Console-entry iterator.",
+      inputSchema: diagnosticsInputSchema,
+    },
+    async (args) => {
+      try {
+        const input = args as {
+          maxEntries?: number;
+          minimumSeverity?: "error" | "warning" | "log";
+        };
+        const options: DiagnosticsOptions = {};
+        if (input.maxEntries !== undefined) {
+          options.maxEntries = input.maxEntries;
+        }
+        if (input.minimumSeverity !== undefined) {
+          options.minimumSeverity = input.minimumSeverity;
+        }
+
+        const diagnostics = await bridge.requestDiagnostics(options);
+        return {
+          content: [{ type: "text", text: JSON.stringify(diagnostics) }],
+          structuredContent: diagnostics,
         };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
