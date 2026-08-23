@@ -116,19 +116,16 @@ Current implementation:
 - `editor.status` read handler,
 - bounded `scene.hierarchy` read handler,
 - bounded `gameObject.create` write handler,
+- create-specific validation, Undo registration, dirty-state handling, `GlobalObjectId` result capture, and same-session mutation replay via `SessionState`,
 - `editor.diagnostics` read handler,
-- `object.resolve` native GlobalObjectId resolver,
-- create-specific validation, Undo registration, dirty-state handling, mutation identity, and same-session mutation storage,
-- create-time native GlobalObjectId readback before successful mutation results are cached,
-- replay-time target re-resolution and fail-closed stale-target rejection,
 - recent log capture through `Application.logMessageReceivedThreaded`,
 - compiler warning/error capture through `CompilationPipeline.assemblyCompilationFinished`,
 - latest compilation snapshot persistence through domain reload using `SessionState`,
-- current Console count reads without relying on internal `UnityEditor.LogEntries`.
+- current Console count reads without relying on internal `UnityEditor.LogEntries`,
+- Phase 2 `object.resolve` handler using `GlobalObjectId` native re-resolution,
+- Phase 2 native readback and stale replay validation for the bounded GameObject-create path.
 
-All Phase 1 minimum slices are runtime-verified on Windows / Unity 6000.3.21f1 as recorded in `STATUS.md`.
-
-The first Phase 2 stable-resolution/readback slice is implemented on its feature branch but requires real Unity verification before it can be marked Verified or merged.
+All Phase 1 minimum slices are runtime-verified on Windows / Unity 6000.3.21f1 as recorded in `STATUS.md`. The new Phase 2 resolver/readback code is implemented and Node-verified but still awaits successful real Unity runtime verification.
 
 ### `bridge-protocol/`
 
@@ -156,7 +153,7 @@ Current implementation:
 - write-risk routing and mutation-id validation for the create slice,
 - bounded diagnostics and resolver validation,
 - simulated local-bridge tests,
-- real-Unity verification helpers for Phase 1 plus the Phase 2 resolver/Undo/stale-replay path.
+- real-Unity verification helpers including the Phase 2 resolver/Undo/stale-replay verifier.
 
 Remote Streamable HTTP, hosted auth/pairing, multi-user routing, and managed-service policy are not implemented here yet.
 
