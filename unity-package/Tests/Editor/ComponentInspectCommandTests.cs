@@ -8,19 +8,22 @@ namespace UnityAiBridge.Editor.Tests
 {
     public sealed class ComponentInspectCommandTests
     {
+        private const string ParseableGlobalObjectId =
+            "GlobalObjectId_V1-2-0123456789abcdef0123456789abcdef-1-0";
+
         [Test]
         public void ValidateArguments_AcceptsDocumentedBounds()
         {
             Assert.DoesNotThrow(() =>
                 ComponentInspectCommand.ValidateArguments(
-                    "GlobalObjectId_V1-2-00000000000000000000000000000000-1-0",
+                    ParseableGlobalObjectId,
                     1,
                     1,
                     0));
 
             Assert.DoesNotThrow(() =>
                 ComponentInspectCommand.ValidateArguments(
-                    "GlobalObjectId_V1-2-00000000000000000000000000000000-1-0",
+                    ParseableGlobalObjectId,
                     ComponentInspectCommand.MaximumMaxComponents,
                     ComponentInspectCommand.MaximumMaxPropertiesPerComponent,
                     ComponentInspectCommand.MaximumMaxDepth));
@@ -29,14 +32,13 @@ namespace UnityAiBridge.Editor.Tests
         [Test]
         public void ValidateArguments_RejectsOutOfRangeLimits()
         {
-            var id = "GlobalObjectId_V1-2-00000000000000000000000000000000-1-0";
             Assert.Throws<ArgumentOutOfRangeException>(() =>
-                ComponentInspectCommand.ValidateArguments(id, 0, 1, 0));
+                ComponentInspectCommand.ValidateArguments(ParseableGlobalObjectId, 0, 1, 0));
             Assert.Throws<ArgumentOutOfRangeException>(() =>
-                ComponentInspectCommand.ValidateArguments(id, 1, 0, 0));
+                ComponentInspectCommand.ValidateArguments(ParseableGlobalObjectId, 1, 0, 0));
             Assert.Throws<ArgumentOutOfRangeException>(() =>
                 ComponentInspectCommand.ValidateArguments(
-                    id,
+                    ParseableGlobalObjectId,
                     1,
                     1,
                     ComponentInspectCommand.MaximumMaxDepth + 1));
