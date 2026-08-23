@@ -1,0 +1,32 @@
+{
+  "protocolVersion": "0",
+  "requestId": "req-prefab-inspect-1",
+  "ok": true,
+  "result": {
+    "guid": "8a7f7a7f8c15476ebf7a50b5c9049f11",
+    "path": "Packages/com.eunsung.unity-ai-bridge/Tests/Editor/Fixtures/PrefabWorkflowFixture.prefab",
+    "dependencyHash": "0123456789abcdef0123456789abcdef",
+    "prefabAssetType": "Regular",
+    "rootName": "PrefabWorkflowFixture",
+    "totalNodeCount": 1,
+    "returnedNodeCount": 1,
+    "maxDepth": 8,
+    "maxNodes": 100,
+    "truncatedByDepth": false,
+    "truncatedByNodes": false,
+    "nodes": [
+      {
+        "relativePath": "PrefabWorkflowFixture",
+        "name": "PrefabWorkflowFixture",
+        "depth": 0,
+        "siblingIndex": 0,
+        "childCount": 0,
+        "activeSelf": true,
+        "componentTypeNames": ["UnityEngine.Transform"]
+      }
+    ]
+  },
+  "warnings": [],
+  "dirtyState": "unchanged",
+  "compileState": "idle"
+}

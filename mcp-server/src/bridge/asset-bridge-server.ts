@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import { ComponentPropertyBridgeServer } from "./component-property-bridge-server.js";
 
 export interface AssetSearchOptions {
@@ -53,6 +55,64 @@ export interface AssetInspectPayload {
   directDependencies: AssetDependencyPayload[];
 }
 
+export interface PrefabInspectOptions {
+  path: string;
+  maxDepth?: number;
+  maxNodes?: number;
+}
+
+export interface PrefabNodePayload {
+  relativePath: string;
+  name: string;
+  depth: number;
+  siblingIndex: number;
+  childCount: number;
+  activeSelf: boolean;
+  componentTypeNames: string[];
+}
+
+export interface PrefabInspectPayload {
+  guid: string;
+  path: string;
+  dependencyHash: string;
+  prefabAssetType: string;
+  rootName: string;
+  totalNodeCount: number;
+  returnedNodeCount: number;
+  maxDepth: number;
+  maxNodes: number;
+  truncatedByDepth: boolean;
+  truncatedByNodes: boolean;
+  nodes: PrefabNodePayload[];
+}
+
+export interface PrefabInstantiateOptions {
+  prefabPath: string;
+  expectedPrefabDependencyHash: string;
+  mutationId?: string;
+  expectedStateEpoch: string;
+  expectedStateRevision: number;
+}
+
+export interface PrefabInstantiatePayload {
+  mutationId: string;
+  replayed: boolean;
+  prefabGuid: string;
+  prefabPath: string;
+  expectedPrefabDependencyHash: string;
+  globalObjectId: string;
+  instanceId: number;
+  name: string;
+  hierarchyPath: string;
+  sceneName: string;
+  scenePath: string;
+  siblingIndex: number;
+  expectedStateEpoch: string;
+  expectedStateRevision: number;
+  stateEpoch: string;
+  stateRevision: number;
+}
+
 const DEFAULT_SEARCH_FOLDERS = ["Assets"] as const;
 const DEFAULT_MAX_RESULTS = 50;
 const MAX_RESULTS = 200;
@@ -61,6 +121,14 @@ const MAX_FOLDER_COUNT = 16;
 const MAX_PATH_LENGTH = 512;
 const DEFAULT_MAX_DEPENDENCIES = 64;
 const MAX_DEPENDENCIES = 256;
+const DEFAULT_PREFAB_MAX_DEPTH = 8;
+const MAX_PREFAB_DEPTH = 32;
+const DEFAULT_PREFAB_MAX_NODES = 100;
+const MAX_PREFAB_NODES = 500;
+const MAX_HASH_LENGTH = 128;
+const MAX_MUTATION_ID_LENGTH = 128;
+const MAX_STATE_EPOCH_LENGTH = 128;
+const MUTATION_ID_PATTERN = /^[A-Za-z0-9._:-]+$/;
 
 export class AssetBridgeServer extends ComponentPropertyBridgeServer {
   public async requestSearchAssets(
@@ -82,10 +150,7 @@ export class AssetBridgeServer extends ComponentPropertyBridgeServer {
     const result = await this.requestOperation(
       "asset.search",
       { filter, searchInFolders, maxResults },
-      {
-        editorId: editor.editorId,
-        connectionGeneration: editor.connectionGeneration,
-      },
+      { editorId: editor.editorId, connectionGeneration: editor.connectionGeneration },
       timeoutMs,
       "read",
     );
@@ -112,10 +177,7 @@ export class AssetBridgeServer extends ComponentPropertyBridgeServer {
     const result = await this.requestOperation(
       "asset.inspect",
       { path: options.path, maxDependencies },
-      {
-        editorId: editor.editorId,
-        connectionGeneration: editor.connectionGeneration,
-      },
+      { editorId: editor.editorId, connectionGeneration: editor.connectionGeneration },
       timeoutMs,
       "read",
     );
@@ -124,6 +186,72 @@ export class AssetBridgeServer extends ComponentPropertyBridgeServer {
       throw new Error("Unity returned an invalid asset.inspect payload.");
     }
     return result;
+  }
+
+  public async requestInspectPrefab(
+    options: PrefabInspectOptions,
+    timeoutMs = 5000,
+  ): Promise<PrefabInspectPayload> {
+    const editor = this.connectedEditor;
+    if (editor === undefined) {
+      throw new Error("No Unity Editor is connected to the local bridge.");
+    }
+    validateProjectPath(options.path, "path");
+    const maxDepth = options.maxDepth ?? DEFAULT_PREFAB_MAX_DEPTH;
+    const maxNodes = options.maxNodes ?? DEFAULT_PREFAB_MAX_NODES;
+    validateIntegerRange(maxDepth, "maxDepth", 0, MAX_PREFAB_DEPTH);
+    validateIntegerRange(maxNodes, "maxNodes", 1, MAX_PREFAB_NODES);
+
+    const result = await this.requestOperation(
+      "prefab.inspect",
+      { path: options.path, maxDepth, maxNodes },
+      { editorId: editor.editorId, connectionGeneration: editor.connectionGeneration },
+      timeoutMs,
+      "read",
+    );
+    if (!isPrefabInspectPayload(result)) {
+      throw new Error("Unity returned an invalid prefab.inspect payload.");
+    }
+    return result;
+  }
+
+  public async requestInstantiatePrefab(
+    options: PrefabInstantiateOptions,
+    timeoutMs = 5000,
+  ): Promise<PrefabInstantiatePayload> {
+    const editor = this.connectedEditor;
+    if (editor === undefined) {
+      throw new Error("No Unity Editor is connected to the local bridge.");
+    }
+
+    validateProjectPath(options.prefabPath, "prefabPath");
+    validateDependencyHash(options.expectedPrefabDependencyHash);
+    validateStateExpectation(options.expectedStateEpoch, options.expectedStateRevision);
+    const mutationId = options.mutationId ?? randomUUID();
+    validateMutationId(mutationId);
+
+    try {
+      const result = await this.requestOperation(
+        "prefab.instantiate",
+        {
+          prefabPath: options.prefabPath,
+          expectedPrefabDependencyHash: options.expectedPrefabDependencyHash,
+          mutationId,
+          expectedStateEpoch: options.expectedStateEpoch,
+          expectedStateRevision: options.expectedStateRevision,
+        },
+        { editorId: editor.editorId, connectionGeneration: editor.connectionGeneration },
+        timeoutMs,
+        "write",
+      );
+      if (!isPrefabInstantiatePayload(result)) {
+        throw new Error("Unity returned an invalid prefab.instantiate payload.");
+      }
+      return result;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`${message} mutationId=${mutationId}`);
+    }
   }
 }
 
@@ -183,10 +311,36 @@ function validateIntegerRange(value: number, name: string, minimum: number, maxi
   }
 }
 
-function isAssetSearchPayload(value: unknown): value is AssetSearchPayload {
-  if (typeof value !== "object" || value === null) {
-    return false;
+function validateDependencyHash(value: string): void {
+  if (typeof value !== "string" || value.length === 0 || value.length > MAX_HASH_LENGTH) {
+    throw new Error(`expectedPrefabDependencyHash must be 1..${MAX_HASH_LENGTH} characters.`);
   }
+}
+
+function validateMutationId(value: string): void {
+  if (
+    typeof value !== "string" ||
+    value.length === 0 ||
+    value.length > MAX_MUTATION_ID_LENGTH ||
+    !MUTATION_ID_PATTERN.test(value)
+  ) {
+    throw new Error(
+      "mutationId must be 1..128 characters using only letters, digits, '-', '_', '.', and ':'.",
+    );
+  }
+}
+
+function validateStateExpectation(epoch: string, revision: number): void {
+  if (typeof epoch !== "string" || epoch.length === 0 || epoch.length > MAX_STATE_EPOCH_LENGTH) {
+    throw new Error(`expectedStateEpoch must be 1..${MAX_STATE_EPOCH_LENGTH} characters.`);
+  }
+  if (!Number.isSafeInteger(revision) || revision <= 0) {
+    throw new Error("expectedStateRevision must be a positive safe integer.");
+  }
+}
+
+function isAssetSearchPayload(value: unknown): value is AssetSearchPayload {
+  if (typeof value !== "object" || value === null) return false;
   const candidate = value as Record<string, unknown>;
   return (
     typeof candidate.filter === "string" &&
@@ -203,15 +357,11 @@ function isAssetSearchPayload(value: unknown): value is AssetSearchPayload {
 }
 
 function isAssetSummaryPayload(value: unknown): value is AssetSummaryPayload {
-  if (typeof value !== "object" || value === null) {
-    return false;
-  }
+  if (typeof value !== "object" || value === null) return false;
   const candidate = value as Record<string, unknown>;
   return (
-    typeof candidate.guid === "string" &&
-    candidate.guid.length > 0 &&
-    typeof candidate.path === "string" &&
-    candidate.path.length > 0 &&
+    typeof candidate.guid === "string" && candidate.guid.length > 0 &&
+    typeof candidate.path === "string" && candidate.path.length > 0 &&
     typeof candidate.name === "string" &&
     typeof candidate.extension === "string" &&
     typeof candidate.mainTypeName === "string" &&
@@ -220,27 +370,19 @@ function isAssetSummaryPayload(value: unknown): value is AssetSummaryPayload {
 }
 
 function isAssetInspectPayload(value: unknown): value is AssetInspectPayload {
-  if (typeof value !== "object" || value === null) {
-    return false;
-  }
+  if (typeof value !== "object" || value === null) return false;
   const candidate = value as Record<string, unknown>;
   return (
-    typeof candidate.guid === "string" &&
-    candidate.guid.length > 0 &&
-    typeof candidate.path === "string" &&
-    candidate.path.length > 0 &&
+    typeof candidate.guid === "string" && candidate.guid.length > 0 &&
+    typeof candidate.path === "string" && candidate.path.length > 0 &&
     typeof candidate.name === "string" &&
     typeof candidate.extension === "string" &&
-    typeof candidate.mainTypeName === "string" &&
-    candidate.mainTypeName.length > 0 &&
-    typeof candidate.mainAssetInstanceId === "number" &&
-    Number.isSafeInteger(candidate.mainAssetInstanceId) &&
+    typeof candidate.mainTypeName === "string" && candidate.mainTypeName.length > 0 &&
+    typeof candidate.mainAssetInstanceId === "number" && Number.isSafeInteger(candidate.mainAssetInstanceId) &&
     typeof candidate.mainAssetName === "string" &&
     typeof candidate.importerTypeName === "string" &&
-    typeof candidate.dependencyHash === "string" &&
-    candidate.dependencyHash.length > 0 &&
-    Array.isArray(candidate.labels) &&
-    candidate.labels.every((entry) => typeof entry === "string") &&
+    typeof candidate.dependencyHash === "string" && candidate.dependencyHash.length > 0 &&
+    Array.isArray(candidate.labels) && candidate.labels.every((entry) => typeof entry === "string") &&
     isNonNegativeInteger(candidate.directDependencyCount) &&
     isNonNegativeInteger(candidate.returnedDependencyCount) &&
     typeof candidate.dependenciesTruncated === "boolean" &&
@@ -251,15 +393,71 @@ function isAssetInspectPayload(value: unknown): value is AssetInspectPayload {
 }
 
 function isAssetDependencyPayload(value: unknown): value is AssetDependencyPayload {
-  if (typeof value !== "object" || value === null) {
-    return false;
-  }
+  if (typeof value !== "object" || value === null) return false;
   const candidate = value as Record<string, unknown>;
   return (
     typeof candidate.guid === "string" &&
-    typeof candidate.path === "string" &&
-    candidate.path.length > 0 &&
+    typeof candidate.path === "string" && candidate.path.length > 0 &&
     typeof candidate.mainTypeName === "string"
+  );
+}
+
+function isPrefabInspectPayload(value: unknown): value is PrefabInspectPayload {
+  if (typeof value !== "object" || value === null) return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.guid === "string" && candidate.guid.length > 0 &&
+    typeof candidate.path === "string" && candidate.path.length > 0 &&
+    typeof candidate.dependencyHash === "string" && candidate.dependencyHash.length > 0 &&
+    typeof candidate.prefabAssetType === "string" && candidate.prefabAssetType.length > 0 &&
+    typeof candidate.rootName === "string" &&
+    isNonNegativeInteger(candidate.totalNodeCount) &&
+    isNonNegativeInteger(candidate.returnedNodeCount) &&
+    isNonNegativeInteger(candidate.maxDepth) &&
+    isPositiveInteger(candidate.maxNodes) &&
+    typeof candidate.truncatedByDepth === "boolean" &&
+    typeof candidate.truncatedByNodes === "boolean" &&
+    Array.isArray(candidate.nodes) &&
+    candidate.nodes.length === candidate.returnedNodeCount &&
+    candidate.nodes.every(isPrefabNodePayload)
+  );
+}
+
+function isPrefabNodePayload(value: unknown): value is PrefabNodePayload {
+  if (typeof value !== "object" || value === null) return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.relativePath === "string" &&
+    typeof candidate.name === "string" &&
+    isNonNegativeInteger(candidate.depth) &&
+    isNonNegativeInteger(candidate.siblingIndex) &&
+    isNonNegativeInteger(candidate.childCount) &&
+    typeof candidate.activeSelf === "boolean" &&
+    Array.isArray(candidate.componentTypeNames) &&
+    candidate.componentTypeNames.every((entry) => typeof entry === "string")
+  );
+}
+
+function isPrefabInstantiatePayload(value: unknown): value is PrefabInstantiatePayload {
+  if (typeof value !== "object" || value === null) return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.mutationId === "string" && candidate.mutationId.length > 0 &&
+    typeof candidate.replayed === "boolean" &&
+    typeof candidate.prefabGuid === "string" && candidate.prefabGuid.length > 0 &&
+    typeof candidate.prefabPath === "string" && candidate.prefabPath.length > 0 &&
+    typeof candidate.expectedPrefabDependencyHash === "string" && candidate.expectedPrefabDependencyHash.length > 0 &&
+    typeof candidate.globalObjectId === "string" && candidate.globalObjectId.length > 0 &&
+    typeof candidate.instanceId === "number" && Number.isSafeInteger(candidate.instanceId) &&
+    typeof candidate.name === "string" &&
+    typeof candidate.hierarchyPath === "string" &&
+    typeof candidate.sceneName === "string" &&
+    typeof candidate.scenePath === "string" &&
+    isNonNegativeInteger(candidate.siblingIndex) &&
+    typeof candidate.expectedStateEpoch === "string" && candidate.expectedStateEpoch.length > 0 &&
+    isPositiveInteger(candidate.expectedStateRevision) &&
+    typeof candidate.stateEpoch === "string" && candidate.stateEpoch.length > 0 &&
+    isPositiveInteger(candidate.stateRevision)
   );
 }
 

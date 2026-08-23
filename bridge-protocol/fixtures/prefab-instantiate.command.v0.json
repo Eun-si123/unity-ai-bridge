@@ -1,0 +1,13 @@
+{
+  "protocolVersion": "0",
+  "requestId": "req-prefab-instantiate-1",
+  "operation": "prefab.instantiate",
+  "arguments": {
+    "prefabPath": "Packages/com.eunsung.unity-ai-bridge/Tests/Editor/Fixtures/PrefabWorkflowFixture.prefab",
+    "expectedPrefabDependencyHash": "0123456789abcdef0123456789abcdef",
+    "mutationId": "prefab-instantiate-example-1",
+    "expectedStateEpoch": "example-state-epoch",
+    "expectedStateRevision": 42
+  },
+  "risk": "write"
+}

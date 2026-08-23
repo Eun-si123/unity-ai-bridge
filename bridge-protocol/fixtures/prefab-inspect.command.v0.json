@@ -1,0 +1,11 @@
+{
+  "protocolVersion": "0",
+  "requestId": "req-prefab-inspect-1",
+  "operation": "prefab.inspect",
+  "arguments": {
+    "path": "Packages/com.eunsung.unity-ai-bridge/Tests/Editor/Fixtures/PrefabWorkflowFixture.prefab",
+    "maxDepth": 8,
+    "maxNodes": 100
+  },
+  "risk": "read"
+}
