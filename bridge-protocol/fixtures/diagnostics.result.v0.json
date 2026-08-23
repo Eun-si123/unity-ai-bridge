@@ -1,0 +1,46 @@
+{
+  "protocolVersion": "0",
+  "requestId": "diagnostics-example-1",
+  "ok": true,
+  "result": {
+    "consoleCounts": {
+      "errors": 1,
+      "warnings": 2,
+      "logs": 3
+    },
+    "isCompiling": false,
+    "captureStartedUnixMs": 1787443000000,
+    "minimumSeverity": "warning",
+    "maxEntries": 100,
+    "consoleEntryCoverage": "captured_since_current_domain_load",
+    "compilerCoverage": "latest_compilation_observed_by_compilation_pipeline",
+    "consoleEntriesTruncated": false,
+    "compilerMessagesTruncated": false,
+    "recentConsoleEntries": [
+      {
+        "timestampUnixMs": 1787443001000,
+        "severity": "warning",
+        "message": "Example warning",
+        "stackTrace": ""
+      }
+    ],
+    "latestCompilation": {
+      "sequence": 2,
+      "completedUnixMs": 1787443002000,
+      "truncated": false,
+      "messages": [
+        {
+          "severity": "error",
+          "message": "; expected",
+          "file": "Assets/Broken.cs",
+          "line": 10,
+          "column": 20,
+          "assemblyPath": "Library/ScriptAssemblies/Assembly-CSharp.dll"
+        }
+      ]
+    }
+  },
+  "warnings": [],
+  "dirtyState": "unchanged",
+  "compileState": "idle"
+}

@@ -48,7 +48,7 @@ These roadmap markers describe milestone progress only. `STATUS.md` is authorita
 
 ### Exit gate
 
-✅ **Passed.** The repository can be cloned, its architecture understood from repository documentation, dependencies installed, automated checks run, and the Unity package loaded/compiled without relying on private chat history. Phase 0 was squash-merged to `main` on 2026-08-22.
+✅ **Passed.** Phase 0 was squash-merged to `main` on 2026-08-22.
 
 ---
 
@@ -56,7 +56,7 @@ These roadmap markers describe milestone progress only. `STATUS.md` is authorita
 
 **Goal:** prove complete requests can travel from MCP to Unity and back correctly, then establish the minimum useful local tool slice.
 
-**State:** 🟨 In progress — only Console/compiler diagnostics remain in the minimum gate
+**State:** ✅ Verified milestone — completed 2026-08-23
 
 Target flow:
 
@@ -68,7 +68,7 @@ MCP client
   -> Unity main thread
   -> Unity Editor API
   -> structured result
-  -> re-read state for verification
+  -> MCP result
 ```
 
 Verified foundation slice:
@@ -86,15 +86,16 @@ Minimum capabilities:
 
 - ✅ Unity/editor status
 - ✅ Active scene information
-- ✅ Hierarchy read — verified through real MCP stdio against Unity 6000.3.21f1 with bounded traversal and `GlobalObjectId` metadata
-- ✅ Create a simple GameObject — verified through real MCP stdio with Undo/dirty metadata and duplicate-retry protection
-- ⬜ Read Console/compiler errors/diagnostics
+- ✅ Hierarchy read with bounded traversal and `GlobalObjectId` metadata
+- ✅ Create one simple GameObject with Undo/dirty metadata and duplicate-retry protection
+- ✅ Read bounded Console/compiler diagnostics
+- ✅ Capture a real compiler error with severity/message/file/line/column metadata
 - ✅ Structured error model for current read/write/routing paths
-- ✅ First mutation request identity and retry protection — `gameObject.create` reuses the same mutation ID and does not duplicate the object on identical retry
+- ✅ First mutation request identity and retry protection
 
 ### Exit gate
 
-A clean test project can perform the minimum capabilities repeatedly with reproducible end-to-end evidence and without freezing the Unity Editor.
+✅ **Passed on 2026-08-23.** The clean Unity 6000.3.21f1 test project completed the minimum capabilities through real MCP-to-Unity paths. The final compiler diagnostic test captured an intentional `CS0103` at `Assets/MCPCompileErrorTest.cs`, line 5, column 21.
 
 ---
 
@@ -102,26 +103,33 @@ A clean test project can perform the minimum capabilities repeatedly with reprod
 
 **Goal:** make AI changes recoverable and resilient to normal Unity lifecycle events.
 
-**State:** ⬜ Planned as a full phase; some lifecycle/write groundwork was completed early in Phase 1
+**State:** 🟨 In progress — officially entered after Phase 1 completion on 2026-08-23
 
-- 🟨 Main-thread dispatcher hardened — verified for status, hierarchy, and the first GameObject-create write path; broader tool coverage pending
-- ⬜ Serialized conflicting writes
+Some narrow primitives were proven early in Phase 1; Phase 2 generalizes them into a common execution core.
+
+- 🟨 Main-thread dispatcher hardened — verified for status, hierarchy, diagnostics, and the first GameObject-create write path; broader tool coverage pending
+- ⬜ Structured scene/state snapshot suitable for preflight and verification
 - ⬜ Stable object resolver
-- 🟨 Undo integration — verified for the bounded GameObject-create slice; generalized policy pending
-- 🟨 Scene/asset dirty-state reporting — scene dirty reporting exercised by the first create slice; generalized behavior pending
+- ⬜ State revision / stale-state detection
+- ⬜ Serialized conflicting writes
+- 🟨 Undo integration — verified for bounded GameObject create; generalized transaction grouping pending
+- 🟨 Scene dirty-state reporting — exercised by create; generalized behavior pending
 - ⬜ Explicit save behavior
-- ⬜ Compilation watcher
-- ✅ Domain reload recovery — verified for the local connection/status lifecycle
-- ✅ Reconnection and connection generations — verified for the local single-editor lifecycle
+- 🟨 Compilation observation — compiler diagnostics are captured; full operation lifecycle across compilation/reload remains pending
+- ✅ Domain reload recovery — verified for local connection/status lifecycle
+- ✅ Reconnection and connection generations — verified for local single-editor lifecycle
 - 🟨 Timeout/cancellation behavior — request deadlines/timeouts exist; broader cancellation semantics pending
-- 🟨 Duplicate/replayed request protection for mutations — verified for immediate same-session `gameObject.create`; generalized mutation semantics and post-Undo/deletion readback pending
-- ⬜ Native readback + semantic verification for writes
-- ⬜ Rollback verification on failed mutations
-- ⬜ Unity EditMode test coverage for core execution
+- 🟨 Duplicate/replayed request protection — verified for immediate same-session `gameObject.create`; generalized mutation semantics pending
+- ⬜ Preflight validation framework
+- ⬜ Native readback after writes
+- ⬜ Semantic verification of intended state
+- ⬜ Rollback on failed verification
+- ⬜ Verification that rollback itself restored the expected state
+- ⬜ Unity EditMode test coverage for the common execution core
 
 ### Exit gate
 
-Normal disconnects, compilation, domain reload, retry, and failed-write scenarios do not silently duplicate mutations, lose routing identity, or report false success.
+Normal disconnects, compilation, domain reload, stale-state, retry, and failed-write scenarios do not silently duplicate mutations, lose routing identity, or report false success; write outcomes are verified against native Unity state and recover safely when verification fails.
 
 ---
 

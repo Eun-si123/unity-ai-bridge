@@ -13,6 +13,40 @@ The project is pre-alpha. Internal package version `0.0.1` does not represent a 
 - Clarified that the separate private `unity-ai-mcp-infra` repository is not automatically licensed under the public core's Apache-2.0 license.
 - Closed the Phase 0 "project license selected" governance item.
 
+### Phase 1 — Console / Compiler Diagnostics — Verified slice
+
+#### Added
+
+- Unity `editor.diagnostics` read operation.
+- MCP `unity_get_diagnostics` with bounded `maxEntries` and `minimumSeverity` inputs.
+- Current Unity Console error/warning/log counts through public `ConsoleWindowUtility.GetConsoleLogCounts`.
+- Recent Console message capture through `Application.logMessageReceivedThreaded`.
+- Compiler warning/error capture through `CompilationPipeline.assemblyCompilationFinished`.
+- Latest compilation snapshot persistence through domain reload using Editor `SessionState`.
+- Explicit coverage metadata so callers know recent log text only covers the current domain-load capture window.
+- Bounded message/stack lengths and bounded compiler/Console entry counts.
+- Node routing/result/input-validation tests.
+- `verify:diagnostics` for a live bounded diagnostics read.
+- `verify:compiler-error` for intentional compiler-error capture with source location metadata.
+- Diagnostics protocol fixtures and documentation.
+
+#### Verification
+
+- Node Verification: **PASS**.
+- Phase 1 Local Bridge Verification: **PASS**.
+- Unity 6000.3.21f1 package compile: **PASS (manual Windows verification, 2026-08-23)**.
+- Real `verify:diagnostics`: **PASS**; observed Console counts `errors=0`, `warnings=1`, `logs=1`, and a captured Unity AI Bridge reconnect warning with full stack trace.
+- Real `verify:compiler-error`: **PASS** after creating a temporary `Assets/MCPCompileErrorTest.cs` that referenced `ThisSymbolDoesNotExist`.
+- Captured compiler result: severity `error`, `CS0103`, file `Assets\\MCPCompileErrorTest.cs`, line `5`, column `21`, assembly `Library/ScriptAssemblies/Assembly-CSharp.dll`.
+- Matching compiler error also appeared in recent Console capture.
+- The implementation intentionally avoids unsupported/internal `UnityEditor.LogEntries` for historical Console text access.
+
+#### Phase 1 milestone
+
+- **Phase 1 — Minimal Local End-to-End completed on 2026-08-23.**
+- Verified minimum capabilities now include editor status, active-scene hierarchy, one bounded GameObject mutation with duplicate-retry protection, and bounded Console/compiler diagnostics.
+- Development advances to **Phase 2 — Reliability Core**, where narrow Phase 1 reliability primitives are generalized into common preflight/transaction/readback/verification/rollback infrastructure.
+
 ### Phase 1 — GameObject Create / Mutation Retry Protection — Verified slice
 
 #### Added
@@ -88,10 +122,8 @@ The project is pre-alpha. Internal package version `0.0.1` does not represent a 
 - Simulated Unity WebSocket integration tests covering hello/status round-trip and the no-editor failure path.
 - Simulated explicit-route test covering propagation of `routing/stale_connection`.
 - Phase 1 design document and CI workflow.
-- `docs/TESTING.md` with repeatable Node, Unity compile, real bridge, MCP end-to-end, and reconnect verification procedures, including a simple C# compile/reload trigger.
-- `verify:unity` developer command that waits for a real Unity Editor hello and performs a real `editor.status` round trip.
-- `verify:mcp-unity` developer command using the official MCP TypeScript client over stdio to call the real `unity_get_status` tool against live Unity.
-- `verify:reconnect` developer command that checks stable editor identity, changed connection generation, stale-generation rejection, and successful post-reconnect status.
+- `docs/TESTING.md` with repeatable Node, Unity compile, real bridge, MCP end-to-end, and reconnect verification procedures.
+- `verify:unity`, `verify:mcp-unity`, and `verify:reconnect` developer commands.
 
 #### Dependencies
 
@@ -102,24 +134,18 @@ The project is pre-alpha. Internal package version `0.0.1` does not represent a 
 
 #### Fixed
 
-- Corrected WebSocket send callback handling so both `null` and `undefined` are treated as successful sends; CI exposed the original `reject(null)` failure during the status round-trip test.
+- Corrected WebSocket send callback handling so both `null` and `undefined` are treated as successful sends.
 - Made WebSocket test/server teardown deterministic so transport cleanup details do not mask request-path failures.
-- Rebuilt the Phase 1 branch on the squash-merged Phase 0 `main`, and again on the Apache-2.0 licensing `main`, so PR #4 contains Phase 1 changes without losing current governance state.
 
 #### Verification
 
 - Node Verification and Phase 1 Local Bridge Verification: **PASS** on the merged heartbeat/status slice.
-- TypeScript build and Node tests: **PASS**.
-- Simulated Unity `hello -> editor.status -> structured result`: **PASS**.
-- Explicit no-editor failure path: **PASS**.
-- Simulated stale-generation error propagation: **PASS**.
-- Unity 6000.3.21f1 package load/compile at revision `059727365c025eb1d18013371fe95e055517e570`: **PASS (manual Windows verification, 2026-08-22)**.
-- Real Unity WebSocket protocol v0 `hello` to `127.0.0.1:5081`: **PASS**.
-- Real bridge `editor.status` round trip: **PASS**.
-- Real MCP stdio `unity_get_status` against the live Unity Editor: **PASS**.
-- Real domain reload reconnection: **PASS**; same `editorId`, new `connectionGeneration` (`1787395056602` -> `1787395125304`).
-- Real stale-generation rejection after reconnect: **PASS** with `routing/stale_connection`.
-- Successful post-reconnect `editor.status` on the new generation: **PASS**.
+- Unity 6000.3.21f1 package load/compile: **PASS**.
+- Real Unity WebSocket hello/status: **PASS**.
+- Real MCP stdio `unity_get_status`: **PASS**.
+- Real domain reload reconnection: **PASS** with stable editor identity and new connection generation.
+- Real stale-generation rejection: **PASS** with `routing/stale_connection`.
+- Successful post-reconnect status: **PASS**.
 
 ## Phase 0 — Foundation Runtime Scaffold — 2026-08-22
 
@@ -151,16 +177,10 @@ The project is pre-alpha. Internal package version `0.0.1` does not represent a 
 - Recorded successful CI verification for lockfile generation, `npm ci`, TypeScript build, and protocol smoke tests.
 - Clarified that a public GitHub repository is **not** an open-source license; the project license was still undecided at the time of the Phase 0 scaffold merge.
 - Separated accepted design decisions from implementation status in `STATUS.md`.
-- Reduced mandatory AI reading overhead: new/lost-context sessions load the core truth/design context, while routine changes load only relevant documents.
-- Clarified that external Unity MCP projects are research references unless exact third-party material is deliberately incorporated.
-- Clarified the intended public-core/private-managed-service boundary.
-
-### Removed
-
-- Premature `THIRD_PARTY_NOTICES.md` reference log. A real third-party notice/license file should be added only when incorporated material actually requires one.
+- Clarified the public-core/private-managed-service boundary and third-party reference policy.
 
 ### Verification at Phase 0 merge
 
 - Node/MCP dependency install, TypeScript build, and protocol smoke tests: **Verified by GitHub Actions**.
-- Unity 6000.3.21f1 package load/compile: **Not yet verified at Phase 0 merge; later manually verified during Phase 1**.
-- Project license: **Not yet selected at Phase 0 merge; later resolved to Apache-2.0 in Unreleased**.
+- Unity 6000.3.21f1 package load/compile: later manually verified during Phase 1.
+- Project license: later resolved to Apache-2.0 in Unreleased.

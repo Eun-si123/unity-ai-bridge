@@ -1,0 +1,10 @@
+{
+  "protocolVersion": "0",
+  "requestId": "diagnostics-example-1",
+  "operation": "editor.diagnostics",
+  "arguments": {
+    "maxEntries": 100,
+    "minimumSeverity": "warning"
+  },
+  "risk": "read"
+}

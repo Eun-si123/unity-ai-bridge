@@ -230,6 +230,12 @@ namespace UnityAiBridge.Editor.Connection
                 return;
             }
 
+            if (string.Equals(command.operation, "editor.diagnostics", StringComparison.Ordinal))
+            {
+                await HandleDiagnosticsAsync(current, command, cancellationToken);
+                return;
+            }
+
             if (string.Equals(command.operation, "gameObject.create", StringComparison.Ordinal))
             {
                 await HandleGameObjectCreateAsync(current, command, cancellationToken);
@@ -327,6 +333,63 @@ namespace UnityAiBridge.Editor.Connection
                     command.requestId,
                     "unity_api",
                     "hierarchy_read_failed",
+                    exception.Message,
+                    cancellationToken);
+            }
+        }
+
+        private static async Task HandleDiagnosticsAsync(
+            ClientWebSocket current,
+            BridgeCommandDto command,
+            CancellationToken cancellationToken)
+        {
+            var maxEntries = command.arguments != null && command.arguments.maxEntries > 0
+                ? command.arguments.maxEntries
+                : DiagnosticsCommand.DefaultMaxEntries;
+            var minimumSeverity = command.arguments != null && !string.IsNullOrEmpty(command.arguments.minimumSeverity)
+                ? command.arguments.minimumSeverity
+                : DiagnosticsCommand.DefaultMinimumSeverity;
+
+            try
+            {
+                DiagnosticsCommand.ValidateArguments(maxEntries, minimumSeverity);
+            }
+            catch (ArgumentException exception)
+            {
+                await SendErrorAsync(
+                    current,
+                    command.requestId,
+                    "validation",
+                    "diagnostics_arguments",
+                    exception.Message,
+                    cancellationToken);
+                return;
+            }
+
+            try
+            {
+                var diagnostics = await EditorMainThreadDispatcher.InvokeAsync(
+                    () => DiagnosticsCommand.Execute(maxEntries, minimumSeverity));
+                var response = new BridgeDiagnosticsResultDto
+                {
+                    protocolVersion = BridgeProtocol.Version,
+                    requestId = command.requestId,
+                    ok = true,
+                    result = diagnostics,
+                    warnings = Array.Empty<string>(),
+                    dirtyState = "unchanged",
+                    compileState = diagnostics.isCompiling ? "compiling" : "idle",
+                };
+
+                await SendJsonAsync(current, JsonUtility.ToJson(response), cancellationToken);
+            }
+            catch (Exception exception)
+            {
+                await SendErrorAsync(
+                    current,
+                    command.requestId,
+                    "unity_api",
+                    "diagnostics_read_failed",
                     exception.Message,
                     cancellationToken);
             }
@@ -577,6 +640,8 @@ namespace UnityAiBridge.Editor.Connection
         {
             public int maxDepth;
             public int maxNodes;
+            public int maxEntries;
+            public string minimumSeverity;
             public string name;
             public string mutationId;
         }
@@ -623,6 +688,18 @@ namespace UnityAiBridge.Editor.Connection
             public string requestId;
             public bool ok;
             public HierarchyPayload result;
+            public string[] warnings;
+            public string dirtyState;
+            public string compileState;
+        }
+
+        [Serializable]
+        private sealed class BridgeDiagnosticsResultDto
+        {
+            public string protocolVersion;
+            public string requestId;
+            public bool ok;
+            public DiagnosticsPayload result;
             public string[] warnings;
             public string dirtyState;
             public string compileState;
