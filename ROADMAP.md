@@ -89,14 +89,15 @@ Verified slices:
 - ✅ Component property edit — `unity_set_component_property`, **45/45** EditMode
 - ✅ Asset search/inspect — `unity_search_assets` + `unity_inspect_asset`, **50/50** EditMode
 - ✅ Prefab inspect + linked scene instantiate — `unity_inspect_prefab` + `unity_instantiate_prefab`, **56/56** EditMode
-- 🟨 Prefab Asset authoring / Apply Overrides — next Prefab slice
+- ✅ Prefab Asset creation — `unity_create_prefab_asset`, create-only disk write with native GUID/hash/root verification and stale replay after manual removal, **62/62** EditMode
+- 🟨 Bounded Prefab Apply Overrides workflow — next Prefab slice
 - ⬜ Script read/write workflows
 - ⬜ Diagnostics extensions where they unlock concrete workflows
 - ⬜ Play Mode control
 - ⬜ Unity Test Runner control
 - ⬜ Explicit Undo/recovery tools where useful to clients
 
-Prefab verification now covers bounded Prefab Asset hierarchy/component inspection, GUID + dependencyHash observation, dual scene/asset preconditions for instantiate, linked `PrefabUtility.InstantiatePrefab`, native linkage readback, immediate replay, Undo removal, and stale-replay rejection after Undo.
+Prefab verification now covers bounded Prefab Asset inspection, linked scene instantiation, dual scene/asset preconditions, create-only Prefab Asset authoring from a plain scene GameObject, native GUID/dependencyHash/root readback, mutation replay, Undo where the scene operation supports it, and stale-replay rejection after Undo or external asset removal.
 
 Reliability requirements inherited from Phase 2:
 
@@ -117,7 +118,8 @@ Supporting work:
 - ✅ capability/version reporting foundation
 - ✅ bounded structured Component inspection
 - ✅ bounded AssetDatabase search/inspection
-- ✅ first Prefab asset-side precondition using Unity dependencyHash
+- ✅ Prefab asset-side precondition using Unity dependencyHash
+- ✅ create-only Prefab disk-write contract that never overwrites an existing destination
 - 🟨 consistent risk classification as new operations are added
 - ⬜ broader tool-schema compatibility tests as the surface grows
 - ⬜ better structured error explanations for AI clients
