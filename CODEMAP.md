@@ -34,7 +34,8 @@ This file maps what exists in the repository and what is only planned.
 │     │  ├─ EditorStatusCommand.cs
 │     │  ├─ HierarchyCommand.cs
 │     │  ├─ GameObjectCreateCommand.cs
-│     │  └─ DiagnosticsCommand.cs
+│     │  ├─ DiagnosticsCommand.cs
+│     │  └─ ObjectResolverCommand.cs
 │     ├─ Connection/
 │     │  └─ LocalBridgeConnection.cs
 │     ├─ Dispatch/
@@ -56,7 +57,9 @@ This file maps what exists in the repository and what is only planned.
 │     ├─ gameobject-create.command.v0.json
 │     ├─ gameobject-create.result.v0.json
 │     ├─ diagnostics.command.v0.json
-│     └─ diagnostics.result.v0.json
+│     ├─ diagnostics.result.v0.json
+│     ├─ object-resolve.command.v0.json
+│     └─ object-resolve.result.v0.json
 │
 └─ mcp-server/
    ├─ package.json
@@ -74,12 +77,14 @@ This file maps what exists in the repository and what is only planned.
    │     ├─ verify-reconnect-unity.ts
    │     ├─ verify-hierarchy-unity.ts
    │     ├─ verify-gameobject-create-unity.ts
-   │     └─ verify-diagnostics-unity.ts
+   │     ├─ verify-diagnostics-unity.ts
+   │     └─ verify-object-resolver-unity.ts
    └─ tests/
       ├─ bridge-protocol.test.ts
       ├─ local-bridge.test.ts
       ├─ gameobject-create.test.ts
-      └─ diagnostics.test.ts
+      ├─ diagnostics.test.ts
+      └─ object-resolver.test.ts
 ```
 
 `STATUS.md` distinguishes implemented source from runtime-verified behavior.
@@ -111,8 +116,11 @@ Current implementation:
 - `editor.status` read handler,
 - bounded `scene.hierarchy` read handler,
 - bounded `gameObject.create` write handler,
-- create-specific validation, Undo registration, dirty-state handling, `GlobalObjectId` result capture, and same-session mutation replay via `SessionState`,
 - `editor.diagnostics` read handler,
+- `object.resolve` native GlobalObjectId resolver,
+- create-specific validation, Undo registration, dirty-state handling, mutation identity, and same-session mutation storage,
+- create-time native GlobalObjectId readback before successful mutation results are cached,
+- replay-time target re-resolution and fail-closed stale-target rejection,
 - recent log capture through `Application.logMessageReceivedThreaded`,
 - compiler warning/error capture through `CompilationPipeline.assemblyCompilationFinished`,
 - latest compilation snapshot persistence through domain reload using `SessionState`,
@@ -120,14 +128,14 @@ Current implementation:
 
 All Phase 1 minimum slices are runtime-verified on Windows / Unity 6000.3.21f1 as recorded in `STATUS.md`.
 
-Phase 2 work now targets stable object resolution, state revisions, generalized write transactions, native readback, semantic verification, rollback, and Unity EditMode tests.
+The first Phase 2 stable-resolution/readback slice is implemented on its feature branch but requires real Unity verification before it can be marked Verified or merged.
 
 ### `bridge-protocol/`
 
 Current implementation:
 
 - protocol v0 command, hello, and result JSON Schemas,
-- editor-status, hierarchy, GameObject-create, and diagnostics request/result fixtures,
+- editor-status, hierarchy, GameObject-create, diagnostics, and object-resolve request/result fixtures,
 - protocol documentation.
 
 The contract remains separate from MCP so Unity-facing command semantics do not depend on a particular AI provider or MCP transport.
@@ -144,10 +152,11 @@ Current implementation:
 - `unity_get_hierarchy`,
 - `unity_create_game_object`,
 - `unity_get_diagnostics`,
+- `unity_resolve_object`,
 - write-risk routing and mutation-id validation for the create slice,
-- bounded diagnostics input and structured-payload validation,
+- bounded diagnostics and resolver validation,
 - simulated local-bridge tests,
-- real-Unity verification helpers for bridge status, MCP status, reconnect, hierarchy, GameObject create/dedup, general diagnostics, and intentional compiler-error capture.
+- real-Unity verification helpers for Phase 1 plus the Phase 2 resolver/Undo/stale-replay path.
 
 Remote Streamable HTTP, hosted auth/pairing, multi-user routing, and managed-service policy are not implemented here yet.
 
