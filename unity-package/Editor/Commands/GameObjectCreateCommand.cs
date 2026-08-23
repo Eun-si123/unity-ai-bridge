@@ -1,4 +1,5 @@
 using System;
+using UnityAiBridge.Editor.Execution;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -70,6 +71,7 @@ namespace UnityAiBridge.Editor.Commands
         {
             ValidateArguments(name, mutationId);
 
+            // Preserve the Phase 1 fail-closed behavior for replay checks while compilation is active.
             if (EditorApplication.isCompiling)
             {
                 throw new GameObjectCreateCompilingException(
@@ -100,38 +102,26 @@ namespace UnityAiBridge.Editor.Commands
                 return cached;
             }
 
-            var scene = SceneManager.GetActiveScene();
-            if (!scene.IsValid() || !scene.isLoaded)
+            CreateMutationState mutationState;
+            try
             {
-                throw new InvalidOperationException("The active Unity scene is not valid and loaded.");
+                mutationState = EditorMutationTransaction.Execute(
+                    "gameObject.create",
+                    UndoGroupName,
+                    context => CreateNativeObject(context, name),
+                    (context, state) => VerifyNativeObject(context, state, name));
+            }
+            catch (EditorMutationPreflightException exception)
+                when (exception.Failure == EditorMutationPreflightFailure.Compiling)
+            {
+                throw new GameObjectCreateCompilingException(exception.Message);
+            }
+            catch (EditorMutationVerificationException exception)
+            {
+                throw new GameObjectCreateReadbackException(exception.Message);
             }
 
-            var gameObject = new GameObject(name);
-            if (gameObject.scene != scene)
-            {
-                SceneManager.MoveGameObjectToScene(gameObject, scene);
-            }
-
-            Undo.RegisterCreatedObjectUndo(gameObject, UndoGroupName);
-            EditorSceneManager.MarkSceneDirty(scene);
-
-            var objects = new UnityEngine.Object[] { gameObject };
-            var globalObjectIds = new GlobalObjectId[1];
-            GlobalObjectId.GetGlobalObjectIdsSlow(objects, globalObjectIds);
-            var globalObjectId = globalObjectIds[0].ToString();
-
-            var readback = ObjectResolverCommand.Execute(globalObjectId);
-            if (!readback.found ||
-                !readback.isGameObject ||
-                !string.Equals(readback.canonicalGlobalObjectId, globalObjectId, StringComparison.Ordinal) ||
-                !string.Equals(readback.name, name, StringComparison.Ordinal) ||
-                !string.Equals(readback.sceneName, scene.name, StringComparison.Ordinal) ||
-                !string.Equals(readback.scenePath, scene.path ?? string.Empty, StringComparison.Ordinal))
-            {
-                throw new GameObjectCreateReadbackException(
-                    "gameObject.create changed Unity state, but native GlobalObjectId readback did not verify the requested object.");
-            }
-
+            var readback = mutationState.readback;
             var result = new GameObjectCreatePayload
             {
                 mutationId = mutationId,
@@ -147,6 +137,54 @@ namespace UnityAiBridge.Editor.Commands
 
             SessionState.SetString(sessionKey, JsonUtility.ToJson(result));
             return result;
+        }
+
+        private static CreateMutationState CreateNativeObject(
+            EditorMutationContext context,
+            string name)
+        {
+            var scene = context.activeScene;
+            var gameObject = new GameObject(name);
+            if (gameObject.scene != scene)
+            {
+                SceneManager.MoveGameObjectToScene(gameObject, scene);
+            }
+
+            Undo.RegisterCreatedObjectUndo(gameObject, context.undoGroupName);
+            context.MarkUndoRecorded();
+            EditorSceneManager.MarkSceneDirty(scene);
+
+            var objects = new UnityEngine.Object[] { gameObject };
+            var globalObjectIds = new GlobalObjectId[1];
+            GlobalObjectId.GetGlobalObjectIdsSlow(objects, globalObjectIds);
+
+            return new CreateMutationState
+            {
+                globalObjectId = globalObjectIds[0].ToString(),
+                readback = null,
+            };
+        }
+
+        private static bool VerifyNativeObject(
+            EditorMutationContext context,
+            CreateMutationState state,
+            string requestedName)
+        {
+            var readback = ObjectResolverCommand.Execute(state.globalObjectId);
+            state.readback = readback;
+
+            return readback.found &&
+                readback.isGameObject &&
+                string.Equals(
+                    readback.canonicalGlobalObjectId,
+                    state.globalObjectId,
+                    StringComparison.Ordinal) &&
+                string.Equals(readback.name, requestedName, StringComparison.Ordinal) &&
+                string.Equals(readback.sceneName, context.activeScene.name, StringComparison.Ordinal) &&
+                string.Equals(
+                    readback.scenePath,
+                    context.activeScene.path ?? string.Empty,
+                    StringComparison.Ordinal);
         }
 
         private static void EnsureReplayStillMatches(
@@ -227,6 +265,12 @@ namespace UnityAiBridge.Editor.Commands
                         nameof(mutationId));
                 }
             }
+        }
+
+        private sealed class CreateMutationState
+        {
+            public string globalObjectId;
+            public ObjectResolvePayload readback;
         }
     }
 }
