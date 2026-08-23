@@ -109,7 +109,7 @@ Some narrow primitives were proven early in Phase 1; Phase 2 generalizes them in
 
 - 🟨 Main-thread dispatcher hardened — verified for status, hierarchy, diagnostics, and the first GameObject-create write path; broader tool coverage pending
 - ⬜ Structured scene/state snapshot suitable for preflight and verification
-- ⬜ Stable object resolver
+- 🟨 Stable object resolver — `object.resolve` / `unity_resolve_object` implemented with Node CI passing; live Unity verification pending
 - ⬜ State revision / stale-state detection
 - ⬜ Serialized conflicting writes
 - 🟨 Undo integration — verified for bounded GameObject create; generalized transaction grouping pending
@@ -119,10 +119,10 @@ Some narrow primitives were proven early in Phase 1; Phase 2 generalizes them in
 - ✅ Domain reload recovery — verified for local connection/status lifecycle
 - ✅ Reconnection and connection generations — verified for local single-editor lifecycle
 - 🟨 Timeout/cancellation behavior — request deadlines/timeouts exist; broader cancellation semantics pending
-- 🟨 Duplicate/replayed request protection — verified for immediate same-session `gameObject.create`; generalized mutation semantics pending
+- 🟨 Duplicate/replayed request protection — immediate same-session create replay is verified; stale replay revalidation is implemented and awaiting live Undo verification
 - ⬜ Preflight validation framework
-- ⬜ Native readback after writes
-- ⬜ Semantic verification of intended state
+- 🟨 Native readback after writes — first implementation exists for `gameObject.create`; live verification pending
+- 🟨 Semantic verification of intended state — first create identity/name/scene verification exists; general framework pending
 - ⬜ Rollback on failed verification
 - ⬜ Verification that rollback itself restored the expected state
 - ⬜ Unity EditMode test coverage for the common execution core
