@@ -411,7 +411,7 @@ namespace UnityAiBridge.Editor.Commands
                 return false;
             }
 
-            var instance = EditorUtility.InstanceIDToObject(readback.instanceId) as GameObject;
+            var instance = ResolveGameObject(readback);
             if (instance == null)
             {
                 return false;
@@ -440,7 +440,7 @@ namespace UnityAiBridge.Editor.Commands
                     "The cached prefab.instantiate target no longer exists, for example after Undo. The same mutationId will not instantiate another copy automatically.");
             }
 
-            var instance = EditorUtility.InstanceIDToObject(readback.instanceId) as GameObject;
+            var instance = ResolveGameObject(readback);
             var linkedPath = instance != null
                 ? PrefabUtility.GetPrefabAssetPathOfNearestInstanceRoot(instance)
                 : string.Empty;
@@ -452,6 +452,21 @@ namespace UnityAiBridge.Editor.Commands
                 throw new PrefabReplayStaleException(
                     "The cached prefab.instantiate target no longer matches the completed Prefab instance linkage. The same mutationId will not reapply it automatically.");
             }
+        }
+
+        private static GameObject ResolveGameObject(ObjectResolvePayload readback)
+        {
+            if (readback == null || !readback.found || string.IsNullOrEmpty(readback.canonicalGlobalObjectId))
+            {
+                return null;
+            }
+
+            if (!GlobalObjectId.TryParse(readback.canonicalGlobalObjectId, out var parsed))
+            {
+                return null;
+            }
+
+            return GlobalObjectId.GlobalObjectIdentifierToObjectSlow(parsed) as GameObject;
         }
 
         private static void EnsureAssetHash(string prefabPath, string expectedPrefabDependencyHash)
