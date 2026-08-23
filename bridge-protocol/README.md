@@ -28,17 +28,20 @@ Current implemented operations include:
 
 - `editor.status` — read current Unity/editor state,
 - `scene.hierarchy` — read a bounded preorder snapshot of the active scene hierarchy,
-- `gameObject.create` — create one empty root GameObject in the active scene with write-risk metadata and mutation deduplication,
+- `object.resolve` — re-resolve a Unity `GlobalObjectId` against current native Editor state,
+- `gameObject.create` — create one empty root GameObject in the active scene with write-risk metadata, native readback, and mutation deduplication,
 - `editor.diagnostics` — read bounded Console/compiler diagnostics with explicit coverage metadata.
 
 `scene.hierarchy` accepts `maxDepth` and `maxNodes`. The implementation defaults to depth 8 / 200 nodes and rejects values beyond depth 32 / 500 nodes. Returned hierarchy paths are informational; `InstanceID` is transient and is not the sole durable identity. The result also carries Unity `GlobalObjectId` strings where available.
+
+`object.resolve` accepts one `globalObjectId` string. Unity parses it with `GlobalObjectId.TryParse` and re-resolves it against current native Editor state. A syntactically valid identity may return `found=false` when the object no longer exists or its scene is unavailable. When found, the result returns the canonical GlobalObjectId plus current `InstanceID`, type, owner GameObject identity, scene, hierarchy path, sibling index, and active state. The transient fields are current observations, not replacement durable identities.
 
 `gameObject.create` accepts:
 
 - `name` — 1..128 characters and not whitespace-only,
 - `mutationId` — 1..128 characters using letters, digits, `-`, `_`, `.`, or `:`.
 
-The Node bridge generates a mutation id when the MCP caller omits one. Unity stores completed `gameObject.create` mutation results in Editor `SessionState`; a repeated delivery using the same `mutationId` and the same `name` replays the prior result rather than creating another object. Reusing the same mutation id with different arguments is rejected. This is narrow same-session retry protection, not a general durable transaction log.
+The Node bridge generates a mutation id when the MCP caller omits one. Unity stores completed `gameObject.create` mutation results in Editor `SessionState`. The first create is now re-resolved through `GlobalObjectId` before its result is cached. A repeated delivery using the same `mutationId` and the same `name` re-resolves the cached target before replaying the result. If that object was undone, deleted, moved to a different scene, renamed, or otherwise no longer matches the completed mutation identity, the replay fails closed with `stale_target/mutation_replay_stale` and does not silently create a replacement. Reusing the same mutation id with different arguments is rejected. This remains narrow same-session retry protection, not a general durable transaction log.
 
 `editor.diagnostics` accepts:
 
@@ -47,7 +50,7 @@ The Node bridge generates a mutation id when the MCP caller omits one. Unity sto
 
 Diagnostics results include current Console error/warning/log counts, recent captured Console messages, latest compiler warning/error messages, compilation state, truncation flags, and explicit coverage strings. Recent Console text is captured from the current domain load forward; the implementation does not depend on unsupported/internal `UnityEditor.LogEntries`. Compiler messages are observed through Unity's compilation pipeline and include source file/line/column metadata when Unity provides them.
 
-Example request/result fixtures live in `fixtures/editor-status.*`, `fixtures/hierarchy.*`, `fixtures/gameobject-create.*`, and `fixtures/diagnostics.*`.
+Example request/result fixtures live in `fixtures/editor-status.*`, `fixtures/hierarchy.*`, `fixtures/object-resolve.*`, `fixtures/gameobject-create.*`, and `fixtures/diagnostics.*`.
 
 ## Result envelope
 
@@ -55,7 +58,7 @@ Example request/result fixtures live in `fixtures/editor-status.*`, `fixtures/hi
 
 A successful network delivery is not sufficient for `ok: true`; callers should use `ok: true` only when the requested contract has been observed as completed.
 
-For a first-time `gameObject.create`, Unity reports the scene as dirty and includes Undo metadata. A deduplicated replay reports `replayed: true` in the operation result and does not perform a second mutation.
+For a first-time `gameObject.create`, Unity reports the scene as dirty and includes Undo metadata. A deduplicated replay reports `replayed: true` only after the cached target has been re-resolved and revalidated against current Unity state.
 
 ## Transport
 
