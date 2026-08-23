@@ -30,6 +30,16 @@ namespace UnityAiBridge.Editor.Commands
         public PrefabAssetCreateUnavailableException(string message) : base(message) { }
     }
 
+    internal sealed class PrefabAssetCreateCompilingException : InvalidOperationException
+    {
+        public PrefabAssetCreateCompilingException(string message) : base(message) { }
+    }
+
+    internal sealed class PrefabAssetCreatePlayModeException : InvalidOperationException
+    {
+        public PrefabAssetCreatePlayModeException(string message) : base(message) { }
+    }
+
     internal sealed class PrefabAssetCreateDestinationOccupiedException : InvalidOperationException
     {
         public PrefabAssetCreateDestinationOccupiedException(string message) : base(message) { }
@@ -107,12 +117,12 @@ namespace UnityAiBridge.Editor.Commands
 
             if (EditorApplication.isCompiling)
             {
-                throw new PrefabAssetCreateUnavailableException(
+                throw new PrefabAssetCreateCompilingException(
                     "Unity is compiling; prefab.asset.create was not executed.");
             }
             if (EditorApplication.isPlaying || EditorApplication.isPlayingOrWillChangePlaymode)
             {
-                throw new PrefabAssetCreateUnavailableException(
+                throw new PrefabAssetCreatePlayModeException(
                     "prefab.asset.create is disabled while Unity is in or transitioning to Play Mode.");
             }
 
