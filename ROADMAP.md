@@ -109,7 +109,7 @@ Some narrow primitives were proven early in Phase 1; Phase 2 generalizes them in
 
 - 🟨 Main-thread dispatcher hardened — verified for status, hierarchy, diagnostics, and the first GameObject-create write path; broader tool coverage pending
 - ⬜ Structured scene/state snapshot suitable for preflight and verification
-- 🟨 Stable object resolver — `object.resolve` / `unity_resolve_object` implemented with Node CI passing; live Unity verification pending
+- 🟨 Stable object resolver — implementation and Node tests exist on the current Phase 2 branch; real Unity runtime verification remains pending
 - ⬜ State revision / stale-state detection
 - ⬜ Serialized conflicting writes
 - 🟨 Undo integration — verified for bounded GameObject create; generalized transaction grouping pending
@@ -118,18 +118,19 @@ Some narrow primitives were proven early in Phase 1; Phase 2 generalizes them in
 - 🟨 Compilation observation — compiler diagnostics are captured; full operation lifecycle across compilation/reload remains pending
 - ✅ Domain reload recovery — verified for local connection/status lifecycle
 - ✅ Reconnection and connection generations — verified for local single-editor lifecycle
+- 🟨 Agent capability/version negotiation — a real Phase 2 test exposed a stale compiled Unity Agent that accepted the connection but did not support the newly advertised `object.resolve`; explicit capability/version negotiation should prevent this mismatch from reaching command execution
 - 🟨 Timeout/cancellation behavior — request deadlines/timeouts exist; broader cancellation semantics pending
-- 🟨 Duplicate/replayed request protection — immediate same-session create replay is verified; stale replay revalidation is implemented and awaiting live Undo verification
+- 🟨 Duplicate/replayed request protection — verified for immediate same-session `gameObject.create`; generalized mutation semantics pending
 - ⬜ Preflight validation framework
-- 🟨 Native readback after writes — first implementation exists for `gameObject.create`; live verification pending
-- 🟨 Semantic verification of intended state — first create identity/name/scene verification exists; general framework pending
+- 🟨 Native readback after writes — implemented for the current GameObject-create Phase 2 branch; real Unity verification pending
+- ⬜ Semantic verification of intended state
 - ⬜ Rollback on failed verification
 - ⬜ Verification that rollback itself restored the expected state
 - ⬜ Unity EditMode test coverage for the common execution core
 
 ### Exit gate
 
-Normal disconnects, compilation, domain reload, stale-state, retry, and failed-write scenarios do not silently duplicate mutations, lose routing identity, or report false success; write outcomes are verified against native Unity state and recover safely when verification fails.
+Normal disconnects, compilation, domain reload, stale-state, retry, agent-version skew, and failed-write scenarios do not silently duplicate mutations, lose routing identity, execute unsupported operations, or report false success; write outcomes are verified against native Unity state and recover safely when verification fails.
 
 ---
 
