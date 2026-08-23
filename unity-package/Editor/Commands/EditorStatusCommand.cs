@@ -39,6 +39,8 @@ namespace UnityAiBridge.Editor.Commands
             "component.property.set",
             "asset.search",
             "asset.inspect",
+            "prefab.inspect",
+            "prefab.instantiate",
             "scene.save",
             "transform.get",
             "transform.set",
