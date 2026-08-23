@@ -3,7 +3,7 @@ import { serveStdio } from "@modelcontextprotocol/server/stdio";
 
 import { requireAgentCapability } from "./agent/capabilities.js";
 import { registerAssetTools } from "./asset-tools.js";
-import { AssetBridgeServer } from "./bridge/asset-bridge-server.js";
+import { PrefabPropertyBridgeServer } from "./bridge/prefab-property-bridge-server.js";
 import {
   type DiagnosticsOptions,
   type GameObjectCreateOptions,
@@ -13,9 +13,10 @@ import {
   type Vector3Payload,
 } from "./bridge/local-bridge-server.js";
 import { registerGameObjectEditTools } from "./gameobject-edit-tools.js";
+import { registerPrefabPropertyTools } from "./prefab-property-tools.js";
 import { BRIDGE_PROTOCOL_VERSION } from "./protocol/bridge.js";
 
-const bridge = new AssetBridgeServer();
+const bridge = new PrefabPropertyBridgeServer();
 const bridgePort = await bridge.start();
 console.error(`[Unity AI Bridge] Local bridge listening on ws://127.0.0.1:${bridgePort}`);
 
@@ -259,6 +260,7 @@ serveStdio(() => {
 
   registerGameObjectEditTools(server, bridge);
   registerAssetTools(server, bridge);
+  registerPrefabPropertyTools(server, bridge);
 
   server.registerTool(
     "unity_get_status",
