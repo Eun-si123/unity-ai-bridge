@@ -16,6 +16,10 @@ namespace UnityAiBridge.Editor.Execution
         public bool verified;
         public bool rolledBack;
         public bool rollbackVerified;
+        public bool sceneWasDirtyBefore;
+        public bool sceneIsDirtyAfter;
+        public bool dirtyStateChanged;
+        public bool rollbackDirtyResidue;
         public EditorStateRevisionSnapshot stateBefore;
         public EditorStateRevisionSnapshot stateAfter;
     }
@@ -235,6 +239,7 @@ namespace UnityAiBridge.Editor.Execution
                 Undo.CollapseUndoOperations(context.undoGroup);
                 context.stateAfter = EditorStateRevision.Advance();
                 context.outcome.stateAfter = context.stateAfter;
+                CaptureDirtyStateAfter(context);
                 EditorMutationLifecycle.MarkCompleted(context.lifecycle, context.stateAfter);
 
                 return new EditorMutationExecution<T>
@@ -253,11 +258,13 @@ namespace UnityAiBridge.Editor.Execution
                         context.outcome.rolledBack = true;
                         context.stateAfter = EditorStateRevision.Advance();
                         context.outcome.stateAfter = context.stateAfter;
+                        CaptureDirtyStateAfter(context);
                     }
                     catch (Exception rollbackException)
                     {
                         context.stateAfter = EditorStateRevision.Advance();
                         context.outcome.stateAfter = context.stateAfter;
+                        CaptureDirtyStateAfter(context);
                         try
                         {
                             EditorMutationLifecycle.MarkRollbackFailed(context.lifecycle, context.stateAfter);
@@ -323,6 +330,7 @@ namespace UnityAiBridge.Editor.Execution
                 {
                     context.stateAfter = EditorStateRevision.Capture();
                     context.outcome.stateAfter = context.stateAfter;
+                    CaptureDirtyStateAfter(context);
                     EditorMutationLifecycle.MarkFailedNoMutation(context.lifecycle, context.stateAfter);
                 }
 
@@ -332,6 +340,24 @@ namespace UnityAiBridge.Editor.Execution
             {
                 isExecuting = false;
             }
+        }
+
+        internal static void ApplyDirtyStateAfter(
+            EditorMutationOutcome outcome,
+            bool sceneIsDirtyAfter)
+        {
+            if (outcome == null)
+            {
+                throw new ArgumentNullException(nameof(outcome));
+            }
+
+            outcome.sceneIsDirtyAfter = sceneIsDirtyAfter;
+            outcome.dirtyStateChanged =
+                outcome.sceneWasDirtyBefore != outcome.sceneIsDirtyAfter;
+            outcome.rollbackDirtyResidue =
+                outcome.rolledBack &&
+                !outcome.sceneWasDirtyBefore &&
+                outcome.sceneIsDirtyAfter;
         }
 
         private static void ValidateArguments<T>(
@@ -393,12 +419,17 @@ namespace UnityAiBridge.Editor.Execution
 
             EditorStateRevision.RequireCurrent(expectedStateEpoch, expectedStateRevision);
             var stateBefore = EditorStateRevision.Capture();
+            var sceneWasDirtyBefore = scene.isDirty;
             var outcome = new EditorMutationOutcome
             {
                 changed = false,
                 verified = false,
                 rolledBack = false,
                 rollbackVerified = false,
+                sceneWasDirtyBefore = sceneWasDirtyBefore,
+                sceneIsDirtyAfter = sceneWasDirtyBefore,
+                dirtyStateChanged = false,
+                rollbackDirtyResidue = false,
                 stateBefore = stateBefore,
                 stateAfter = null,
             };
@@ -415,6 +446,15 @@ namespace UnityAiBridge.Editor.Execution
                 lifecycle = null,
                 outcome = outcome,
             };
+        }
+
+        private static void CaptureDirtyStateAfter(EditorMutationContext context)
+        {
+            var sceneIsDirtyAfter =
+                context.activeScene.IsValid() && context.activeScene.isLoaded
+                    ? context.activeScene.isDirty
+                    : context.outcome.sceneWasDirtyBefore;
+            ApplyDirtyStateAfter(context.outcome, sceneIsDirtyAfter);
         }
     }
 }
