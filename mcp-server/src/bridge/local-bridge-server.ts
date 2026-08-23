@@ -179,6 +179,60 @@ export interface SceneSavePayload {
   stateRevision: number;
 }
 
+export interface Vector3Payload {
+  x: number;
+  y: number;
+  z: number;
+}
+
+export interface QuaternionPayload {
+  x: number;
+  y: number;
+  z: number;
+  w: number;
+}
+
+export interface TransformSnapshotPayload {
+  globalObjectId: string;
+  instanceId: number;
+  name: string;
+  sceneName: string;
+  scenePath: string;
+  hierarchyPath: string;
+  sceneIsDirty: boolean;
+  localPosition: Vector3Payload;
+  localEulerAngles: Vector3Payload;
+  localRotation: QuaternionPayload;
+  localScale: Vector3Payload;
+  worldPosition: Vector3Payload;
+  worldRotation: QuaternionPayload;
+  lossyScale: Vector3Payload;
+  stateEpoch: string;
+  stateRevision: number;
+}
+
+export interface TransformSetOptions {
+  globalObjectId: string;
+  localPosition: Vector3Payload;
+  localEulerAngles: Vector3Payload;
+  localScale: Vector3Payload;
+  mutationId?: string;
+  expectedStateEpoch: string;
+  expectedStateRevision: number;
+}
+
+export interface TransformSetPayload {
+  mutationId: string;
+  replayed: boolean;
+  requestedGlobalObjectId: string;
+  requestedLocalPosition: Vector3Payload;
+  requestedLocalEulerAngles: Vector3Payload;
+  requestedLocalScale: Vector3Payload;
+  expectedStateEpoch: string;
+  expectedStateRevision: number;
+  transform: TransformSnapshotPayload;
+}
+
 interface ActiveEditor {
   socket: WebSocket;
   hello: BridgeHello;
@@ -373,12 +427,7 @@ export class LocalBridgeServer {
     timeoutMs = 5000,
   ): Promise<ObjectResolvePayload> {
     const editor = this.requireActiveEditor();
-    if (typeof globalObjectId !== "string" || globalObjectId.trim().length === 0) {
-      throw new Error("globalObjectId is required.");
-    }
-    if (globalObjectId.length > MAX_GLOBAL_OBJECT_ID_LENGTH) {
-      throw new Error(`globalObjectId must be at most ${MAX_GLOBAL_OBJECT_ID_LENGTH} characters.`);
-    }
+    validateGlobalObjectId(globalObjectId);
 
     const result = await this.requestOperation(
       "object.resolve",
@@ -392,6 +441,29 @@ export class LocalBridgeServer {
 
     if (!isObjectResolvePayload(result)) {
       throw new Error("Unity returned an invalid object.resolve payload.");
+    }
+    return result;
+  }
+
+  public async requestTransform(
+    globalObjectId: string,
+    timeoutMs = 5000,
+  ): Promise<TransformSnapshotPayload> {
+    const editor = this.requireActiveEditor();
+    validateGlobalObjectId(globalObjectId);
+
+    const result = await this.requestOperation(
+      "transform.get",
+      { globalObjectId },
+      {
+        editorId: editor.hello.editorId,
+        connectionGeneration: editor.hello.connectionGeneration,
+      },
+      timeoutMs,
+    );
+
+    if (!isTransformSnapshotPayload(result)) {
+      throw new Error("Unity returned an invalid transform.get payload.");
     }
     return result;
   }
@@ -412,16 +484,7 @@ export class LocalBridgeServer {
     if (name.length > MAX_GAMEOBJECT_NAME_LENGTH) {
       throw new Error(`name must be at most ${MAX_GAMEOBJECT_NAME_LENGTH} characters.`);
     }
-    if (
-      typeof mutationId !== "string" ||
-      mutationId.length === 0 ||
-      mutationId.length > MAX_MUTATION_ID_LENGTH ||
-      !MUTATION_ID_PATTERN.test(mutationId)
-    ) {
-      throw new Error(
-        "mutationId must be 1..128 characters using only letters, digits, '-', '_', '.', and ':'.",
-      );
-    }
+    validateMutationId(mutationId);
 
     const hasExpectedEpoch = expectedStateEpoch !== undefined;
     const hasExpectedRevision = expectedStateRevision !== undefined;
@@ -429,22 +492,7 @@ export class LocalBridgeServer {
       throw new Error("expectedStateEpoch and expectedStateRevision must be supplied together.");
     }
     if (hasExpectedEpoch) {
-      if (
-        typeof expectedStateEpoch !== "string" ||
-        expectedStateEpoch.length === 0 ||
-        expectedStateEpoch.length > MAX_STATE_EPOCH_LENGTH
-      ) {
-        throw new Error(
-          `expectedStateEpoch must be a non-empty string of at most ${MAX_STATE_EPOCH_LENGTH} characters.`,
-        );
-      }
-      if (
-        typeof expectedStateRevision !== "number" ||
-        !Number.isSafeInteger(expectedStateRevision) ||
-        expectedStateRevision <= 0
-      ) {
-        throw new Error("expectedStateRevision must be a positive safe integer.");
-      }
+      validateStateExpectation(expectedStateEpoch, expectedStateRevision);
     }
 
     const args: Record<string, unknown> = { name, mutationId };
@@ -475,6 +523,50 @@ export class LocalBridgeServer {
     }
   }
 
+  public async requestSetTransform(
+    options: TransformSetOptions,
+    timeoutMs = 5000,
+  ): Promise<TransformSetPayload> {
+    const editor = this.requireActiveEditor();
+    const mutationId = options.mutationId ?? randomUUID();
+
+    validateGlobalObjectId(options.globalObjectId);
+    validateVector3(options.localPosition, "localPosition");
+    validateVector3(options.localEulerAngles, "localEulerAngles");
+    validateVector3(options.localScale, "localScale");
+    validateMutationId(mutationId);
+    validateStateExpectation(options.expectedStateEpoch, options.expectedStateRevision);
+
+    try {
+      const result = await this.requestOperation(
+        "transform.set",
+        {
+          globalObjectId: options.globalObjectId,
+          localPosition: options.localPosition,
+          localEulerAngles: options.localEulerAngles,
+          localScale: options.localScale,
+          mutationId,
+          expectedStateEpoch: options.expectedStateEpoch,
+          expectedStateRevision: options.expectedStateRevision,
+        },
+        {
+          editorId: editor.hello.editorId,
+          connectionGeneration: editor.hello.connectionGeneration,
+        },
+        timeoutMs,
+        "write",
+      );
+
+      if (!isTransformSetPayload(result)) {
+        throw new Error("Unity returned an invalid transform.set payload.");
+      }
+      return result;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`${message} mutationId=${mutationId}`);
+    }
+  }
+
   public async requestSaveScene(
     options: SceneSaveOptions,
     timeoutMs = 5000,
@@ -494,32 +586,8 @@ export class LocalBridgeServer {
         `expectedScenePath must be a non-empty string of at most ${MAX_SCENE_PATH_LENGTH} characters.`,
       );
     }
-    if (
-      typeof mutationId !== "string" ||
-      mutationId.length === 0 ||
-      mutationId.length > MAX_MUTATION_ID_LENGTH ||
-      !MUTATION_ID_PATTERN.test(mutationId)
-    ) {
-      throw new Error(
-        "mutationId must be 1..128 characters using only letters, digits, '-', '_', '.', and ':'.",
-      );
-    }
-    if (
-      typeof expectedStateEpoch !== "string" ||
-      expectedStateEpoch.length === 0 ||
-      expectedStateEpoch.length > MAX_STATE_EPOCH_LENGTH
-    ) {
-      throw new Error(
-        `expectedStateEpoch must be a non-empty string of at most ${MAX_STATE_EPOCH_LENGTH} characters.`,
-      );
-    }
-    if (
-      typeof expectedStateRevision !== "number" ||
-      !Number.isSafeInteger(expectedStateRevision) ||
-      expectedStateRevision <= 0
-    ) {
-      throw new Error("expectedStateRevision must be a positive safe integer.");
-    }
+    validateMutationId(mutationId);
+    validateStateExpectation(expectedStateEpoch, expectedStateRevision);
 
     try {
       const result = await this.requestOperation(
@@ -671,6 +739,53 @@ export class LocalBridgeServer {
       pending.reject(new Error("Unity Editor disconnected before the request completed."));
     }
     this.pending.clear();
+  }
+}
+
+function validateGlobalObjectId(globalObjectId: string): void {
+  if (typeof globalObjectId !== "string" || globalObjectId.trim().length === 0) {
+    throw new Error("globalObjectId is required.");
+  }
+  if (globalObjectId.length > MAX_GLOBAL_OBJECT_ID_LENGTH) {
+    throw new Error(`globalObjectId must be at most ${MAX_GLOBAL_OBJECT_ID_LENGTH} characters.`);
+  }
+}
+
+function validateMutationId(mutationId: string): void {
+  if (
+    typeof mutationId !== "string" ||
+    mutationId.length === 0 ||
+    mutationId.length > MAX_MUTATION_ID_LENGTH ||
+    !MUTATION_ID_PATTERN.test(mutationId)
+  ) {
+    throw new Error(
+      "mutationId must be 1..128 characters using only letters, digits, '-', '_', '.', and ':'.",
+    );
+  }
+}
+
+function validateStateExpectation(epoch: string | undefined, revision: number | undefined): void {
+  if (
+    typeof epoch !== "string" ||
+    epoch.length === 0 ||
+    epoch.length > MAX_STATE_EPOCH_LENGTH
+  ) {
+    throw new Error(
+      `expectedStateEpoch must be a non-empty string of at most ${MAX_STATE_EPOCH_LENGTH} characters.`,
+    );
+  }
+  if (
+    typeof revision !== "number" ||
+    !Number.isSafeInteger(revision) ||
+    revision <= 0
+  ) {
+    throw new Error("expectedStateRevision must be a positive safe integer.");
+  }
+}
+
+function validateVector3(value: Vector3Payload, name: string): void {
+  if (!isVector3Payload(value)) {
+    throw new Error(`${name} must be an object with finite numeric x, y, and z values.`);
   }
 }
 
@@ -935,6 +1050,87 @@ function isSceneSavePayload(value: unknown): value is SceneSavePayload {
     candidate.expectedStateEpoch.length > 0 &&
     isPositiveInteger(candidate.expectedStateRevision) &&
     isStateRevision(candidate.stateEpoch, candidate.stateRevision)
+  );
+}
+
+function isTransformSnapshotPayload(value: unknown): value is TransformSnapshotPayload {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.globalObjectId === "string" &&
+    candidate.globalObjectId.length > 0 &&
+    typeof candidate.instanceId === "number" &&
+    Number.isSafeInteger(candidate.instanceId) &&
+    typeof candidate.name === "string" &&
+    typeof candidate.sceneName === "string" &&
+    typeof candidate.scenePath === "string" &&
+    typeof candidate.hierarchyPath === "string" &&
+    typeof candidate.sceneIsDirty === "boolean" &&
+    isVector3Payload(candidate.localPosition) &&
+    isVector3Payload(candidate.localEulerAngles) &&
+    isQuaternionPayload(candidate.localRotation) &&
+    isVector3Payload(candidate.localScale) &&
+    isVector3Payload(candidate.worldPosition) &&
+    isQuaternionPayload(candidate.worldRotation) &&
+    isVector3Payload(candidate.lossyScale) &&
+    isStateRevision(candidate.stateEpoch, candidate.stateRevision)
+  );
+}
+
+function isTransformSetPayload(value: unknown): value is TransformSetPayload {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.mutationId === "string" &&
+    candidate.mutationId.length > 0 &&
+    typeof candidate.replayed === "boolean" &&
+    typeof candidate.requestedGlobalObjectId === "string" &&
+    candidate.requestedGlobalObjectId.length > 0 &&
+    isVector3Payload(candidate.requestedLocalPosition) &&
+    isVector3Payload(candidate.requestedLocalEulerAngles) &&
+    isVector3Payload(candidate.requestedLocalScale) &&
+    typeof candidate.expectedStateEpoch === "string" &&
+    candidate.expectedStateEpoch.length > 0 &&
+    isPositiveInteger(candidate.expectedStateRevision) &&
+    isTransformSnapshotPayload(candidate.transform)
+  );
+}
+
+function isVector3Payload(value: unknown): value is Vector3Payload {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.x === "number" &&
+    Number.isFinite(candidate.x) &&
+    typeof candidate.y === "number" &&
+    Number.isFinite(candidate.y) &&
+    typeof candidate.z === "number" &&
+    Number.isFinite(candidate.z)
+  );
+}
+
+function isQuaternionPayload(value: unknown): value is QuaternionPayload {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.x === "number" &&
+    Number.isFinite(candidate.x) &&
+    typeof candidate.y === "number" &&
+    Number.isFinite(candidate.y) &&
+    typeof candidate.z === "number" &&
+    Number.isFinite(candidate.z) &&
+    typeof candidate.w === "number" &&
+    Number.isFinite(candidate.w)
   );
 }
 
