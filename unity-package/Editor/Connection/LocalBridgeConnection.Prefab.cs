@@ -221,8 +221,8 @@ namespace UnityAiBridge.Editor.Connection
         private sealed class PrefabInspectCommandArgumentsDto
         {
             public string path;
-            public int maxDepth;
-            public int maxNodes;
+            public int maxDepth = PrefabInspectCommand.DefaultMaxDepth;
+            public int maxNodes = PrefabInspectCommand.DefaultMaxNodes;
         }
 
         [Serializable]
