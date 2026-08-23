@@ -28,6 +28,22 @@ namespace UnityAiBridge.Editor.Commands
         }
     }
 
+    internal sealed class GameObjectCreateReplayStaleException : InvalidOperationException
+    {
+        public GameObjectCreateReplayStaleException(string message)
+            : base(message)
+        {
+        }
+    }
+
+    internal sealed class GameObjectCreateReadbackException : InvalidOperationException
+    {
+        public GameObjectCreateReadbackException(string message)
+            : base(message)
+        {
+        }
+    }
+
     internal sealed class GameObjectCreateCompilingException : InvalidOperationException
     {
         public GameObjectCreateCompilingException(string message)
@@ -76,7 +92,11 @@ namespace UnityAiBridge.Editor.Commands
                         "mutationId was already used for gameObject.create with different arguments.");
                 }
 
+                var replayReadback = ObjectResolverCommand.Execute(cached.globalObjectId);
+                EnsureReplayStillMatches(cached, replayReadback);
+                RefreshFromReadback(cached, replayReadback);
                 cached.replayed = true;
+                SessionState.SetString(sessionKey, JsonUtility.ToJson(cached));
                 return cached;
             }
 
@@ -98,22 +118,69 @@ namespace UnityAiBridge.Editor.Commands
             var objects = new UnityEngine.Object[] { gameObject };
             var globalObjectIds = new GlobalObjectId[1];
             GlobalObjectId.GetGlobalObjectIdsSlow(objects, globalObjectIds);
+            var globalObjectId = globalObjectIds[0].ToString();
+
+            var readback = ObjectResolverCommand.Execute(globalObjectId);
+            if (!readback.found ||
+                !readback.isGameObject ||
+                !string.Equals(readback.canonicalGlobalObjectId, globalObjectId, StringComparison.Ordinal) ||
+                !string.Equals(readback.name, name, StringComparison.Ordinal) ||
+                !string.Equals(readback.sceneName, scene.name, StringComparison.Ordinal) ||
+                !string.Equals(readback.scenePath, scene.path ?? string.Empty, StringComparison.Ordinal))
+            {
+                throw new GameObjectCreateReadbackException(
+                    "gameObject.create changed Unity state, but native GlobalObjectId readback did not verify the requested object.");
+            }
 
             var result = new GameObjectCreatePayload
             {
                 mutationId = mutationId,
                 replayed = false,
-                globalObjectId = globalObjectIds[0].ToString(),
-                instanceId = gameObject.GetInstanceID(),
-                name = gameObject.name,
-                hierarchyPath = gameObject.name,
-                sceneName = scene.name,
-                scenePath = scene.path ?? string.Empty,
-                siblingIndex = gameObject.transform.GetSiblingIndex(),
+                globalObjectId = readback.canonicalGlobalObjectId,
+                instanceId = readback.instanceId,
+                name = readback.name,
+                hierarchyPath = readback.hierarchyPath,
+                sceneName = readback.sceneName,
+                scenePath = readback.scenePath,
+                siblingIndex = readback.siblingIndex,
             };
 
             SessionState.SetString(sessionKey, JsonUtility.ToJson(result));
             return result;
+        }
+
+        private static void EnsureReplayStillMatches(
+            GameObjectCreatePayload cached,
+            ObjectResolvePayload readback)
+        {
+            if (!readback.found)
+            {
+                throw new GameObjectCreateReplayStaleException(
+                    "The cached gameObject.create target no longer exists. The same mutationId will not create a replacement automatically.");
+            }
+
+            if (!readback.isGameObject ||
+                !string.Equals(readback.canonicalGlobalObjectId, cached.globalObjectId, StringComparison.Ordinal) ||
+                !string.Equals(readback.name, cached.name, StringComparison.Ordinal) ||
+                !string.Equals(readback.sceneName, cached.sceneName, StringComparison.Ordinal) ||
+                !string.Equals(readback.scenePath, cached.scenePath, StringComparison.Ordinal))
+            {
+                throw new GameObjectCreateReplayStaleException(
+                    "The cached gameObject.create target resolved, but its native Unity identity no longer matches the completed mutation result.");
+            }
+        }
+
+        private static void RefreshFromReadback(
+            GameObjectCreatePayload payload,
+            ObjectResolvePayload readback)
+        {
+            payload.globalObjectId = readback.canonicalGlobalObjectId;
+            payload.instanceId = readback.instanceId;
+            payload.name = readback.name;
+            payload.hierarchyPath = readback.hierarchyPath;
+            payload.sceneName = readback.sceneName;
+            payload.scenePath = readback.scenePath;
+            payload.siblingIndex = readback.siblingIndex;
         }
 
         private static void ValidateName(string name)
