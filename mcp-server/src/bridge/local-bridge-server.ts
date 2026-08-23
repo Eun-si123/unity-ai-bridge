@@ -156,6 +156,29 @@ export interface GameObjectCreatePayload {
   stateRevision: number;
 }
 
+export interface SceneSaveOptions {
+  expectedScenePath: string;
+  mutationId?: string;
+  expectedStateEpoch: string;
+  expectedStateRevision: number;
+}
+
+export interface SceneSavePayload {
+  mutationId: string;
+  replayed: boolean;
+  saved: boolean;
+  alreadyClean: boolean;
+  sceneName: string;
+  scenePath: string;
+  wasDirty: boolean;
+  isDirty: boolean;
+  expectedScenePath: string;
+  expectedStateEpoch: string;
+  expectedStateRevision: number;
+  stateEpoch: string;
+  stateRevision: number;
+}
+
 interface ActiveEditor {
   socket: WebSocket;
   hello: BridgeHello;
@@ -177,6 +200,7 @@ const DEFAULT_DIAGNOSTICS_MINIMUM_SEVERITY = "warning" as const;
 const DIAGNOSTICS_SEVERITIES = new Set(["error", "warning", "log"]);
 const MAX_GLOBAL_OBJECT_ID_LENGTH = 256;
 const MAX_GAMEOBJECT_NAME_LENGTH = 128;
+const MAX_SCENE_PATH_LENGTH = 512;
 const MAX_MUTATION_ID_LENGTH = 128;
 const MAX_STATE_EPOCH_LENGTH = 128;
 const MUTATION_ID_PATTERN = /^[A-Za-z0-9._:-]+$/;
@@ -443,6 +467,79 @@ export class LocalBridgeServer {
 
       if (!isGameObjectCreatePayload(result)) {
         throw new Error("Unity returned an invalid gameObject.create payload.");
+      }
+      return result;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`${message} mutationId=${mutationId}`);
+    }
+  }
+
+  public async requestSaveScene(
+    options: SceneSaveOptions,
+    timeoutMs = 5000,
+  ): Promise<SceneSavePayload> {
+    const editor = this.requireActiveEditor();
+    const expectedScenePath = options.expectedScenePath;
+    const mutationId = options.mutationId ?? randomUUID();
+    const expectedStateEpoch = options.expectedStateEpoch;
+    const expectedStateRevision = options.expectedStateRevision;
+
+    if (
+      typeof expectedScenePath !== "string" ||
+      expectedScenePath.trim().length === 0 ||
+      expectedScenePath.length > MAX_SCENE_PATH_LENGTH
+    ) {
+      throw new Error(
+        `expectedScenePath must be a non-empty string of at most ${MAX_SCENE_PATH_LENGTH} characters.`,
+      );
+    }
+    if (
+      typeof mutationId !== "string" ||
+      mutationId.length === 0 ||
+      mutationId.length > MAX_MUTATION_ID_LENGTH ||
+      !MUTATION_ID_PATTERN.test(mutationId)
+    ) {
+      throw new Error(
+        "mutationId must be 1..128 characters using only letters, digits, '-', '_', '.', and ':'.",
+      );
+    }
+    if (
+      typeof expectedStateEpoch !== "string" ||
+      expectedStateEpoch.length === 0 ||
+      expectedStateEpoch.length > MAX_STATE_EPOCH_LENGTH
+    ) {
+      throw new Error(
+        `expectedStateEpoch must be a non-empty string of at most ${MAX_STATE_EPOCH_LENGTH} characters.`,
+      );
+    }
+    if (
+      typeof expectedStateRevision !== "number" ||
+      !Number.isSafeInteger(expectedStateRevision) ||
+      expectedStateRevision <= 0
+    ) {
+      throw new Error("expectedStateRevision must be a positive safe integer.");
+    }
+
+    try {
+      const result = await this.requestOperation(
+        "scene.save",
+        {
+          expectedScenePath,
+          mutationId,
+          expectedStateEpoch,
+          expectedStateRevision,
+        },
+        {
+          editorId: editor.hello.editorId,
+          connectionGeneration: editor.hello.connectionGeneration,
+        },
+        timeoutMs,
+        "destructive",
+      );
+
+      if (!isSceneSavePayload(result)) {
+        throw new Error("Unity returned an invalid scene.save payload.");
       }
       return result;
     } catch (error) {
@@ -811,6 +908,32 @@ function isGameObjectCreatePayload(value: unknown): value is GameObjectCreatePay
     isNonNegativeInteger(candidate.siblingIndex) &&
     typeof candidate.expectedStateEpoch === "string" &&
     isNonNegativeInteger(candidate.expectedStateRevision) &&
+    isStateRevision(candidate.stateEpoch, candidate.stateRevision)
+  );
+}
+
+function isSceneSavePayload(value: unknown): value is SceneSavePayload {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.mutationId === "string" &&
+    candidate.mutationId.length > 0 &&
+    typeof candidate.replayed === "boolean" &&
+    typeof candidate.saved === "boolean" &&
+    typeof candidate.alreadyClean === "boolean" &&
+    typeof candidate.sceneName === "string" &&
+    typeof candidate.scenePath === "string" &&
+    candidate.scenePath.length > 0 &&
+    typeof candidate.wasDirty === "boolean" &&
+    typeof candidate.isDirty === "boolean" &&
+    typeof candidate.expectedScenePath === "string" &&
+    candidate.expectedScenePath.length > 0 &&
+    typeof candidate.expectedStateEpoch === "string" &&
+    candidate.expectedStateEpoch.length > 0 &&
+    isPositiveInteger(candidate.expectedStateRevision) &&
     isStateRevision(candidate.stateEpoch, candidate.stateRevision)
   );
 }
