@@ -15,7 +15,7 @@ using UnityEngine;
 namespace UnityAiBridge.Editor.Connection
 {
     [InitializeOnLoad]
-    internal static class LocalBridgeConnection
+    internal static partial class LocalBridgeConnection
     {
         private const string Endpoint = "ws://127.0.0.1:5081";
         private const int ReconnectDelayMs = 1000;
@@ -252,6 +252,11 @@ namespace UnityAiBridge.Editor.Connection
             if (string.Equals(command.operation, "scene.save", StringComparison.Ordinal))
             {
                 await HandleSceneSaveAsync(current, command, cancellationToken);
+                return;
+            }
+
+            if (await TryHandleTransformCommandAsync(current, command, json, cancellationToken))
+            {
                 return;
             }
 
