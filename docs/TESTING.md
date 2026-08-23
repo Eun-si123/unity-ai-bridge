@@ -38,6 +38,8 @@ Target editor: Unity 6000.3.21f1.
 
 PASS requires the package to load and the Editor assembly to compile successfully.
 
+When switching Git branches while Unity remains open, Unity can temporarily keep the previously compiled Editor assembly even though the package source on disk changed. If a newly added bridge operation returns `unsupported/operation_not_supported` but the checked-out source contains that dispatcher route, force a package reimport/domain reload or restart Unity before classifying the source implementation as missing.
+
 ## 3. Real local bridge + `editor.status` verification helper
 
 With the Unity project open and the package loaded, run from the repository root:
@@ -151,7 +153,30 @@ The exact counts and node list depend on the live scene. For PASS, compare the r
 
 If the scene exceeds the requested bounds, `truncatedByDepth` or `truncatedByNodes` may legitimately be true. That is not a failure by itself.
 
-## 7. Evidence format
+## 7. Phase 2 stable resolver / stale replay check
+
+On branch `phase2/stable-object-resolver`, first make sure Unity has actually recompiled the current package source. Then run:
+
+```text
+npm --prefix mcp-server run verify:resolver
+```
+
+The verifier creates one temporary GameObject, resolves its returned `GlobalObjectId` back through Unity native APIs, then prompts you to press Ctrl+Z exactly once. PASS requires:
+
+1. initial native resolve matches the created GameObject,
+2. after Undo the resolver reports `found=false`,
+3. retrying the exact same mutation ID fails with `stale_target/mutation_replay_stale`,
+4. hierarchy readback finds zero replacement objects.
+
+If the verifier reports:
+
+```text
+unsupported/operation_not_supported: Operation 'object.resolve' is not implemented
+```
+
+but the checked-out `LocalBridgeConnection.cs` contains the `object.resolve` dispatch branch, Unity is running a stale previously compiled package assembly. In Unity, reimport the Unity AI Bridge Editor scripts/package or restart the Editor, wait for compilation/domain reload to finish, and rerun the verifier.
+
+## 8. Evidence format
 
 Every real verification entry added to `STATUS.md` should record:
 
