@@ -33,7 +33,8 @@ This file maps what exists in the repository and what is only planned.
 │     ├─ Commands/
 │     │  ├─ EditorStatusCommand.cs
 │     │  ├─ HierarchyCommand.cs
-│     │  └─ GameObjectCreateCommand.cs
+│     │  ├─ GameObjectCreateCommand.cs
+│     │  └─ DiagnosticsCommand.cs
 │     ├─ Connection/
 │     │  └─ LocalBridgeConnection.cs
 │     ├─ Dispatch/
@@ -53,7 +54,9 @@ This file maps what exists in the repository and what is only planned.
 │     ├─ hierarchy.command.v0.json
 │     ├─ hierarchy.result.v0.json
 │     ├─ gameobject-create.command.v0.json
-│     └─ gameobject-create.result.v0.json
+│     ├─ gameobject-create.result.v0.json
+│     ├─ diagnostics.command.v0.json
+│     └─ diagnostics.result.v0.json
 │
 └─ mcp-server/
    ├─ package.json
@@ -70,11 +73,13 @@ This file maps what exists in the repository and what is only planned.
    │     ├─ verify-mcp-unity.ts
    │     ├─ verify-reconnect-unity.ts
    │     ├─ verify-hierarchy-unity.ts
-   │     └─ verify-gameobject-create-unity.ts
+   │     ├─ verify-gameobject-create-unity.ts
+   │     └─ verify-diagnostics-unity.ts
    └─ tests/
       ├─ bridge-protocol.test.ts
       ├─ local-bridge.test.ts
-      └─ gameobject-create.test.ts
+      ├─ gameobject-create.test.ts
+      └─ diagnostics.test.ts
 ```
 
 `STATUS.md` distinguishes implemented source from runtime-verified behavior.
@@ -106,18 +111,23 @@ Current implementation:
 - `editor.status` read handler,
 - bounded `scene.hierarchy` read handler,
 - bounded `gameObject.create` write handler,
-- create-specific validation, Undo registration, dirty-state handling, `GlobalObjectId` result capture, and same-session mutation replay via `SessionState`.
+- create-specific validation, Undo registration, dirty-state handling, `GlobalObjectId` result capture, and same-session mutation replay via `SessionState`,
+- `editor.diagnostics` read handler,
+- recent log capture through `Application.logMessageReceivedThreaded`,
+- compiler warning/error capture through `CompilationPipeline.assemblyCompilationFinished`,
+- latest compilation snapshot persistence through domain reload using `SessionState`,
+- current Console count reads without relying on internal `UnityEditor.LogEntries`.
 
-Status, hierarchy, and the first GameObject-create write slice are runtime-verified on Windows / Unity 6000.3.21f1 as recorded in `STATUS.md`.
+All Phase 1 minimum slices are runtime-verified on Windows / Unity 6000.3.21f1 as recorded in `STATUS.md`.
 
-Planned later areas include broader object resolution, compiler/Console diagnostics, generalized write transactions/readback, Undo/rollback policy, and Unity EditMode tests.
+Phase 2 work now targets stable object resolution, state revisions, generalized write transactions, native readback, semantic verification, rollback, and Unity EditMode tests.
 
 ### `bridge-protocol/`
 
 Current implementation:
 
 - protocol v0 command, hello, and result JSON Schemas,
-- editor-status, hierarchy, and GameObject-create request/result fixtures,
+- editor-status, hierarchy, GameObject-create, and diagnostics request/result fixtures,
 - protocol documentation.
 
 The contract remains separate from MCP so Unity-facing command semantics do not depend on a particular AI provider or MCP transport.
@@ -133,10 +143,11 @@ Current implementation:
 - `unity_get_status`,
 - `unity_get_hierarchy`,
 - `unity_create_game_object`,
+- `unity_get_diagnostics`,
 - write-risk routing and mutation-id validation for the create slice,
-- TypeScript payload validation,
+- bounded diagnostics input and structured-payload validation,
 - simulated local-bridge tests,
-- real-Unity verification helpers for bridge status, MCP status, reconnect, hierarchy, and GameObject create/dedup.
+- real-Unity verification helpers for bridge status, MCP status, reconnect, hierarchy, GameObject create/dedup, general diagnostics, and intentional compiler-error capture.
 
 Remote Streamable HTTP, hosted auth/pairing, multi-user routing, and managed-service policy are not implemented here yet.
 
@@ -145,7 +156,7 @@ Remote Streamable HTTP, hosted auth/pairing, multi-user routing, and managed-ser
 - `.nvmrc` pins the initial Node runtime.
 - root `package.json` delegates build/test to `mcp-server`.
 - `mcp-server/package-lock.json` pins the generated dependency graph.
-- GitHub Actions runs Node verification and Phase 1 local-bridge verification.
+- GitHub Actions runs Node verification and local-bridge verification.
 - `.gitignore` excludes Node/TypeScript outputs and common generated Unity project data.
 
 ## Planned top-level areas
