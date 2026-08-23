@@ -146,7 +146,15 @@ async function resolve(globalObjectId: string): Promise<ResolvePayload> {
     arguments: { globalObjectId },
   });
   if (result.isError) {
-    throw new Error(`unity_resolve_object failed: ${readToolText(result)}`);
+    const message = readToolText(result);
+    if (message.includes("unsupported/operation_not_supported") && message.includes("object.resolve")) {
+      throw new Error(
+        "Connected Unity Editor is running an older Unity AI Bridge assembly that does not implement object.resolve. " +
+          "Pull the latest phase2/stable-object-resolver branch, force Unity to reimport/recompile the Unity AI Bridge Editor scripts (or restart Unity), then rerun verify:resolver. " +
+          `Raw tool error: ${message}`,
+      );
+    }
+    throw new Error(`unity_resolve_object failed: ${message}`);
   }
   if (!isResolvePayload(result.structuredContent)) {
     throw new Error(`unity_resolve_object returned invalid structuredContent: ${JSON.stringify(result.structuredContent)}`);
