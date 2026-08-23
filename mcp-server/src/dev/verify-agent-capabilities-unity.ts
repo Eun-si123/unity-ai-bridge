@@ -19,6 +19,7 @@ const expectedCapabilities = [
   "asset.inspect",
   "prefab.inspect",
   "prefab.instantiate",
+  "prefab.asset.create",
   "scene.save",
   "transform.get",
   "transform.set",
@@ -55,6 +56,7 @@ try {
     "unity_inspect_asset",
     "unity_inspect_prefab",
     "unity_instantiate_prefab",
+    "unity_create_prefab_asset",
   ]) {
     if (!tools.some((tool) => tool.name === required)) {
       throw new Error(`MCP server did not advertise ${required}.`);

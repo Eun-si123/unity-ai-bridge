@@ -18,6 +18,9 @@ const hello = {
 const prefabPath = "Assets/Prefabs/Test.prefab";
 const prefabGuid = "1234567890abcdef1234567890abcdef";
 const prefabHash = "abcdef0123456789abcdef0123456789";
+const sourceGlobalObjectId =
+  "GlobalObjectId_V1-2-1234567890abcdef1234567890abcdef-101-0";
+const createDestinationPath = "Assets/CreatedByBridge.prefab";
 
 test("prefab inspect sends bounded read command and validates result", async () => {
   const bridge = new AssetBridgeServer("127.0.0.1", 0);
@@ -204,6 +207,152 @@ test("prefab instantiate rejects invalid scene state before delivery", async () 
       bridge.requestInstantiatePrefab({
         prefabPath,
         expectedPrefabDependencyHash: prefabHash,
+        expectedStateEpoch: "",
+        expectedStateRevision: 0,
+      }),
+      /expectedStateEpoch/,
+    );
+    await delay(20);
+    assert.equal(observed, false);
+  } finally {
+    await bridge.stop();
+    if (client.readyState !== WebSocket.CLOSED) client.terminate();
+  }
+});
+
+test("prefab asset create sends destructive disk-write command and accepts unchanged scene revision", async () => {
+  const bridge = new AssetBridgeServer("127.0.0.1", 0);
+  const port = await bridge.start();
+  const client = new WebSocket(`ws://127.0.0.1:${port}`);
+
+  try {
+    await waitForOpen(client);
+    client.send(JSON.stringify(hello));
+    await bridge.waitForEditor();
+
+    client.on("message", (data) => {
+      const command = JSON.parse(data.toString()) as {
+        requestId: string;
+        operation: string;
+        risk: string;
+        arguments: Record<string, unknown>;
+      };
+      assert.equal(command.operation, "prefab.asset.create");
+      assert.equal(command.risk, "destructive");
+      assert.equal(command.arguments.sourceGlobalObjectId, sourceGlobalObjectId);
+      assert.equal(command.arguments.destinationPath, createDestinationPath);
+      assert.equal(command.arguments.mutationId, "prefab-create-mutation");
+      assert.equal(command.arguments.expectedStateEpoch, "epoch-121");
+      assert.equal(command.arguments.expectedStateRevision, 42);
+
+      client.send(JSON.stringify({
+        protocolVersion: BRIDGE_PROTOCOL_VERSION,
+        requestId: command.requestId,
+        ok: true,
+        result: {
+          mutationId: "prefab-create-mutation",
+          replayed: false,
+          created: true,
+          sourceGlobalObjectId,
+          sourceName: "CreateSource",
+          destinationPath: createDestinationPath,
+          prefabGuid,
+          dependencyHash: prefabHash,
+          prefabAssetType: "Regular",
+          rootName: "CreateSource",
+          expectedStateEpoch: "epoch-121",
+          expectedStateRevision: 42,
+          stateEpoch: "epoch-121",
+          stateRevision: 42,
+        },
+        warnings: ["persistent disk write"],
+        changedTargets: [],
+        dirtyState: "unchanged",
+        undo: { available: false, groupName: "" },
+        compileState: "idle",
+      }));
+    });
+
+    const result = await bridge.requestCreatePrefabAsset({
+      sourceGlobalObjectId,
+      destinationPath: createDestinationPath,
+      mutationId: "prefab-create-mutation",
+      expectedStateEpoch: "epoch-121",
+      expectedStateRevision: 42,
+    });
+    assert.equal(result.created, true);
+    assert.equal(result.replayed, false);
+    assert.equal(result.prefabGuid, prefabGuid);
+    assert.equal(result.stateRevision, 42);
+  } finally {
+    await bridge.stop();
+    if (client.readyState !== WebSocket.CLOSED) client.terminate();
+  }
+});
+
+test("prefab asset create rejects package and non-prefab destinations before delivery", async () => {
+  const bridge = new AssetBridgeServer("127.0.0.1", 0);
+  const port = await bridge.start();
+  const client = new WebSocket(`ws://127.0.0.1:${port}`);
+
+  try {
+    await waitForOpen(client);
+    client.send(JSON.stringify(hello));
+    await bridge.waitForEditor();
+    let observed = false;
+    client.on("message", () => { observed = true; });
+
+    await assert.rejects(
+      bridge.requestCreatePrefabAsset({
+        sourceGlobalObjectId,
+        destinationPath: "Packages/example/Test.prefab",
+        expectedStateEpoch: "epoch-121",
+        expectedStateRevision: 42,
+      }),
+      /under Assets/,
+    );
+    await assert.rejects(
+      bridge.requestCreatePrefabAsset({
+        sourceGlobalObjectId,
+        destinationPath: "Assets/Test.asset",
+        expectedStateEpoch: "epoch-121",
+        expectedStateRevision: 42,
+      }),
+      /end in .prefab/,
+    );
+    await delay(20);
+    assert.equal(observed, false);
+  } finally {
+    await bridge.stop();
+    if (client.readyState !== WebSocket.CLOSED) client.terminate();
+  }
+});
+
+test("prefab asset create rejects invalid source and state before delivery", async () => {
+  const bridge = new AssetBridgeServer("127.0.0.1", 0);
+  const port = await bridge.start();
+  const client = new WebSocket(`ws://127.0.0.1:${port}`);
+
+  try {
+    await waitForOpen(client);
+    client.send(JSON.stringify(hello));
+    await bridge.waitForEditor();
+    let observed = false;
+    client.on("message", () => { observed = true; });
+
+    await assert.rejects(
+      bridge.requestCreatePrefabAsset({
+        sourceGlobalObjectId: "not-a-global-id",
+        destinationPath: createDestinationPath,
+        expectedStateEpoch: "epoch-121",
+        expectedStateRevision: 42,
+      }),
+      /GlobalObjectId/,
+    );
+    await assert.rejects(
+      bridge.requestCreatePrefabAsset({
+        sourceGlobalObjectId,
+        destinationPath: createDestinationPath,
         expectedStateEpoch: "",
         expectedStateRevision: 0,
       }),

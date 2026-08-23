@@ -1,0 +1,14 @@
+{
+  "protocolVersion": "0",
+  "requestId": "req-prefab-asset-create-1",
+  "operation": "prefab.asset.create",
+  "arguments": {
+    "sourceGlobalObjectId": "GlobalObjectId_V1-2-1234567890abcdef1234567890abcdef-101-0",
+    "destinationPath": "Assets/CreatedByBridge.prefab",
+    "mutationId": "prefab-asset-create-1",
+    "expectedStateEpoch": "epoch-example",
+    "expectedStateRevision": 42
+  },
+  "risk": "destructive",
+  "deadlineUnixMs": 1893456000000
+}

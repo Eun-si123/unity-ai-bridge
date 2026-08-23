@@ -5,6 +5,7 @@ import {
   AssetBridgeServer,
   type AssetInspectOptions,
   type AssetSearchOptions,
+  type PrefabAssetCreateOptions,
   type PrefabInspectOptions,
   type PrefabInstantiateOptions,
 } from "./bridge/asset-bridge-server.js";
@@ -135,6 +136,53 @@ const prefabInstantiateInputSchema = fromJsonSchema({
   additionalProperties: false,
 });
 
+const prefabAssetCreateInputSchema = fromJsonSchema({
+  type: "object",
+  required: [
+    "sourceGlobalObjectId",
+    "destinationPath",
+    "expectedStateEpoch",
+    "expectedStateRevision",
+  ],
+  properties: {
+    sourceGlobalObjectId: {
+      type: "string",
+      minLength: 1,
+      maxLength: 256,
+      description:
+        "Exact GlobalObjectId of a plain GameObject in the current active scene. Existing Prefab instances are rejected by this first authoring slice.",
+    },
+    destinationPath: {
+      type: "string",
+      minLength: 1,
+      maxLength: 512,
+      pattern: "^Assets/.+\\.[Pp][Rr][Ee][Ff][Aa][Bb]$",
+      description:
+        "New project-relative Prefab Asset path under Assets. The parent folder must already exist and the destination must not already exist. Existing assets are never overwritten.",
+    },
+    mutationId: {
+      type: "string",
+      minLength: 1,
+      maxLength: 128,
+      pattern: "^[A-Za-z0-9._:-]+$",
+      description:
+        "Optional retry identity. Reuse only for an ambiguous retry of this exact source/path/state intent. If omitted, the bridge generates one.",
+    },
+    expectedStateEpoch: {
+      type: "string",
+      minLength: 1,
+      maxLength: 128,
+      description: "Required active-scene state epoch from a recent Unity observation.",
+    },
+    expectedStateRevision: {
+      type: "integer",
+      minimum: 1,
+      description: "Required active-scene state revision from the same observation.",
+    },
+  },
+  additionalProperties: false,
+});
+
 export function registerAssetTools(server: McpServer, bridge: AssetBridgeServer): void {
   server.registerTool(
     "unity_search_assets",
@@ -151,8 +199,7 @@ export function registerAssetTools(server: McpServer, bridge: AssetBridgeServer)
         if (input.searchInFolders !== undefined) options.searchInFolders = input.searchInFolders;
         if (input.maxResults !== undefined) options.maxResults = input.maxResults;
         await preflight(bridge, "asset.search");
-        const result = await bridge.requestSearchAssets(options);
-        return success(result);
+        return success(await bridge.requestSearchAssets(options));
       } catch (error) {
         return toolError(error);
       }
@@ -172,8 +219,7 @@ export function registerAssetTools(server: McpServer, bridge: AssetBridgeServer)
         const options: AssetInspectOptions = { path: input.path };
         if (input.maxDependencies !== undefined) options.maxDependencies = input.maxDependencies;
         await preflight(bridge, "asset.inspect");
-        const result = await bridge.requestInspectAsset(options);
-        return success(result);
+        return success(await bridge.requestInspectAsset(options));
       } catch (error) {
         return toolError(error);
       }
@@ -194,8 +240,7 @@ export function registerAssetTools(server: McpServer, bridge: AssetBridgeServer)
         if (input.maxDepth !== undefined) options.maxDepth = input.maxDepth;
         if (input.maxNodes !== undefined) options.maxNodes = input.maxNodes;
         await preflight(bridge, "prefab.inspect");
-        const result = await bridge.requestInspectPrefab(options);
-        return success(result);
+        return success(await bridge.requestInspectPrefab(options));
       } catch (error) {
         return toolError(error);
       }
@@ -226,8 +271,38 @@ export function registerAssetTools(server: McpServer, bridge: AssetBridgeServer)
         };
         if (input.mutationId !== undefined) options.mutationId = input.mutationId;
         await preflight(bridge, "prefab.instantiate", "state.revision.v1");
-        const result = await bridge.requestInstantiatePrefab(options);
-        return success(result);
+        return success(await bridge.requestInstantiatePrefab(options));
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    "unity_create_prefab_asset",
+    {
+      description:
+        "Create a NEW Prefab Asset on disk from one plain active-scene GameObject without connecting or modifying the source GameObject. The destination must be a new Assets/*.prefab path whose parent already exists; this operation never overwrites an asset. It is a persistent destructive-risk disk write with no Unity Undo. Requires a fresh scene state token and uses mutationId replay protection plus native GUID/dependencyHash/root verification.",
+      inputSchema: prefabAssetCreateInputSchema,
+    },
+    async (args) => {
+      try {
+        const input = args as {
+          sourceGlobalObjectId: string;
+          destinationPath: string;
+          mutationId?: string;
+          expectedStateEpoch: string;
+          expectedStateRevision: number;
+        };
+        const options: PrefabAssetCreateOptions = {
+          sourceGlobalObjectId: input.sourceGlobalObjectId,
+          destinationPath: input.destinationPath,
+          expectedStateEpoch: input.expectedStateEpoch,
+          expectedStateRevision: input.expectedStateRevision,
+        };
+        if (input.mutationId !== undefined) options.mutationId = input.mutationId;
+        await preflight(bridge, "prefab.asset.create", "state.revision.v1");
+        return success(await bridge.requestCreatePrefabAsset(options));
       } catch (error) {
         return toolError(error);
       }
