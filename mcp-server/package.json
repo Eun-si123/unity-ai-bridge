@@ -26,7 +26,8 @@
     "verify:components": "npm run build && node dist/src/dev/verify-component-inspect-unity.js",
     "verify:component-mutations": "npm run build && node dist/src/dev/verify-component-mutation-unity.js",
     "verify:component-properties": "npm run build && node dist/src/dev/verify-component-property-unity.js",
-    "verify:assets": "npm run build && node dist/src/dev/verify-asset-inspection-unity.js"
+    "verify:assets": "npm run build && node dist/src/dev/verify-asset-inspection-unity.js",
+    "verify:prefab": "npm run build && node dist/src/dev/verify-prefab-unity.js"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "2.0.0",
