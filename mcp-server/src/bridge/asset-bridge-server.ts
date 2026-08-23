@@ -113,12 +113,38 @@ export interface PrefabInstantiatePayload {
   stateRevision: number;
 }
 
+export interface PrefabAssetCreateOptions {
+  sourceGlobalObjectId: string;
+  destinationPath: string;
+  mutationId?: string;
+  expectedStateEpoch: string;
+  expectedStateRevision: number;
+}
+
+export interface PrefabAssetCreatePayload {
+  mutationId: string;
+  replayed: boolean;
+  created: boolean;
+  sourceGlobalObjectId: string;
+  sourceName: string;
+  destinationPath: string;
+  prefabGuid: string;
+  dependencyHash: string;
+  prefabAssetType: string;
+  rootName: string;
+  expectedStateEpoch: string;
+  expectedStateRevision: number;
+  stateEpoch: string;
+  stateRevision: number;
+}
+
 const DEFAULT_SEARCH_FOLDERS = ["Assets"] as const;
 const DEFAULT_MAX_RESULTS = 50;
 const MAX_RESULTS = 200;
 const MAX_FILTER_LENGTH = 256;
 const MAX_FOLDER_COUNT = 16;
 const MAX_PATH_LENGTH = 512;
+const MAX_GLOBAL_OBJECT_ID_LENGTH = 256;
 const DEFAULT_MAX_DEPENDENCIES = 64;
 const MAX_DEPENDENCIES = 256;
 const DEFAULT_PREFAB_MAX_DEPTH = 8;
@@ -253,6 +279,45 @@ export class AssetBridgeServer extends ComponentPropertyBridgeServer {
       throw new Error(`${message} mutationId=${mutationId}`);
     }
   }
+
+  public async requestCreatePrefabAsset(
+    options: PrefabAssetCreateOptions,
+    timeoutMs = 5000,
+  ): Promise<PrefabAssetCreatePayload> {
+    const editor = this.connectedEditor;
+    if (editor === undefined) {
+      throw new Error("No Unity Editor is connected to the local bridge.");
+    }
+
+    validateGlobalObjectIdString(options.sourceGlobalObjectId, "sourceGlobalObjectId");
+    validatePrefabDestinationPath(options.destinationPath);
+    validateStateExpectation(options.expectedStateEpoch, options.expectedStateRevision);
+    const mutationId = options.mutationId ?? randomUUID();
+    validateMutationId(mutationId);
+
+    try {
+      const result = await this.requestOperation(
+        "prefab.asset.create",
+        {
+          sourceGlobalObjectId: options.sourceGlobalObjectId,
+          destinationPath: options.destinationPath,
+          mutationId,
+          expectedStateEpoch: options.expectedStateEpoch,
+          expectedStateRevision: options.expectedStateRevision,
+        },
+        { editorId: editor.editorId, connectionGeneration: editor.connectionGeneration },
+        timeoutMs,
+        "destructive",
+      );
+      if (!isPrefabAssetCreatePayload(result)) {
+        throw new Error("Unity returned an invalid prefab.asset.create payload.");
+      }
+      return result;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`${message} mutationId=${mutationId}`);
+    }
+  }
 }
 
 function validateFilter(value: string): void {
@@ -302,6 +367,25 @@ function validateProjectPath(value: string, name: string): void {
     !value.startsWith("Packages/")
   ) {
     throw new Error(`${name} must be under Assets or Packages.`);
+  }
+}
+
+function validatePrefabDestinationPath(value: string): void {
+  validateProjectPath(value, "destinationPath");
+  if (!value.startsWith("Assets/")) {
+    throw new Error("destinationPath must be under Assets; package assets are not writable by this operation.");
+  }
+  if (!value.toLowerCase().endsWith(".prefab")) {
+    throw new Error("destinationPath must end in .prefab.");
+  }
+}
+
+function validateGlobalObjectIdString(value: string, name: string): void {
+  if (typeof value !== "string" || value.length === 0 || value.length > MAX_GLOBAL_OBJECT_ID_LENGTH) {
+    throw new Error(`${name} must be 1..${MAX_GLOBAL_OBJECT_ID_LENGTH} characters.`);
+  }
+  if (!value.startsWith("GlobalObjectId_")) {
+    throw new Error(`${name} must be a Unity GlobalObjectId string.`);
   }
 }
 
@@ -454,6 +538,27 @@ function isPrefabInstantiatePayload(value: unknown): value is PrefabInstantiateP
     typeof candidate.sceneName === "string" &&
     typeof candidate.scenePath === "string" &&
     isNonNegativeInteger(candidate.siblingIndex) &&
+    typeof candidate.expectedStateEpoch === "string" && candidate.expectedStateEpoch.length > 0 &&
+    isPositiveInteger(candidate.expectedStateRevision) &&
+    typeof candidate.stateEpoch === "string" && candidate.stateEpoch.length > 0 &&
+    isPositiveInteger(candidate.stateRevision)
+  );
+}
+
+function isPrefabAssetCreatePayload(value: unknown): value is PrefabAssetCreatePayload {
+  if (typeof value !== "object" || value === null) return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.mutationId === "string" && candidate.mutationId.length > 0 &&
+    typeof candidate.replayed === "boolean" &&
+    candidate.created === true &&
+    typeof candidate.sourceGlobalObjectId === "string" && candidate.sourceGlobalObjectId.length > 0 &&
+    typeof candidate.sourceName === "string" &&
+    typeof candidate.destinationPath === "string" && candidate.destinationPath.startsWith("Assets/") &&
+    typeof candidate.prefabGuid === "string" && candidate.prefabGuid.length > 0 &&
+    typeof candidate.dependencyHash === "string" && candidate.dependencyHash.length > 0 &&
+    typeof candidate.prefabAssetType === "string" && candidate.prefabAssetType.length > 0 &&
+    typeof candidate.rootName === "string" &&
     typeof candidate.expectedStateEpoch === "string" && candidate.expectedStateEpoch.length > 0 &&
     isPositiveInteger(candidate.expectedStateRevision) &&
     typeof candidate.stateEpoch === "string" && candidate.stateEpoch.length > 0 &&
