@@ -632,7 +632,7 @@ export class LocalBridgeServer {
     });
   }
 
-  private async requestOperation(
+  protected async requestOperation(
     operation: string,
     args: Record<string, unknown>,
     route: BridgeRoute,

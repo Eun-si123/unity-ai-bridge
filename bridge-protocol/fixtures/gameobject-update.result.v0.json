@@ -1,0 +1,44 @@
+{
+  "protocolVersion": "0",
+  "requestId": "req-gameobject-update-1",
+  "ok": true,
+  "result": {
+    "mutationId": "fixture-gameobject-update-1",
+    "replayed": false,
+    "changed": true,
+    "requestedGlobalObjectId": "GlobalObjectId_V1-2-00000000000000000000000000000000-1-0",
+    "requestedName": "RenamedObject",
+    "requestedActiveSelf": false,
+    "expectedStateEpoch": "fixture-epoch",
+    "expectedStateRevision": 20,
+    "gameObject": {
+      "globalObjectId": "GlobalObjectId_V1-2-00000000000000000000000000000000-1-0",
+      "instanceId": 101,
+      "name": "RenamedObject",
+      "activeSelf": false,
+      "activeInHierarchy": false,
+      "childCount": 0,
+      "sceneName": "SampleScene",
+      "scenePath": "Assets/Scenes/SampleScene.unity",
+      "hierarchyPath": "RenamedObject",
+      "siblingIndex": 0,
+      "sceneIsDirty": true,
+      "stateEpoch": "fixture-epoch",
+      "stateRevision": 21
+    }
+  },
+  "warnings": [],
+  "changedTargets": [
+    {
+      "globalObjectId": "GlobalObjectId_V1-2-00000000000000000000000000000000-1-0",
+      "instanceId": 101,
+      "name": "RenamedObject"
+    }
+  ],
+  "dirtyState": "dirty",
+  "undo": {
+    "available": true,
+    "groupName": "Unity AI Bridge: Update GameObject"
+  },
+  "compileState": "idle"
+}

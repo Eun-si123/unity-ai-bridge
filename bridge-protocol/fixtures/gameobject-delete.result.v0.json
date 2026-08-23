@@ -1,0 +1,28 @@
+{
+  "protocolVersion": "0",
+  "requestId": "req-gameobject-delete-1",
+  "ok": true,
+  "result": {
+    "mutationId": "fixture-gameobject-delete-1",
+    "replayed": false,
+    "deleted": true,
+    "requestedGlobalObjectId": "GlobalObjectId_V1-2-00000000000000000000000000000000-1-0",
+    "deletedName": "RenamedObject",
+    "deletedSceneName": "SampleScene",
+    "deletedScenePath": "Assets/Scenes/SampleScene.unity",
+    "deletedHierarchyPath": "RenamedObject",
+    "deletedChildCount": 0,
+    "expectedStateEpoch": "fixture-epoch",
+    "expectedStateRevision": 21,
+    "stateEpoch": "fixture-epoch",
+    "stateRevision": 22
+  },
+  "warnings": [],
+  "changedTargets": [],
+  "dirtyState": "dirty",
+  "undo": {
+    "available": true,
+    "groupName": "Unity AI Bridge: Delete GameObject"
+  },
+  "compileState": "idle"
+}

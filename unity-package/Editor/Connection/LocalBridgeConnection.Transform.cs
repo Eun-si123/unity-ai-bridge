@@ -31,6 +31,11 @@ namespace UnityAiBridge.Editor.Connection
                 return true;
             }
 
+            if (await TryHandleGameObjectEditCommandAsync(current, command, rawJson, cancellationToken))
+            {
+                return true;
+            }
+
             return false;
         }
 

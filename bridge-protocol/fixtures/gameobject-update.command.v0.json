@@ -1,0 +1,19 @@
+{
+  "protocolVersion": "0",
+  "requestId": "req-gameobject-update-1",
+  "operation": "gameObject.update",
+  "arguments": {
+    "globalObjectId": "GlobalObjectId_V1-2-00000000000000000000000000000000-1-0",
+    "name": "RenamedObject",
+    "activeSelf": false,
+    "mutationId": "fixture-gameobject-update-1",
+    "expectedStateEpoch": "fixture-epoch",
+    "expectedStateRevision": 20
+  },
+  "risk": "write",
+  "route": {
+    "editorId": "fixture-editor",
+    "connectionGeneration": 1
+  },
+  "deadlineUnixMs": 2000000000000
+}

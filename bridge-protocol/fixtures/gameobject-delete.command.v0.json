@@ -1,0 +1,17 @@
+{
+  "protocolVersion": "0",
+  "requestId": "req-gameobject-delete-1",
+  "operation": "gameObject.delete",
+  "arguments": {
+    "globalObjectId": "GlobalObjectId_V1-2-00000000000000000000000000000000-1-0",
+    "mutationId": "fixture-gameobject-delete-1",
+    "expectedStateEpoch": "fixture-epoch",
+    "expectedStateRevision": 21
+  },
+  "risk": "destructive",
+  "route": {
+    "editorId": "fixture-editor",
+    "connectionGeneration": 1
+  },
+  "deadlineUnixMs": 2000000000000
+}

@@ -9,6 +9,8 @@ const expectedCapabilities = [
   "editor.diagnostics",
   "object.resolve",
   "gameObject.create",
+  "gameObject.update",
+  "gameObject.delete",
   "scene.save",
   "transform.get",
   "transform.set",
@@ -35,6 +37,8 @@ try {
     "unity_get_hierarchy",
     "unity_get_transform",
     "unity_set_transform",
+    "unity_update_game_object",
+    "unity_delete_game_object",
   ]) {
     if (!tools.some((tool) => tool.name === required)) {
       throw new Error(`MCP server did not advertise ${required}.`);
