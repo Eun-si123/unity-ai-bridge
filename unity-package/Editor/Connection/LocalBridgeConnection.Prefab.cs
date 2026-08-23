@@ -253,6 +253,14 @@ namespace UnityAiBridge.Editor.Connection
             {
                 await SendErrorAsync(current, command.requestId, "timeout", "deadline_exceeded", exception.Message, cancellationToken);
             }
+            catch (PrefabAssetCreateCompilingException exception)
+            {
+                await SendErrorAsync(current, command.requestId, "compile_reload", "editor_compiling", exception.Message, cancellationToken);
+            }
+            catch (PrefabAssetCreatePlayModeException exception)
+            {
+                await SendErrorAsync(current, command.requestId, "validation", "play_mode_active", exception.Message, cancellationToken);
+            }
             catch (EditorStateStaleException exception)
             {
                 await SendErrorAsync(current, command.requestId, "stale_state", "state_revision_mismatch", exception.Message, cancellationToken);
