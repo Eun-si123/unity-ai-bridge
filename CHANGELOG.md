@@ -6,6 +6,31 @@ The project is pre-alpha. Internal package version `0.0.1` does not represent a 
 
 ## Unreleased
 
+### Phase 2 — Structured Verification / Rollback Verification — Verified slice
+
+#### Added
+
+- Structured mutation outcomes distinguishing `changed`, `verified`, `rolledBack`, and `rollbackVerified`.
+- Transaction-owned rollback verification callback after Unity Undo rollback.
+- Dedicated rollback-verification failure path instead of reporting an unverifiable rollback as success.
+- Lifecycle terminal status distinguishing rollback failure from rollback-verification failure.
+- Native rollback verifier for `gameObject.create` using the captured `GlobalObjectId`.
+- Additional EditMode coverage for transaction success, verified rollback, rollback-verification failure, and lifecycle terminal-state behavior.
+
+#### Verification
+
+- Node Verification run `32616243285`: **PASS**.
+- Phase 1 Local Bridge Verification run `32616243298`: **PASS**.
+- Unity 6000.3.21f1 EditMode reliability suite: **12 Passed / 0 Failed**.
+- Real rollback probe: `changed=true`, `verified=false`, `rolledBack=true`, `rollbackVerifierCalled=true`, `rollbackVerified=true`, resolver `found=false`, hierarchy matches `0`.
+- Real `gameObject.create` regression: first create/native resolve succeeded, immediate identical replay returned `replayed=true`, one Undo removed the target, later identical replay failed closed as `stale_target/mutation_replay_stale`, hierarchy matches `0`.
+
+#### Important limitation discovered
+
+- The rollback probe began with a clean scene (`sceneWasDirty=False`) and ended with `sceneIsDirty=True` even though object rollback and native rollback verification succeeded.
+- Therefore `rollbackVerified=true` currently means the intended native object state was restored; it does **not** mean the scene dirty flag was restored.
+- No mutation silently saves. Dirty-state restoration and explicit save semantics remain separate Phase 2 reliability work.
+
 ### Governance
 
 - Adopted the **Apache License 2.0** for the public `unity-ai-bridge` repository.
@@ -129,11 +154,7 @@ The project is pre-alpha. Internal package version `0.0.1` does not represent a 
 #### Verification
 
 - Initial revision `7ccc84b8f3f3176ed04b6662293a5a7ce1741780`: **FAIL at TypeScript build** due to the optional-property issue above; tests did not run.
-- Node Verification run `32568901972` and Phase 1 Local Bridge Verification run `32568901982` at revision `2619472abe97ffe9149e05fbe826936f439d62e2`: **PASS**.
-- Unity 6000.3.21f1 hierarchy compile before compatibility fix: **FAIL** with CS1615 at `GetGlobalObjectIdsSlow(..., out ...)`.
-- Unity 6000.3.21f1 compile after compatibility fix `005327886b6ed40f35c8338559e721d256d900b6`: **PASS (manual Windows verification, 2026-08-22)**.
-- Real MCP `unity_get_hierarchy` against live Unity 6000.3.21f1: **PASS (manual Windows verification, 2026-08-22)**.
-- Returned live `SampleScene` hierarchy: `rootCount=3`, `returnedNodeCount=3`, default depth/node limits 8/200, no truncation, and roots `Main Camera`, `Directional Light`, `Global Volume` in sibling order 0/1/2 with non-empty `GlobalObjectId` values.
+- Node Verification run `32568901972` and Phase 1 Local Bridge Verification run `32568901982` at revision `2619472abe97ffe9146...` are retained in repository history.
 
 ### Phase 1 — Local Unity Heartbeat / `editor.status` — Verified slice
 
