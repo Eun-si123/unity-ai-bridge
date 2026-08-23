@@ -89,7 +89,7 @@ Verified foundation:
 Phase 2 established the common safety contract that future write tools must adopt individually.
 
 - ✅ Main-thread execution for current bridge operations
-- 🟨 Structured scene/state snapshot — epoch/revision + bounded hierarchy/state metadata are available; richer component/asset snapshots move with Phase 3 tool families
+- 🟨 Structured scene/state snapshot — epoch/revision + bounded hierarchy/state metadata are available; richer Component/Asset snapshots move with Phase 3 tool families
 - ✅ Stable object resolver using Unity `GlobalObjectId`
 - ✅ State revision / stale-state rejection
 - ✅ Current single-editor command serialization + mutation re-entry guard
@@ -140,13 +140,13 @@ See [`docs/PHASE2_EXIT_GATE.md`](docs/PHASE2_EXIT_GATE.md).
 
 Target tool families, in approximate implementation order:
 
-- ✅ Transform read/update for a resolved GameObject — `unity_get_transform` + `unity_set_transform` verified on Windows / Unity 6000.3.21f1 with native readback, same-id replay, Undo restoration, stale-replay rejection, cleanup, and **23 Passed / 0 Failed** EditMode tests
-- ✅ GameObject update/delete — `unity_update_game_object` + `unity_delete_game_object` verified on Windows / Unity 6000.3.21f1 with native update/delete verification, same-id replay, Undo restoration, stale-replay rejection, cleanup, and **29 Passed / 0 Failed** EditMode tests
-- ✅ Component inspect — `unity_get_components` verified on Windows / Unity 6000.3.21f1 with bounded `SerializedObject`/`SerializedProperty` snapshots, Component `GlobalObjectId` resolver ownership, automatic cleanup, and **33 Passed / 0 Failed** EditMode tests
-- ✅ Component add/remove — `unity_add_component` + `unity_remove_component` verified on Windows / Unity 6000.3.21f1 with exact Component identities, native add/absence verification, same-id replay, Undo restoration/removal, stale-replay rejection, cleanup, and **39 Passed / 0 Failed** EditMode tests
-- 🟨 Component property edit — next Component-domain slice; must reuse the verified serialized-property snapshot paths and Phase 2 mutation guarantees
-- ⬜ Asset search/inspect
-- ⬜ Prefab inspect/create/apply workflows
+- ✅ Transform read/update — `unity_get_transform` + `unity_set_transform`, native readback/replay/Undo/stale-replay/cleanup, **23/23** EditMode
+- ✅ GameObject update/delete — `unity_update_game_object` + `unity_delete_game_object`, native verification/replay/Undo/stale-replay/cleanup, **29/29** EditMode
+- ✅ Component inspect — `unity_get_components`, bounded visible serialized snapshots + Component identity/ownership, **33/33** EditMode
+- ✅ Component add/remove — `unity_add_component` + `unity_remove_component`, exact Component identities + Undo/native verification/replay, **39/39** EditMode
+- ✅ Component property edit — `unity_set_component_property`, bounded visible Boolean/Integer/Float/String/Vector3 writes with native readback, Undo and stale replay protection, **45/45** EditMode
+- ✅ Asset search/inspect — `unity_search_assets` + `unity_inspect_asset`, bounded Unity AssetDatabase search and exact asset metadata/dependency inspection, **50/50** EditMode
+- 🟨 Prefab inspect/create/apply workflows — next major editing slice
 - ⬜ Script read/write workflows
 - ⬜ Diagnostics beyond the Phase 1 minimum where additional coverage is useful
 - ⬜ Play Mode control
@@ -156,7 +156,7 @@ Target tool families, in approximate implementation order:
 Reliability requirements inherited from Phase 2:
 
 - stable target resolution,
-- stale-state preconditions,
+- stale-state or domain-appropriate concurrency preconditions,
 - explicit risk classification,
 - main-thread execution,
 - Undo grouping where applicable,
@@ -170,6 +170,8 @@ Reliability requirements inherited from Phase 2:
 Supporting work:
 
 - ✅ Capability/version reporting foundation already exists
+- ✅ Bounded structured Component inspection foundation
+- ✅ Bounded AssetDatabase search/inspection foundation
 - 🟨 Consistent risk classification — current read/write/destructive operations classified; new tools must follow the same scheme
 - ⬜ Broader tool-schema compatibility tests as the surface grows
 - ⬜ Better structured error explanations for AI clients
