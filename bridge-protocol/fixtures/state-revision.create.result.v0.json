@@ -1,0 +1,23 @@
+{
+  "protocolVersion": "0",
+  "requestId": "req-state-create-1",
+  "ok": true,
+  "result": {
+    "mutationId": "mutation-state-create-1",
+    "replayed": false,
+    "globalObjectId": "GlobalObjectId_V1-2-example-42-0",
+    "instanceId": 12345,
+    "name": "StateCheckedObject",
+    "hierarchyPath": "StateCheckedObject",
+    "sceneName": "SampleScene",
+    "scenePath": "Assets/Scenes/SampleScene.unity",
+    "siblingIndex": 3,
+    "expectedStateEpoch": "6f39b7c06e4548319fdcd8a02b388afe",
+    "expectedStateRevision": 42,
+    "stateEpoch": "6f39b7c06e4548319fdcd8a02b388afe",
+    "stateRevision": 43
+  },
+  "warnings": [],
+  "dirtyState": "dirty",
+  "compileState": "idle"
+}
