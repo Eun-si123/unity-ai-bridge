@@ -236,6 +236,12 @@ namespace UnityAiBridge.Editor.Connection
                 return;
             }
 
+            if (string.Equals(command.operation, "object.resolve", StringComparison.Ordinal))
+            {
+                await HandleObjectResolveAsync(current, command, cancellationToken);
+                return;
+            }
+
             if (string.Equals(command.operation, "gameObject.create", StringComparison.Ordinal))
             {
                 await HandleGameObjectCreateAsync(current, command, cancellationToken);
@@ -395,6 +401,58 @@ namespace UnityAiBridge.Editor.Connection
             }
         }
 
+        private static async Task HandleObjectResolveAsync(
+            ClientWebSocket current,
+            BridgeCommandDto command,
+            CancellationToken cancellationToken)
+        {
+            var globalObjectId = command.arguments != null ? command.arguments.globalObjectId : null;
+
+            try
+            {
+                ObjectResolverCommand.ValidateArguments(globalObjectId);
+            }
+            catch (ArgumentException exception)
+            {
+                await SendErrorAsync(
+                    current,
+                    command.requestId,
+                    "validation",
+                    "invalid_global_object_id",
+                    exception.Message,
+                    cancellationToken);
+                return;
+            }
+
+            try
+            {
+                var result = await EditorMainThreadDispatcher.InvokeAsync(
+                    () => ObjectResolverCommand.Execute(globalObjectId));
+                var response = new BridgeObjectResolveResultDto
+                {
+                    protocolVersion = BridgeProtocol.Version,
+                    requestId = command.requestId,
+                    ok = true,
+                    result = result,
+                    warnings = Array.Empty<string>(),
+                    dirtyState = "unchanged",
+                    compileState = EditorApplication.isCompiling ? "compiling" : "idle",
+                };
+
+                await SendJsonAsync(current, JsonUtility.ToJson(response), cancellationToken);
+            }
+            catch (Exception exception)
+            {
+                await SendErrorAsync(
+                    current,
+                    command.requestId,
+                    "unity_api",
+                    "object_resolve_failed",
+                    exception.Message,
+                    cancellationToken);
+            }
+        }
+
         private static async Task HandleGameObjectCreateAsync(
             ClientWebSocket current,
             BridgeCommandDto command,
@@ -481,6 +539,26 @@ namespace UnityAiBridge.Editor.Connection
                     command.requestId,
                     "validation",
                     "mutation_id_conflict",
+                    exception.Message,
+                    cancellationToken);
+            }
+            catch (GameObjectCreateReplayStaleException exception)
+            {
+                await SendErrorAsync(
+                    current,
+                    command.requestId,
+                    "stale_target",
+                    "mutation_replay_stale",
+                    exception.Message,
+                    cancellationToken);
+            }
+            catch (GameObjectCreateReadbackException exception)
+            {
+                await SendErrorAsync(
+                    current,
+                    command.requestId,
+                    "stale_target",
+                    "native_readback_failed",
                     exception.Message,
                     cancellationToken);
             }
@@ -642,6 +720,7 @@ namespace UnityAiBridge.Editor.Connection
             public int maxNodes;
             public int maxEntries;
             public string minimumSeverity;
+            public string globalObjectId;
             public string name;
             public string mutationId;
         }
@@ -700,6 +779,18 @@ namespace UnityAiBridge.Editor.Connection
             public string requestId;
             public bool ok;
             public DiagnosticsPayload result;
+            public string[] warnings;
+            public string dirtyState;
+            public string compileState;
+        }
+
+        [Serializable]
+        private sealed class BridgeObjectResolveResultDto
+        {
+            public string protocolVersion;
+            public string requestId;
+            public bool ok;
+            public ObjectResolvePayload result;
             public string[] warnings;
             public string dirtyState;
             public string compileState;
