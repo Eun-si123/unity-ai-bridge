@@ -116,10 +116,70 @@ export interface ComponentInspectPayload {
   stateRevision: number;
 }
 
+export interface ComponentSnapshotPayload {
+  globalObjectId: string;
+  instanceId: number;
+  typeName: string;
+  assemblyQualifiedName: string;
+  gameObjectGlobalObjectId: string;
+  gameObjectInstanceId: number;
+  gameObjectName: string;
+  sceneName: string;
+  scenePath: string;
+  componentIndex: number;
+  stateEpoch: string;
+  stateRevision: number;
+}
+
+export interface ComponentAddOptions {
+  gameObjectGlobalObjectId: string;
+  typeName: string;
+  mutationId?: string;
+  expectedStateEpoch: string;
+  expectedStateRevision: number;
+}
+
+export interface ComponentAddPayload {
+  mutationId: string;
+  replayed: boolean;
+  added: boolean;
+  requestedGameObjectGlobalObjectId: string;
+  requestedTypeName: string;
+  expectedStateEpoch: string;
+  expectedStateRevision: number;
+  component: ComponentSnapshotPayload;
+}
+
+export interface ComponentRemoveOptions {
+  componentGlobalObjectId: string;
+  mutationId?: string;
+  expectedStateEpoch: string;
+  expectedStateRevision: number;
+}
+
+export interface ComponentRemovePayload {
+  mutationId: string;
+  replayed: boolean;
+  removed: boolean;
+  requestedComponentGlobalObjectId: string;
+  deletedTypeName: string;
+  deletedAssemblyQualifiedName: string;
+  deletedGameObjectGlobalObjectId: string;
+  deletedGameObjectName: string;
+  deletedSceneName: string;
+  deletedScenePath: string;
+  deletedComponentIndex: number;
+  expectedStateEpoch: string;
+  expectedStateRevision: number;
+  stateEpoch: string;
+  stateRevision: number;
+}
+
 const MAX_GLOBAL_OBJECT_ID_LENGTH = 256;
 const MAX_GAMEOBJECT_NAME_LENGTH = 128;
 const MAX_MUTATION_ID_LENGTH = 128;
 const MAX_STATE_EPOCH_LENGTH = 128;
+const MAX_COMPONENT_TYPE_NAME_LENGTH = 512;
 const MUTATION_ID_PATTERN = /^[A-Za-z0-9._:-]+$/;
 const DEFAULT_MAX_COMPONENTS = 32;
 const MAX_COMPONENTS = 64;
@@ -252,6 +312,82 @@ export class EditingBridgeServer extends LocalBridgeServer {
     return result;
   }
 
+  public async requestAddComponent(
+    options: ComponentAddOptions,
+    timeoutMs = 5000,
+  ): Promise<ComponentAddPayload> {
+    const editor = this.requireConnectedEditorMetadata();
+    const mutationId = options.mutationId ?? randomUUID();
+    validateGlobalObjectId(options.gameObjectGlobalObjectId, "gameObjectGlobalObjectId");
+    validateComponentTypeName(options.typeName);
+    validateMutationId(mutationId);
+    validateStateExpectation(options.expectedStateEpoch, options.expectedStateRevision);
+
+    try {
+      const result = await this.requestOperation(
+        "component.add",
+        {
+          gameObjectGlobalObjectId: options.gameObjectGlobalObjectId,
+          typeName: options.typeName,
+          mutationId,
+          expectedStateEpoch: options.expectedStateEpoch,
+          expectedStateRevision: options.expectedStateRevision,
+        },
+        {
+          editorId: editor.editorId,
+          connectionGeneration: editor.connectionGeneration,
+        },
+        timeoutMs,
+        "write",
+      );
+
+      if (!isComponentAddPayload(result)) {
+        throw new Error("Unity returned an invalid component.add payload.");
+      }
+      return result;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`${message} mutationId=${mutationId}`);
+    }
+  }
+
+  public async requestRemoveComponent(
+    options: ComponentRemoveOptions,
+    timeoutMs = 5000,
+  ): Promise<ComponentRemovePayload> {
+    const editor = this.requireConnectedEditorMetadata();
+    const mutationId = options.mutationId ?? randomUUID();
+    validateGlobalObjectId(options.componentGlobalObjectId, "componentGlobalObjectId");
+    validateMutationId(mutationId);
+    validateStateExpectation(options.expectedStateEpoch, options.expectedStateRevision);
+
+    try {
+      const result = await this.requestOperation(
+        "component.remove",
+        {
+          componentGlobalObjectId: options.componentGlobalObjectId,
+          mutationId,
+          expectedStateEpoch: options.expectedStateEpoch,
+          expectedStateRevision: options.expectedStateRevision,
+        },
+        {
+          editorId: editor.editorId,
+          connectionGeneration: editor.connectionGeneration,
+        },
+        timeoutMs,
+        "destructive",
+      );
+
+      if (!isComponentRemovePayload(result)) {
+        throw new Error("Unity returned an invalid component.remove payload.");
+      }
+      return result;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`${message} mutationId=${mutationId}`);
+    }
+  }
+
   private requireConnectedEditorMetadata(): {
     editorId: string;
     connectionGeneration: number;
@@ -282,6 +418,15 @@ function validateName(name: string): void {
   }
   if (name.length > MAX_GAMEOBJECT_NAME_LENGTH) {
     throw new Error(`name must be at most ${MAX_GAMEOBJECT_NAME_LENGTH} characters.`);
+  }
+}
+
+function validateComponentTypeName(typeName: string): void {
+  if (typeof typeName !== "string" || typeName.trim().length === 0) {
+    throw new Error("typeName is required.");
+  }
+  if (typeName.length > MAX_COMPONENT_TYPE_NAME_LENGTH) {
+    throw new Error(`typeName must be at most ${MAX_COMPONENT_TYPE_NAME_LENGTH} characters.`);
   }
 }
 
@@ -457,6 +602,80 @@ function isComponentPropertyPayload(value: unknown): value is ComponentPropertyP
     Number.isSafeInteger(candidate.objectReferenceInstanceId) &&
     typeof candidate.objectReferenceName === "string" &&
     typeof candidate.objectReferenceType === "string"
+  );
+}
+
+function isComponentSnapshotPayload(value: unknown): value is ComponentSnapshotPayload {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.globalObjectId === "string" &&
+    candidate.globalObjectId.length > 0 &&
+    typeof candidate.instanceId === "number" &&
+    Number.isSafeInteger(candidate.instanceId) &&
+    typeof candidate.typeName === "string" &&
+    candidate.typeName.length > 0 &&
+    typeof candidate.assemblyQualifiedName === "string" &&
+    typeof candidate.gameObjectGlobalObjectId === "string" &&
+    candidate.gameObjectGlobalObjectId.length > 0 &&
+    typeof candidate.gameObjectInstanceId === "number" &&
+    Number.isSafeInteger(candidate.gameObjectInstanceId) &&
+    typeof candidate.gameObjectName === "string" &&
+    typeof candidate.sceneName === "string" &&
+    typeof candidate.scenePath === "string" &&
+    isNonNegativeInteger(candidate.componentIndex) &&
+    isStateRevision(candidate.stateEpoch, candidate.stateRevision)
+  );
+}
+
+function isComponentAddPayload(value: unknown): value is ComponentAddPayload {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.mutationId === "string" &&
+    candidate.mutationId.length > 0 &&
+    typeof candidate.replayed === "boolean" &&
+    candidate.added === true &&
+    typeof candidate.requestedGameObjectGlobalObjectId === "string" &&
+    candidate.requestedGameObjectGlobalObjectId.length > 0 &&
+    typeof candidate.requestedTypeName === "string" &&
+    candidate.requestedTypeName.length > 0 &&
+    typeof candidate.expectedStateEpoch === "string" &&
+    candidate.expectedStateEpoch.length > 0 &&
+    isPositiveInteger(candidate.expectedStateRevision) &&
+    isComponentSnapshotPayload(candidate.component)
+  );
+}
+
+function isComponentRemovePayload(value: unknown): value is ComponentRemovePayload {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.mutationId === "string" &&
+    candidate.mutationId.length > 0 &&
+    typeof candidate.replayed === "boolean" &&
+    candidate.removed === true &&
+    typeof candidate.requestedComponentGlobalObjectId === "string" &&
+    candidate.requestedComponentGlobalObjectId.length > 0 &&
+    typeof candidate.deletedTypeName === "string" &&
+    candidate.deletedTypeName.length > 0 &&
+    typeof candidate.deletedAssemblyQualifiedName === "string" &&
+    typeof candidate.deletedGameObjectGlobalObjectId === "string" &&
+    candidate.deletedGameObjectGlobalObjectId.length > 0 &&
+    typeof candidate.deletedGameObjectName === "string" &&
+    typeof candidate.deletedSceneName === "string" &&
+    typeof candidate.deletedScenePath === "string" &&
+    isNonNegativeInteger(candidate.deletedComponentIndex) &&
+    typeof candidate.expectedStateEpoch === "string" &&
+    candidate.expectedStateEpoch.length > 0 &&
+    isPositiveInteger(candidate.expectedStateRevision) &&
+    isStateRevision(candidate.stateEpoch, candidate.stateRevision)
   );
 }
 
