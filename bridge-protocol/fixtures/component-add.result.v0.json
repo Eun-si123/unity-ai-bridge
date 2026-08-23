@@ -1,0 +1,42 @@
+{
+  "protocolVersion": "0",
+  "requestId": "fixture-component-add",
+  "ok": true,
+  "result": {
+    "mutationId": "fixture-component-add",
+    "replayed": false,
+    "added": true,
+    "requestedGameObjectGlobalObjectId": "GlobalObjectId_V1-2-0123456789abcdef0123456789abcdef-1-0",
+    "requestedTypeName": "UnityEngine.BoxCollider",
+    "expectedStateEpoch": "fixture-epoch",
+    "expectedStateRevision": 20,
+    "component": {
+      "globalObjectId": "GlobalObjectId_V1-2-0123456789abcdef0123456789abcdef-2-0",
+      "instanceId": 202,
+      "typeName": "UnityEngine.BoxCollider",
+      "assemblyQualifiedName": "UnityEngine.BoxCollider, UnityEngine.PhysicsModule",
+      "gameObjectGlobalObjectId": "GlobalObjectId_V1-2-0123456789abcdef0123456789abcdef-1-0",
+      "gameObjectInstanceId": 101,
+      "gameObjectName": "Target",
+      "sceneName": "SampleScene",
+      "scenePath": "Assets/Scenes/SampleScene.unity",
+      "componentIndex": 1,
+      "stateEpoch": "fixture-epoch",
+      "stateRevision": 21
+    }
+  },
+  "warnings": [],
+  "changedTargets": [
+    {
+      "globalObjectId": "GlobalObjectId_V1-2-0123456789abcdef0123456789abcdef-2-0",
+      "instanceId": 202,
+      "name": "UnityEngine.BoxCollider"
+    }
+  ],
+  "dirtyState": "dirty",
+  "undo": {
+    "available": true,
+    "groupName": "Unity AI Bridge: Add Component"
+  },
+  "compileState": "idle"
+}

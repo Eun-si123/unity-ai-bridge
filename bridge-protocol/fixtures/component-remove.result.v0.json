@@ -1,0 +1,30 @@
+{
+  "protocolVersion": "0",
+  "requestId": "fixture-component-remove",
+  "ok": true,
+  "result": {
+    "mutationId": "fixture-component-remove",
+    "replayed": false,
+    "removed": true,
+    "requestedComponentGlobalObjectId": "GlobalObjectId_V1-2-0123456789abcdef0123456789abcdef-2-0",
+    "deletedTypeName": "UnityEngine.BoxCollider",
+    "deletedAssemblyQualifiedName": "UnityEngine.BoxCollider, UnityEngine.PhysicsModule",
+    "deletedGameObjectGlobalObjectId": "GlobalObjectId_V1-2-0123456789abcdef0123456789abcdef-1-0",
+    "deletedGameObjectName": "Target",
+    "deletedSceneName": "SampleScene",
+    "deletedScenePath": "Assets/Scenes/SampleScene.unity",
+    "deletedComponentIndex": 1,
+    "expectedStateEpoch": "fixture-epoch",
+    "expectedStateRevision": 21,
+    "stateEpoch": "fixture-epoch",
+    "stateRevision": 22
+  },
+  "warnings": [],
+  "changedTargets": [],
+  "dirtyState": "dirty",
+  "undo": {
+    "available": true,
+    "groupName": "Unity AI Bridge: Remove Component"
+  },
+  "compileState": "idle"
+}

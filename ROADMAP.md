@@ -143,7 +143,8 @@ Target tool families, in approximate implementation order:
 - ✅ Transform read/update for a resolved GameObject — `unity_get_transform` + `unity_set_transform` verified on Windows / Unity 6000.3.21f1 with native readback, same-id replay, Undo restoration, stale-replay rejection, cleanup, and **23 Passed / 0 Failed** EditMode tests
 - ✅ GameObject update/delete — `unity_update_game_object` + `unity_delete_game_object` verified on Windows / Unity 6000.3.21f1 with native update/delete verification, same-id replay, Undo restoration, stale-replay rejection, cleanup, and **29 Passed / 0 Failed** EditMode tests
 - ✅ Component inspect — `unity_get_components` verified on Windows / Unity 6000.3.21f1 with bounded `SerializedObject`/`SerializedProperty` snapshots, Component `GlobalObjectId` resolver ownership, automatic cleanup, and **33 Passed / 0 Failed** EditMode tests
-- 🟨 Component add/remove/edit — inspect foundation is verified; mutation operations remain pending
+- ✅ Component add/remove — `unity_add_component` + `unity_remove_component` verified on Windows / Unity 6000.3.21f1 with exact Component identities, native add/absence verification, same-id replay, Undo restoration/removal, stale-replay rejection, cleanup, and **39 Passed / 0 Failed** EditMode tests
+- 🟨 Component property edit — next Component-domain slice; must reuse the verified serialized-property snapshot paths and Phase 2 mutation guarantees
 - ⬜ Asset search/inspect
 - ⬜ Prefab inspect/create/apply workflows
 - ⬜ Script read/write workflows

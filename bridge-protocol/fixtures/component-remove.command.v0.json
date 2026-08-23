@@ -1,0 +1,17 @@
+{
+  "protocolVersion": "0",
+  "requestId": "fixture-component-remove",
+  "operation": "component.remove",
+  "arguments": {
+    "componentGlobalObjectId": "GlobalObjectId_V1-2-0123456789abcdef0123456789abcdef-2-0",
+    "mutationId": "fixture-component-remove",
+    "expectedStateEpoch": "fixture-epoch",
+    "expectedStateRevision": 21
+  },
+  "risk": "destructive",
+  "route": {
+    "editorId": "fixture-editor",
+    "connectionGeneration": 7
+  },
+  "deadlineUnixMs": 4102444800000
+}

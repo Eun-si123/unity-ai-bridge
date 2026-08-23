@@ -3,7 +3,9 @@ import { McpServer, fromJsonSchema } from "@modelcontextprotocol/server";
 import { requireAgentCapability } from "./agent/capabilities.js";
 import {
   EditingBridgeServer,
+  type ComponentAddOptions,
   type ComponentInspectOptions,
+  type ComponentRemoveOptions,
 } from "./bridge/editing-bridge-server.js";
 
 const inspectInputSchema = fromJsonSchema({
@@ -44,6 +46,72 @@ const inspectInputSchema = fromJsonSchema({
   additionalProperties: false,
 });
 
+const mutationIdentitySchema = {
+  mutationId: {
+    type: "string",
+    minLength: 1,
+    maxLength: 128,
+    pattern: "^[A-Za-z0-9._:-]+$",
+    description:
+      "Optional idempotency key. Reuse only for an ambiguous retry of this exact mutation intent. If omitted, the bridge generates one.",
+  },
+  expectedStateEpoch: {
+    type: "string",
+    minLength: 1,
+    maxLength: 128,
+    description: "Required optimistic-concurrency epoch from a recent Unity observation.",
+  },
+  expectedStateRevision: {
+    type: "integer",
+    minimum: 1,
+    description:
+      "Required optimistic-concurrency revision from the same observation. Stale state is rejected before mutation.",
+  },
+} as const;
+
+const addInputSchema = fromJsonSchema({
+  type: "object",
+  required: [
+    "gameObjectGlobalObjectId",
+    "typeName",
+    "expectedStateEpoch",
+    "expectedStateRevision",
+  ],
+  properties: {
+    gameObjectGlobalObjectId: {
+      type: "string",
+      minLength: 1,
+      maxLength: 256,
+      description: "GlobalObjectId of the active-scene GameObject that should receive the Component.",
+    },
+    typeName: {
+      type: "string",
+      minLength: 1,
+      maxLength: 512,
+      description:
+        "Exact loaded Unity Component full type name or assembly-qualified name, for example UnityEngine.BoxCollider. The first add slice rejects Transform/RectTransform types rather than replacing the object's mandatory Transform.",
+    },
+    ...mutationIdentitySchema,
+  },
+  additionalProperties: false,
+});
+
+const removeInputSchema = fromJsonSchema({
+  type: "object",
+  required: ["componentGlobalObjectId", "expectedStateEpoch", "expectedStateRevision"],
+  properties: {
+    componentGlobalObjectId: {
+      type: "string",
+      minLength: 1,
+      maxLength: 256,
+      description:
+        "GlobalObjectId of the exact Component to remove. This must be a Component identity returned by component inspection/resolution; GameObject IDs are not silently reinterpreted. Transform/RectTransform removal is rejected.",
+    },
+    ...mutationIdentitySchema,
+  },
+  additionalProperties: false,
+});
+
 export function registerComponentTools(
   server: McpServer,
   bridge: EditingBridgeServer,
@@ -76,22 +144,110 @@ export function registerComponentTools(
           options.maxDepth = input.maxDepth;
         }
 
-        const status = await bridge.requestEditorStatus();
-        requireAgentCapability(status, "component.inspect");
-        requireAgentCapability(status, "state.revision.v1");
-
+        await preflight(bridge, "component.inspect", "state.revision.v1");
         const result = await bridge.requestInspectComponents(options);
         return {
           content: [{ type: "text", text: JSON.stringify(result) }],
           structuredContent: result,
         };
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        return {
-          isError: true,
-          content: [{ type: "text", text: message }],
-        };
+        return toolError(error);
       }
     },
   );
+
+  server.registerTool(
+    "unity_add_component",
+    {
+      description:
+        "Add one concrete loaded Unity Component type to an active-scene GameObject. Requires a fresh state token. Unity records the add in Undo, verifies the new Component by GlobalObjectId/type/owner native readback, rolls back and verifies rollback on failed semantic verification, enforces the execution deadline, and protects ambiguous retries with mutationId replay rules. Transform/RectTransform are intentionally excluded from this first slice.",
+      inputSchema: addInputSchema,
+    },
+    async (args) => {
+      try {
+        const input = args as {
+          gameObjectGlobalObjectId: string;
+          typeName: string;
+          mutationId?: string;
+          expectedStateEpoch: string;
+          expectedStateRevision: number;
+        };
+        const options: ComponentAddOptions = {
+          gameObjectGlobalObjectId: input.gameObjectGlobalObjectId,
+          typeName: input.typeName,
+          expectedStateEpoch: input.expectedStateEpoch,
+          expectedStateRevision: input.expectedStateRevision,
+        };
+        if (input.mutationId !== undefined) {
+          options.mutationId = input.mutationId;
+        }
+
+        await preflight(bridge, "component.add", "state.revision.v1");
+        const result = await bridge.requestAddComponent(options);
+        return {
+          content: [{ type: "text", text: JSON.stringify(result) }],
+          structuredContent: result,
+        };
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    "unity_remove_component",
+    {
+      description:
+        "Remove one exact active-scene Component by Component GlobalObjectId with Unity Undo support. Requires a fresh state token. The mutation verifies native target absence, verifies restoration if rollback is required, enforces the execution deadline, and uses mutationId replay rules so an ambiguous retry does not remove a Component that was restored through Undo. Transform/RectTransform removal is rejected.",
+      inputSchema: removeInputSchema,
+    },
+    async (args) => {
+      try {
+        const input = args as {
+          componentGlobalObjectId: string;
+          mutationId?: string;
+          expectedStateEpoch: string;
+          expectedStateRevision: number;
+        };
+        const options: ComponentRemoveOptions = {
+          componentGlobalObjectId: input.componentGlobalObjectId,
+          expectedStateEpoch: input.expectedStateEpoch,
+          expectedStateRevision: input.expectedStateRevision,
+        };
+        if (input.mutationId !== undefined) {
+          options.mutationId = input.mutationId;
+        }
+
+        await preflight(bridge, "component.remove", "state.revision.v1");
+        const result = await bridge.requestRemoveComponent(options);
+        return {
+          content: [{ type: "text", text: JSON.stringify(result) }],
+          structuredContent: result,
+        };
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+}
+
+async function preflight(
+  bridge: EditingBridgeServer,
+  ...capabilities: string[]
+): Promise<void> {
+  const status = await bridge.requestEditorStatus();
+  for (const capability of capabilities) {
+    requireAgentCapability(status, capability);
+  }
+}
+
+function toolError(error: unknown): {
+  isError: true;
+  content: Array<{ type: "text"; text: string }>;
+} {
+  const message = error instanceof Error ? error.message : String(error);
+  return {
+    isError: true,
+    content: [{ type: "text", text: message }],
+  };
 }
