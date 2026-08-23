@@ -106,6 +106,25 @@ export interface DiagnosticsPayload {
   latestCompilation: CompilationSnapshotPayload;
 }
 
+export interface ObjectResolvePayload {
+  requestedGlobalObjectId: string;
+  found: boolean;
+  canonicalGlobalObjectId: string;
+  instanceId: number;
+  name: string;
+  objectType: string;
+  isGameObject: boolean;
+  isComponent: boolean;
+  owningGameObjectGlobalObjectId: string;
+  owningGameObjectInstanceId: number;
+  sceneName: string;
+  scenePath: string;
+  hierarchyPath: string;
+  siblingIndex: number;
+  activeSelf: boolean;
+  activeInHierarchy: boolean;
+}
+
 export interface GameObjectCreateOptions {
   name: string;
   mutationId?: string;
@@ -142,6 +161,7 @@ const DEFAULT_DIAGNOSTICS_MAX_ENTRIES = 100;
 const MAX_DIAGNOSTICS_ENTRIES = 200;
 const DEFAULT_DIAGNOSTICS_MINIMUM_SEVERITY = "warning" as const;
 const DIAGNOSTICS_SEVERITIES = new Set(["error", "warning", "log"]);
+const MAX_GLOBAL_OBJECT_ID_LENGTH = 256;
 const MAX_GAMEOBJECT_NAME_LENGTH = 128;
 const MAX_MUTATION_ID_LENGTH = 128;
 const MUTATION_ID_PATTERN = /^[A-Za-z0-9._:-]+$/;
@@ -305,6 +325,34 @@ export class LocalBridgeServer {
 
     if (!isDiagnosticsPayload(result)) {
       throw new Error("Unity returned an invalid editor.diagnostics payload.");
+    }
+    return result;
+  }
+
+  public async requestResolveObject(
+    globalObjectId: string,
+    timeoutMs = 5000,
+  ): Promise<ObjectResolvePayload> {
+    const editor = this.requireActiveEditor();
+    if (typeof globalObjectId !== "string" || globalObjectId.trim().length === 0) {
+      throw new Error("globalObjectId is required.");
+    }
+    if (globalObjectId.length > MAX_GLOBAL_OBJECT_ID_LENGTH) {
+      throw new Error(`globalObjectId must be at most ${MAX_GLOBAL_OBJECT_ID_LENGTH} characters.`);
+    }
+
+    const result = await this.requestOperation(
+      "object.resolve",
+      { globalObjectId },
+      {
+        editorId: editor.hello.editorId,
+        connectionGeneration: editor.hello.connectionGeneration,
+      },
+      timeoutMs,
+    );
+
+    if (!isObjectResolvePayload(result)) {
+      throw new Error("Unity returned an invalid object.resolve payload.");
     }
     return result;
   }
@@ -662,6 +710,34 @@ function isCompilerDiagnosticPayload(value: unknown): value is CompilerDiagnosti
     isNonNegativeInteger(candidate.line) &&
     isNonNegativeInteger(candidate.column) &&
     typeof candidate.assemblyPath === "string"
+  );
+}
+
+function isObjectResolvePayload(value: unknown): value is ObjectResolvePayload {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.requestedGlobalObjectId === "string" &&
+    typeof candidate.found === "boolean" &&
+    typeof candidate.canonicalGlobalObjectId === "string" &&
+    typeof candidate.instanceId === "number" &&
+    Number.isSafeInteger(candidate.instanceId) &&
+    typeof candidate.name === "string" &&
+    typeof candidate.objectType === "string" &&
+    typeof candidate.isGameObject === "boolean" &&
+    typeof candidate.isComponent === "boolean" &&
+    typeof candidate.owningGameObjectGlobalObjectId === "string" &&
+    typeof candidate.owningGameObjectInstanceId === "number" &&
+    Number.isSafeInteger(candidate.owningGameObjectInstanceId) &&
+    typeof candidate.sceneName === "string" &&
+    typeof candidate.scenePath === "string" &&
+    typeof candidate.hierarchyPath === "string" &&
+    isNonNegativeInteger(candidate.siblingIndex) &&
+    typeof candidate.activeSelf === "boolean" &&
+    typeof candidate.activeInHierarchy === "boolean"
   );
 }
 

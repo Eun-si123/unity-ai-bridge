@@ -27,23 +27,25 @@ Overall status: **In progress**
 | Public-core license | Implemented | Root `LICENSE` is Apache License 2.0. The separate private `unity-ai-mcp-infra` repository is outside this repository's automatic license boundary. |
 | Core design/docs | Implemented | `AGENTS.md`, `DESIGN.md`, `DECISIONS.md`, `ROADMAP.md`, `CODEMAP.md`, `REFERENCES.md`. |
 | Unity Editor package scaffold | Verified manually | Package Manager load and Editor assembly compilation passed in Unity 6000.3.21f1 on Windows; all Phase 1 slices subsequently compiled on the same target. |
-| Initial Unity target | Verified for Phase 1 | Unity 6000.3.21f1 completed real WebSocket/status, MCP status, reconnect lifecycle, hierarchy read, GameObject create/dedup, diagnostics read, and compiler-error capture. Broader compatibility remains unverified. |
+| Initial Unity target | Verified for current local slices | Unity 6000.3.21f1 completed real WebSocket/status, MCP status, reconnect lifecycle, hierarchy read, GameObject create/dedup, diagnostics/compiler capture, stable object resolve, native create readback, and stale replay rejection. Broader compatibility remains unverified. |
 | Bridge protocol v0 | Implemented | Command/result schemas, TypeScript/C# protocol types/constants, fixtures, and operation docs exist. |
 | MCP/server scaffold | Verified | Node 24.19.0 install/build/tests pass in GitHub Actions. |
-| Local WebSocket bridge server | Verified for Phase 1 slices | Real status, hierarchy, create, and diagnostics requests completed against Unity 6000.3.21f1. |
+| Local WebSocket bridge server | Verified for current local slices | Real status, hierarchy, create, diagnostics, and object-resolve requests completed against Unity 6000.3.21f1. |
 | Unity outbound WebSocket connection | Verified manually | Real `ClientWebSocket` connection, reconnect after domain reload, and renewed hello succeeded. |
 | Unity main-thread dispatcher | Verified for current read/write slices | Real reads and the first write operation completed through the dispatcher-backed Unity main-thread path. |
 | `editor.status` / `unity_get_status` | Verified manually | Live Unity version, project, active scene, Play Mode, and compilation state returned through MCP. |
 | `scene.hierarchy` / `unity_get_hierarchy` | Verified manually | Live bounded hierarchy returned with `GlobalObjectId`, transient `instanceId`, sibling/depth metadata, and truncation metadata. |
 | Hierarchy object identity | Verified for tested saved scene | Returned nodes use Unity `GlobalObjectId` plus transient `instanceId`; unusual/unsaved object cases remain future work. |
+| Stable object resolver / `unity_resolve_object` | Verified manually + CI support | A created GameObject was re-resolved from its `GlobalObjectId` to the same native object/type/scene/name/instance metadata; after Undo, the same identifier returned `found=false`. |
 | Reconnect / stale-generation lifecycle | Verified manually + CI support | Domain reload preserved editor identity, changed `connectionGeneration`, rejected stale routing with `routing/stale_connection`, and accepted commands on the new generation. |
-| `gameObject.create` / `unity_create_game_object` | Verified manually + CI support | One empty root GameObject was created, scene dirtied, Undo registered, and `GlobalObjectId` returned. |
-| Mutation retry/dedup protection | Verified for immediate same-session `gameObject.create` retry | First call reported `replayed=false`; identical retry reported `replayed=true`, returned the same `GlobalObjectId`, and hierarchy readback found exactly one object. |
+| `gameObject.create` / `unity_create_game_object` | Verified manually + CI support | One empty root GameObject was created, scene dirtied, Undo registered, `GlobalObjectId` returned, and the created object was verified by native readback before caching success. |
+| Mutation retry/dedup protection | Verified for same-session `gameObject.create` retry and stale replay | Immediate identical retry replays once without duplication. If the cached target has been Undone/deleted, identical replay fails closed as `stale_target/mutation_replay_stale` and does not recreate the object. |
 | Diagnostics / `unity_get_diagnostics` | Verified manually + CI support | Bounded Console counts and recent captured logs are returned; compiler diagnostics are captured through `CompilationPipeline` with source location metadata. |
 | Compiler error capture | Verified manually | Intentional `CS0103` was captured as severity `error`, file `Assets\\MCPCompileErrorTest.cs`, line `5`, column `21`, with `Assembly-CSharp.dll` assembly path. |
 | Console text coverage | Verified with explicit limitation | Recent log text is captured only since the current domain load; current Console counts are read separately. No unsupported/internal `UnityEditor.LogEntries` dependency is used. |
 | Undo integration | Verified for bounded GameObject-create slice only | General transaction/rollback policy remains Phase 2 work. |
-| Native readback + semantic verification | Planned | Phase 2 priority. Current create dedup cache does not revalidate native state after manual Undo/deletion. |
+| Native readback + semantic verification | Verified for bounded GameObject-create identity/existence slice | First create is re-resolved through Unity native state before success is cached; generalized property/state verification remains Phase 2 work. |
+| Unity Agent capability/version negotiation | Planned | The first resolver verification exposed a server/Agent version-skew case: MCP advertised a new tool while an older loaded Unity assembly returned `unsupported/operation_not_supported`. Future handshake capability advertisement should fail early with an explicit update/reimport requirement. |
 | Remote gateway / Easy Connect | Planned | Not implemented. |
 | Pairing/authentication | Planned | Not implemented. |
 | Multi-user/editor routing | Planned | Local bridge intentionally supports one active editor only. |
@@ -183,6 +185,21 @@ Result: PASS
 Cleanup requirement: remove the temporary MCPCompileErrorTest.cs and allow Unity to compile cleanly again.
 ```
 
+### 2026-08-23 — Stable object resolver + stale mutation replay
+
+```text
+Environment: Windows, Unity 6000.3.21f1, official MCP TypeScript client 2.0.0
+Action: npm.cmd --prefix mcp-server run verify:resolver
+Observed create: replayed=false; GlobalObjectId=GlobalObjectId_V1-2-99c9720ab356a0642a771bea13969a05-2013181652-0; instanceId=-47542
+Observed native resolve: found=true; canonical GlobalObjectId matched; objectType=UnityEngine.GameObject; name/scene/instance matched the created object
+Action during verifier: Ctrl+Z once in Unity
+Observed after Undo: resolver found=false
+Observed same-mutation retry: stale_target/mutation_replay_stale; no automatic replacement created
+Observed hierarchy readback: hierarchyMatches=0
+Result: PASS
+Notes: an earlier attempt reached an older loaded Unity assembly and returned unsupported/operation_not_supported for object.resolve. Reimport/reload brought the Agent source and MCP server back into sync; capability/version negotiation is now tracked as Phase 2 reliability work.
+```
+
 ## Phase 2 — Reliability Core focus
 
 Phase 2 begins from the narrow reliability primitives proven during Phase 1 and generalizes them across future write tools.
@@ -203,9 +220,9 @@ Priority order:
 ## Known unknowns / remaining reliability work
 
 - exact `GlobalObjectId` behavior for unsaved/new scene objects and unusual object cases,
-- GameObject-create replay after manual deletion/Undo is not yet semantically revalidated,
 - mutation dedup persistence across full Unity Editor restart is not provided by current `SessionState`,
 - general write serialization/idempotency across future mutation families remains unimplemented,
+- connected Unity Agent capability/version negotiation is not yet encoded in the hello handshake,
 - recent Console entry text only covers the current domain-load capture window,
 - long-term Unity support matrix beyond 6000.3.21f1,
 - future multi-editor routing design,

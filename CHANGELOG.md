@@ -13,6 +13,33 @@ The project is pre-alpha. Internal package version `0.0.1` does not represent a 
 - Clarified that the separate private `unity-ai-mcp-infra` repository is not automatically licensed under the public core's Apache-2.0 license.
 - Closed the Phase 0 "project license selected" governance item.
 
+### Phase 2 — Stable Object Resolver / Native Create Readback — Verified slice
+
+#### Added
+
+- Unity `object.resolve` read operation backed by `GlobalObjectId.TryParse` and `GlobalObjectIdentifierToObjectSlow`.
+- MCP `unity_resolve_object` tool returning current native object/type/scene/hierarchy metadata while keeping `InstanceID` and hierarchy paths non-durable.
+- Native `GlobalObjectId` readback for `gameObject.create` before a first success is cached.
+- Cached mutation replay revalidation against current Unity native state.
+- Fail-closed stale replay: if the cached create target was Undone/deleted/moved/renamed or no longer matches, the same mutation ID returns `stale_target/mutation_replay_stale` instead of recreating or reporting stale success.
+- Resolver protocol fixtures, simulated Node bridge tests, and `verify:resolver` live verification helper.
+- Phase 2 tracking for Unity Agent capability/version negotiation after a real server/Agent version-skew failure was observed.
+
+#### Verification
+
+- Node Verification and Local Bridge Verification: **PASS** on the Phase 2 resolver branch.
+- Real Unity 6000.3.21f1 `verify:resolver`: **PASS (manual Windows verification, 2026-08-23)**.
+- First create returned `replayed=false`; native resolver returned `found=true` with the same canonical `GlobalObjectId`, `instanceId`, name, scene, and `UnityEngine.GameObject` type.
+- After one Unity Undo, resolver returned `found=false` for the same `GlobalObjectId`.
+- Retrying the same mutation ID returned `stale_target/mutation_replay_stale` and did not create a replacement.
+- Final hierarchy readback reported `hierarchyMatches=0`.
+
+#### Fixed during verification
+
+- The first resolver attempt connected a newer MCP server to an older loaded Unity Agent assembly and reached `unsupported/operation_not_supported` for `object.resolve`.
+- Reimport/reload brought the Unity Agent source and server back into sync.
+- The live verifier now gives an explicit stale-Unity-assembly diagnostic for this failure mode; a real hello/capability negotiation mechanism remains Phase 2 work.
+
 ### Phase 1 — Console / Compiler Diagnostics — Verified slice
 
 #### Added
