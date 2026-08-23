@@ -88,7 +88,6 @@ try {
   requireSuccess(assetCreate, "Prefab Asset create");
   const createdGuid = readString(assetCreate.structuredContent, "prefabGuid");
 
-  // The source is no longer needed once the Prefab Asset exists.
   sourceState = await resolve(sourceId);
   const sourceDelete = await client.callTool({
     name: "unity_delete_game_object",
@@ -119,7 +118,8 @@ try {
   const firstInstanceId = readString(firstInstanceCall.structuredContent, "globalObjectId");
 
   let firstComponents = await inspectComponents(firstInstanceId);
-  const firstColliderId = requireBoxCollider(firstComponents).globalObjectId;
+  const firstCollider = requireBoxCollider(firstComponents);
+  const firstColliderId = readRecordString(firstCollider, "globalObjectId");
   const setTrue = await client.callTool({
     name: "unity_set_component_property",
     arguments: {
@@ -143,6 +143,8 @@ try {
   if (readBooleanProperty(colliderBeforeApply, propertyPath) !== true) {
     throw new Error("Instance BoxCollider m_IsTrigger is not true before apply.");
   }
+  const applyExpectedStateEpoch = firstComponents.stateEpoch;
+  const applyExpectedStateRevision = firstComponents.stateRevision;
 
   const applyCall = await client.callTool({
     name: "unity_apply_prefab_property_override",
@@ -152,8 +154,8 @@ try {
       prefabPath,
       expectedPrefabDependencyHash: hashBefore,
       mutationId: applyMutationId,
-      expectedStateEpoch: firstComponents.stateEpoch,
-      expectedStateRevision: firstComponents.stateRevision,
+      expectedStateEpoch: applyExpectedStateEpoch,
+      expectedStateRevision: applyExpectedStateRevision,
     },
   });
   requireSuccess(applyCall, "Prefab property apply");
@@ -183,8 +185,8 @@ try {
       prefabPath,
       expectedPrefabDependencyHash: hashBefore,
       mutationId: applyMutationId,
-      expectedStateEpoch: firstComponents.stateEpoch,
-      expectedStateRevision: firstComponents.stateRevision,
+      expectedStateEpoch: applyExpectedStateEpoch,
+      expectedStateRevision: applyExpectedStateRevision,
     },
   });
   requireSuccess(immediateReplay, "Immediate property-apply replay");
@@ -193,8 +195,6 @@ try {
     throw new Error("Immediate property-apply replay did not return the completed result.");
   }
 
-  // Instantiate a new copy from the changed asset. This proves the property was persisted to the asset,
-  // not merely cleared locally on the first instance.
   const beforeSecondInstance = await waitForStatus();
   const secondInstanceCall = await client.callTool({
     name: "unity_instantiate_prefab",
@@ -213,8 +213,6 @@ try {
     throw new Error("A fresh Prefab instance did not inherit applied m_IsTrigger=true from the asset.");
   }
 
-  // Create a later override on the original instance. The old apply mutationId must not apply this
-  // newer intent, even though it targets the same component/property.
   firstComponents = await inspectComponents(firstInstanceId);
   const setFalse = await client.callTool({
     name: "unity_set_component_property",
@@ -237,11 +235,11 @@ try {
       prefabPath,
       expectedPrefabDependencyHash: hashBefore,
       mutationId: applyMutationId,
-      expectedStateEpoch: firstComponents.stateEpoch,
-      expectedStateRevision: firstComponents.stateRevision,
+      expectedStateEpoch: applyExpectedStateEpoch,
+      expectedStateRevision: applyExpectedStateRevision,
     },
   });
-  if (!staleReplay.isError) {
+  if (!toolIsError(staleReplay)) {
     throw new Error("Old property-apply mutationId unexpectedly applied a later override.");
   }
   const staleReplayError = readToolText(staleReplay);
@@ -290,7 +288,7 @@ async function waitForStatus(): Promise<StatusPayload> {
   let last = "no status";
   while (Date.now() < deadline) {
     const result = await client.callTool({ name: "unity_get_status", arguments: {} });
-    if (!result.isError) {
+    if (!toolIsError(result)) {
       const parsed = parseStatus(result.structuredContent);
       if (parsed !== null && !parsed.isCompiling) return parsed;
       last = JSON.stringify(result.structuredContent);
@@ -400,19 +398,31 @@ async function deleteGameObject(globalObjectId: string, label: string): Promise<
 
 async function waitForAssetRemoval(path: string): Promise<void> {
   const deadline = Date.now() + timeoutMs;
+  let last = "asset still exists";
   while (Date.now() < deadline) {
     const result = await client.callTool({
       name: "unity_inspect_asset",
       arguments: { path, maxDependencies: 0 },
     });
-    if (result.isError) return;
+    if (toolIsError(result)) {
+      const text = readToolText(result);
+      if (text.includes("stale_target/asset_unavailable")) return;
+      last = text;
+    } else {
+      last = "asset still resolves";
+    }
     await delay(pollIntervalMs);
   }
-  throw new Error(`Timed out waiting for manual removal of '${path}'.`);
+  throw new Error(`Timed out waiting for manual removal of '${path}'. Last observation: ${last}`);
 }
 
-function requireSuccess(result: { isError?: boolean; content: Array<{ type: string; text?: string }> }, label: string): void {
-  if (result.isError) throw new Error(`${label} failed: ${readToolText(result)}`);
+function requireSuccess(result: unknown, label: string): void {
+  if (toolIsError(result)) throw new Error(`${label} failed: ${readToolText(result)}`);
+}
+
+function toolIsError(result: unknown): boolean {
+  const c = asRecord(result);
+  return c.isError === true;
 }
 
 function readString(value: unknown, key: string): string {
@@ -422,6 +432,14 @@ function readString(value: unknown, key: string): string {
     throw new Error(`Missing string '${key}' in ${JSON.stringify(value)}`);
   }
   return result;
+}
+
+function readRecordString(record: Record<string, unknown>, key: string): string {
+  const value = record[key];
+  if (typeof value !== "string" || value.length === 0) {
+    throw new Error(`Missing string '${key}' in ${JSON.stringify(record)}`);
+  }
+  return value;
 }
 
 function parseStatus(value: unknown): StatusPayload | null {
@@ -446,9 +464,15 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
-function readToolText(result: { content: Array<{ type: string; text?: string }> }): string {
-  const text = result.content.find((block) => block.type === "text");
-  return text?.text ?? "tool returned isError=true without text";
+function readToolText(result: unknown): string {
+  const c = asRecord(result);
+  if (!Array.isArray(c.content)) return "tool returned isError=true without text";
+  for (const block of c.content) {
+    if (typeof block !== "object" || block === null) continue;
+    const b = block as Record<string, unknown>;
+    if (b.type === "text" && typeof b.text === "string") return b.text;
+  }
+  return "tool returned isError=true without text";
 }
 
 function isPositiveInteger(value: unknown): value is number {
