@@ -23,7 +23,8 @@
     "verify:save": "npm run build && node dist/src/dev/verify-scene-save-unity.js",
     "verify:transform": "npm run build && node dist/src/dev/verify-transform-unity.js",
     "verify:gameobject-edit": "npm run build && node dist/src/dev/verify-gameobject-edit-unity.js",
-    "verify:components": "npm run build && node dist/src/dev/verify-component-inspect-unity.js"
+    "verify:components": "npm run build && node dist/src/dev/verify-component-inspect-unity.js",
+    "verify:component-mutations": "npm run build && node dist/src/dev/verify-component-mutation-unity.js"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "2.0.0",
