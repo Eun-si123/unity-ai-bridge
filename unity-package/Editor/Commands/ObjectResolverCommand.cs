@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using UnityAiBridge.Editor.Execution;
 using UnityEditor;
 using UnityEngine;
 
@@ -24,6 +25,8 @@ namespace UnityAiBridge.Editor.Commands
         public int siblingIndex;
         public bool activeSelf;
         public bool activeInHierarchy;
+        public string stateEpoch;
+        public long stateRevision;
     }
 
     internal static class ObjectResolverCommand
@@ -53,12 +56,13 @@ namespace UnityAiBridge.Editor.Commands
         public static ObjectResolvePayload Execute(string globalObjectId)
         {
             ValidateArguments(globalObjectId);
+            var state = EditorStateRevision.Capture();
 
             GlobalObjectId.TryParse(globalObjectId, out var parsed);
             var resolved = GlobalObjectId.GlobalObjectIdentifierToObjectSlow(parsed);
             if (resolved == null)
             {
-                return Missing(globalObjectId);
+                return Missing(globalObjectId, state);
             }
 
             var canonicalGlobalObjectId = GlobalObjectId.GetGlobalObjectIdSlow(resolved).ToString();
@@ -84,6 +88,8 @@ namespace UnityAiBridge.Editor.Commands
                 siblingIndex = 0,
                 activeSelf = false,
                 activeInHierarchy = false,
+                stateEpoch = state.epoch,
+                stateRevision = state.revision,
             };
 
             if (owner == null)
@@ -108,7 +114,9 @@ namespace UnityAiBridge.Editor.Commands
             return payload;
         }
 
-        private static ObjectResolvePayload Missing(string globalObjectId)
+        private static ObjectResolvePayload Missing(
+            string globalObjectId,
+            EditorStateRevisionSnapshot state)
         {
             return new ObjectResolvePayload
             {
@@ -128,6 +136,8 @@ namespace UnityAiBridge.Editor.Commands
                 siblingIndex = 0,
                 activeSelf = false,
                 activeInHierarchy = false,
+                stateEpoch = state.epoch,
+                stateRevision = state.revision,
             };
         }
 

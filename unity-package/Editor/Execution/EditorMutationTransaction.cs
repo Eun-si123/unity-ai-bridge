@@ -52,6 +52,8 @@ namespace UnityAiBridge.Editor.Execution
         public int undoGroup;
         public Scene activeScene;
         public bool undoRecorded;
+        public EditorStateRevisionSnapshot stateBefore;
+        public EditorStateRevisionSnapshot stateAfter;
 
         public void MarkUndoRecorded()
         {
@@ -66,6 +68,23 @@ namespace UnityAiBridge.Editor.Execution
         public static T Execute<T>(
             string operation,
             string undoGroupName,
+            Func<EditorMutationContext, T> mutate,
+            Func<EditorMutationContext, T, bool> verify)
+        {
+            return Execute(
+                operation,
+                undoGroupName,
+                string.Empty,
+                0,
+                mutate,
+                verify);
+        }
+
+        public static T Execute<T>(
+            string operation,
+            string undoGroupName,
+            string expectedStateEpoch,
+            long expectedStateRevision,
             Func<EditorMutationContext, T> mutate,
             Func<EditorMutationContext, T, bool> verify)
         {
@@ -95,7 +114,11 @@ namespace UnityAiBridge.Editor.Execution
                     $"Another Unity AI Bridge mutation is already executing; '{operation}' was not started.");
             }
 
-            var context = RunPreflight(operation, undoGroupName);
+            var context = RunPreflight(
+                operation,
+                undoGroupName,
+                expectedStateEpoch,
+                expectedStateRevision);
 
             Undo.IncrementCurrentGroup();
             context.undoGroup = Undo.GetCurrentGroup();
@@ -112,6 +135,7 @@ namespace UnityAiBridge.Editor.Execution
                 }
 
                 Undo.CollapseUndoOperations(context.undoGroup);
+                context.stateAfter = EditorStateRevision.Advance();
                 return result;
             }
             catch (Exception primaryException)
@@ -121,9 +145,11 @@ namespace UnityAiBridge.Editor.Execution
                     try
                     {
                         Undo.RevertAllInCurrentGroup();
+                        context.stateAfter = EditorStateRevision.Advance();
                     }
                     catch (Exception rollbackException)
                     {
+                        EditorStateRevision.Advance();
                         throw new EditorMutationRollbackException(
                             $"{operation} failed and its Undo transaction could not be reverted cleanly.",
                             new AggregateException(primaryException, rollbackException));
@@ -138,7 +164,11 @@ namespace UnityAiBridge.Editor.Execution
             }
         }
 
-        private static EditorMutationContext RunPreflight(string operation, string undoGroupName)
+        private static EditorMutationContext RunPreflight(
+            string operation,
+            string undoGroupName,
+            string expectedStateEpoch,
+            long expectedStateRevision)
         {
             if (EditorApplication.isCompiling)
             {
@@ -155,6 +185,8 @@ namespace UnityAiBridge.Editor.Execution
                     $"The active Unity scene is not valid and loaded; {operation} was not executed.");
             }
 
+            EditorStateRevision.RequireCurrent(expectedStateEpoch, expectedStateRevision);
+
             return new EditorMutationContext
             {
                 operation = operation,
@@ -162,6 +194,8 @@ namespace UnityAiBridge.Editor.Execution
                 undoGroup = -1,
                 activeScene = scene,
                 undoRecorded = false,
+                stateBefore = EditorStateRevision.Capture(),
+                stateAfter = null,
             };
         }
     }

@@ -19,7 +19,15 @@ const hello: BridgeHello = {
   projectName: "BridgeCreateTest",
 };
 
-const baseResult: Omit<GameObjectCreatePayload, "mutationId" | "replayed"> = {
+const baseResult: Omit<
+  GameObjectCreatePayload,
+  | "mutationId"
+  | "replayed"
+  | "expectedStateEpoch"
+  | "expectedStateRevision"
+  | "stateEpoch"
+  | "stateRevision"
+> = {
   globalObjectId: "GlobalObjectId_V1-2-created-0-0",
   instanceId: 777,
   name: "BridgeCreated",
@@ -28,6 +36,24 @@ const baseResult: Omit<GameObjectCreatePayload, "mutationId" | "replayed"> = {
   scenePath: "Assets/Scenes/SampleScene.unity",
   siblingIndex: 3,
 };
+
+function resultPayload(
+  mutationId: string,
+  replayed: boolean,
+  expectedStateEpoch = "",
+  expectedStateRevision = 0,
+  stateRevision = 41,
+): GameObjectCreatePayload {
+  return {
+    mutationId,
+    replayed,
+    ...baseResult,
+    expectedStateEpoch,
+    expectedStateRevision,
+    stateEpoch: "test-state-epoch",
+    stateRevision,
+  };
+}
 
 test("local bridge sends gameObject.create as a write and validates the result", async () => {
   const bridge = new LocalBridgeServer("127.0.0.1", 0);
@@ -62,11 +88,7 @@ test("local bridge sends gameObject.create as a write and validates the result",
           protocolVersion: BRIDGE_PROTOCOL_VERSION,
           requestId: command.requestId,
           ok: true,
-          result: {
-            mutationId,
-            replayed: false,
-            ...baseResult,
-          },
+          result: resultPayload(mutationId, false),
           warnings: [],
           changedTargets: [
             {
@@ -87,11 +109,7 @@ test("local bridge sends gameObject.create as a write and validates the result",
 
     assert.deepEqual(
       await bridge.requestCreateGameObject({ name: "BridgeCreated", mutationId }),
-      {
-        mutationId,
-        replayed: false,
-        ...baseResult,
-      },
+      resultPayload(mutationId, false),
     );
   } finally {
     await bridge.stop();
@@ -134,11 +152,7 @@ test("local bridge preserves the same mutationId across an explicit retry", asyn
           protocolVersion: BRIDGE_PROTOCOL_VERSION,
           requestId: command.requestId,
           ok: true,
-          result: {
-            mutationId,
-            replayed: deliveries > 1,
-            ...baseResult,
-          },
+          result: resultPayload(mutationId, deliveries > 1, "", 0, 41 + deliveries),
           warnings: [],
           dirtyState: deliveries > 1 ? "unchanged" : "dirty",
           compileState: "idle",
@@ -155,6 +169,63 @@ test("local bridge preserves the same mutationId across an explicit retry", asyn
     assert.equal(deliveries, 2);
     assert.equal(requestIds.length, 2);
     assert.notEqual(requestIds[0], requestIds[1]);
+  } finally {
+    await bridge.stop();
+    if (client.readyState !== WebSocket.CLOSED) {
+      client.terminate();
+    }
+  }
+});
+
+test("local bridge forwards an optimistic state precondition and surfaces stale-state rejection", async () => {
+  const bridge = new LocalBridgeServer("127.0.0.1", 0);
+  const port = await bridge.start();
+  const client = new WebSocket(`ws://127.0.0.1:${port}`);
+  const mutationId = "create-stale-state-1";
+
+  try {
+    await waitForOpen(client);
+    client.send(JSON.stringify(hello));
+    await bridge.waitForEditor();
+
+    client.on("message", (data) => {
+      const command = JSON.parse(data.toString()) as {
+        requestId: string;
+        operation: string;
+        arguments: Record<string, unknown>;
+      };
+      assert.equal(command.operation, "gameObject.create");
+      assert.deepEqual(command.arguments, {
+        name: "BridgeCreated",
+        mutationId,
+        expectedStateEpoch: "snapshot-epoch",
+        expectedStateRevision: 7,
+      });
+
+      client.send(
+        JSON.stringify({
+          protocolVersion: BRIDGE_PROTOCOL_VERSION,
+          requestId: command.requestId,
+          ok: false,
+          error: {
+            category: "stale_state",
+            code: "state_revision_mismatch",
+            message: "State revision mismatch. expected=7, current=8.",
+          },
+          warnings: [],
+        }),
+      );
+    });
+
+    await assert.rejects(
+      bridge.requestCreateGameObject({
+        name: "BridgeCreated",
+        mutationId,
+        expectedStateEpoch: "snapshot-epoch",
+        expectedStateRevision: 7,
+      }),
+      /stale_state\/state_revision_mismatch/,
+    );
   } finally {
     await bridge.stop();
     if (client.readyState !== WebSocket.CLOSED) {
@@ -184,6 +255,14 @@ test("local bridge rejects invalid GameObject create input before delivery", asy
     await assert.rejects(
       bridge.requestCreateGameObject({ name: "Valid", mutationId: "bad id with spaces" }),
       /mutationId must be 1\.\.128 characters/,
+    );
+    await assert.rejects(
+      bridge.requestCreateGameObject({
+        name: "Valid",
+        mutationId: "valid-id",
+        expectedStateEpoch: "epoch-only",
+      }),
+      /expectedStateEpoch and expectedStateRevision must be supplied together/,
     );
 
     await new Promise((resolve) => setTimeout(resolve, 25));

@@ -88,13 +88,28 @@ const createGameObjectInputSchema = fromJsonSchema({
       description:
         "Optional idempotency key. Reuse exactly the same mutationId only when retrying the same create after an ambiguous timeout/disconnect. If omitted, the bridge generates one.",
     },
+    expectedStateEpoch: {
+      type: "string",
+      minLength: 1,
+      maxLength: 128,
+      description:
+        "Optional optimistic-concurrency token from a recent status, hierarchy, or object-resolve result. Must be supplied together with expectedStateRevision.",
+    },
+    expectedStateRevision: {
+      type: "integer",
+      minimum: 1,
+      description:
+        "Optional optimistic-concurrency revision from the same observation as expectedStateEpoch. The write is rejected if Unity state has advanced.",
+    },
   },
   additionalProperties: false,
 });
 
-async function preflightAgentCapability(operation: string): Promise<void> {
+async function preflightAgentCapabilities(...capabilities: string[]): Promise<void> {
   const status = await bridge.requestEditorStatus();
-  requireAgentCapability(status, operation);
+  for (const capability of capabilities) {
+    requireAgentCapability(status, capability);
+  }
 }
 
 let shuttingDown = false;
@@ -124,7 +139,7 @@ serveStdio(() => {
     "unity_get_status",
     {
       description:
-        "Read the connected Unity Editor version, project, active scene, Play Mode state, compilation state, Unity AI Bridge Agent version, and advertised bridge-operation capabilities.",
+        "Read the connected Unity Editor version, project, active scene, Play Mode state, compilation state, Unity AI Bridge Agent version/capabilities, and current state epoch/revision when supported.",
     },
     async () => {
       try {
@@ -147,7 +162,7 @@ serveStdio(() => {
     "unity_get_hierarchy",
     {
       description:
-        "Read a bounded preorder snapshot of the active Unity scene hierarchy. Returns GlobalObjectId plus transient instanceId, parent identity, depth, sibling index, child count, and active state. hierarchyPath is informational and must not be treated as durable identity.",
+        "Read a bounded preorder snapshot of the active Unity scene hierarchy. Returns a stateEpoch/stateRevision token plus GlobalObjectId, transient instanceId, parent identity, depth, sibling index, child count, and active state. Pass the token to supported write tools when the mutation depends on this snapshot so stale state is rejected instead of silently overwritten.",
       inputSchema: hierarchyInputSchema,
     },
     async (args) => {
@@ -161,7 +176,7 @@ serveStdio(() => {
           options.maxNodes = input.maxNodes;
         }
 
-        await preflightAgentCapability("scene.hierarchy");
+        await preflightAgentCapabilities("scene.hierarchy", "state.revision.v1");
         const hierarchy = await bridge.requestHierarchy(options);
         return {
           content: [{ type: "text", text: JSON.stringify(hierarchy) }],
@@ -198,7 +213,7 @@ serveStdio(() => {
           options.minimumSeverity = input.minimumSeverity;
         }
 
-        await preflightAgentCapability("editor.diagnostics");
+        await preflightAgentCapabilities("editor.diagnostics");
         const diagnostics = await bridge.requestDiagnostics(options);
         return {
           content: [{ type: "text", text: JSON.stringify(diagnostics) }],
@@ -218,13 +233,13 @@ serveStdio(() => {
     "unity_resolve_object",
     {
       description:
-        "Re-resolve a Unity GlobalObjectId against current native Editor state. Use this before mutations when a target came from an earlier snapshot. Returns found=false instead of inventing a replacement when the target no longer exists. Instance IDs and hierarchy paths are returned only as current hints; the GlobalObjectId remains the stable identity input.",
+        "Re-resolve a Unity GlobalObjectId against current native Editor state and return the observation's stateEpoch/stateRevision. Use this before mutations when a target came from an earlier snapshot. Returns found=false instead of inventing a replacement when the target no longer exists.",
       inputSchema: resolveObjectInputSchema,
     },
     async (args) => {
       try {
         const input = args as { globalObjectId: string };
-        await preflightAgentCapability("object.resolve");
+        await preflightAgentCapabilities("object.resolve", "state.revision.v1");
         const result = await bridge.requestResolveObject(input.globalObjectId);
         return {
           content: [{ type: "text", text: JSON.stringify(result) }],
@@ -244,18 +259,29 @@ serveStdio(() => {
     "unity_create_game_object",
     {
       description:
-        "Create one empty root GameObject in the active Unity scene. This is a write operation. Unity registers Undo, marks the scene dirty, verifies the created target through native GlobalObjectId readback, and deduplicates repeated delivery when the same mutationId and arguments are reused. A replay re-resolves the cached target and fails closed if that object was undone, deleted, moved, or otherwise no longer matches the completed mutation. If a write fails ambiguously, retry only with the mutationId reported by the failed call.",
+        "Create one empty root GameObject in the active Unity scene. This is a write operation. When expectedStateEpoch + expectedStateRevision are supplied from a prior observation, Unity checks them atomically in mutation preflight and rejects stale state. Unity registers Undo, verifies the target by native GlobalObjectId readback, reports the post-write state revision, and deduplicates repeated delivery by mutationId.",
       inputSchema: createGameObjectInputSchema,
     },
     async (args) => {
       try {
-        const input = args as { name: string; mutationId?: string };
+        const input = args as {
+          name: string;
+          mutationId?: string;
+          expectedStateEpoch?: string;
+          expectedStateRevision?: number;
+        };
         const options: GameObjectCreateOptions = { name: input.name };
         if (input.mutationId !== undefined) {
           options.mutationId = input.mutationId;
         }
+        if (input.expectedStateEpoch !== undefined) {
+          options.expectedStateEpoch = input.expectedStateEpoch;
+        }
+        if (input.expectedStateRevision !== undefined) {
+          options.expectedStateRevision = input.expectedStateRevision;
+        }
 
-        await preflightAgentCapability("gameObject.create");
+        await preflightAgentCapabilities("gameObject.create", "state.revision.v1");
         const result = await bridge.requestCreateGameObject(options);
         return {
           content: [{ type: "text", text: JSON.stringify(result) }],

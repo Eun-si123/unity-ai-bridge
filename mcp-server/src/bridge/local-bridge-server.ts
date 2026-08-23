@@ -26,6 +26,10 @@ export interface EditorStatusPayload {
   activeScene: string;
   isPlaying: boolean;
   isCompiling: boolean;
+  agentVersion?: string;
+  capabilities?: string[];
+  stateEpoch?: string;
+  stateRevision?: number;
 }
 
 export interface HierarchyOptions {
@@ -49,6 +53,8 @@ export interface HierarchyNodePayload {
 export interface HierarchyPayload {
   sceneName: string;
   scenePath: string;
+  stateEpoch: string;
+  stateRevision: number;
   rootCount: number;
   returnedNodeCount: number;
   maxDepth: number;
@@ -123,11 +129,15 @@ export interface ObjectResolvePayload {
   siblingIndex: number;
   activeSelf: boolean;
   activeInHierarchy: boolean;
+  stateEpoch: string;
+  stateRevision: number;
 }
 
 export interface GameObjectCreateOptions {
   name: string;
   mutationId?: string;
+  expectedStateEpoch?: string;
+  expectedStateRevision?: number;
 }
 
 export interface GameObjectCreatePayload {
@@ -140,6 +150,10 @@ export interface GameObjectCreatePayload {
   sceneName: string;
   scenePath: string;
   siblingIndex: number;
+  expectedStateEpoch: string;
+  expectedStateRevision: number;
+  stateEpoch: string;
+  stateRevision: number;
 }
 
 interface ActiveEditor {
@@ -164,6 +178,7 @@ const DIAGNOSTICS_SEVERITIES = new Set(["error", "warning", "log"]);
 const MAX_GLOBAL_OBJECT_ID_LENGTH = 256;
 const MAX_GAMEOBJECT_NAME_LENGTH = 128;
 const MAX_MUTATION_ID_LENGTH = 128;
+const MAX_STATE_EPOCH_LENGTH = 128;
 const MUTATION_ID_PATTERN = /^[A-Za-z0-9._:-]+$/;
 
 export class LocalBridgeServer {
@@ -364,6 +379,8 @@ export class LocalBridgeServer {
     const editor = this.requireActiveEditor();
     const name = options.name;
     const mutationId = options.mutationId ?? randomUUID();
+    const expectedStateEpoch = options.expectedStateEpoch;
+    const expectedStateRevision = options.expectedStateRevision;
 
     if (typeof name !== "string" || name.trim().length === 0) {
       throw new Error("name must contain at least one non-whitespace character.");
@@ -382,10 +399,40 @@ export class LocalBridgeServer {
       );
     }
 
+    const hasExpectedEpoch = expectedStateEpoch !== undefined;
+    const hasExpectedRevision = expectedStateRevision !== undefined;
+    if (hasExpectedEpoch !== hasExpectedRevision) {
+      throw new Error("expectedStateEpoch and expectedStateRevision must be supplied together.");
+    }
+    if (hasExpectedEpoch) {
+      if (
+        typeof expectedStateEpoch !== "string" ||
+        expectedStateEpoch.length === 0 ||
+        expectedStateEpoch.length > MAX_STATE_EPOCH_LENGTH
+      ) {
+        throw new Error(
+          `expectedStateEpoch must be a non-empty string of at most ${MAX_STATE_EPOCH_LENGTH} characters.`,
+        );
+      }
+      if (
+        typeof expectedStateRevision !== "number" ||
+        !Number.isSafeInteger(expectedStateRevision) ||
+        expectedStateRevision <= 0
+      ) {
+        throw new Error("expectedStateRevision must be a positive safe integer.");
+      }
+    }
+
+    const args: Record<string, unknown> = { name, mutationId };
+    if (hasExpectedEpoch) {
+      args.expectedStateEpoch = expectedStateEpoch;
+      args.expectedStateRevision = expectedStateRevision;
+    }
+
     try {
       const result = await this.requestOperation(
         "gameObject.create",
-        { name, mutationId },
+        args,
         {
           editorId: editor.hello.editorId,
           connectionGeneration: editor.hello.connectionGeneration,
@@ -594,6 +641,7 @@ function isHierarchyPayload(value: unknown): value is HierarchyPayload {
   if (
     typeof candidate.sceneName !== "string" ||
     typeof candidate.scenePath !== "string" ||
+    !isStateRevision(candidate.stateEpoch, candidate.stateRevision) ||
     !isNonNegativeInteger(candidate.rootCount) ||
     !isNonNegativeInteger(candidate.returnedNodeCount) ||
     !isPositiveInteger(candidate.maxDepth) ||
@@ -737,7 +785,8 @@ function isObjectResolvePayload(value: unknown): value is ObjectResolvePayload {
     typeof candidate.hierarchyPath === "string" &&
     isNonNegativeInteger(candidate.siblingIndex) &&
     typeof candidate.activeSelf === "boolean" &&
-    typeof candidate.activeInHierarchy === "boolean"
+    typeof candidate.activeInHierarchy === "boolean" &&
+    isStateRevision(candidate.stateEpoch, candidate.stateRevision)
   );
 }
 
@@ -759,7 +808,20 @@ function isGameObjectCreatePayload(value: unknown): value is GameObjectCreatePay
     typeof candidate.hierarchyPath === "string" &&
     typeof candidate.sceneName === "string" &&
     typeof candidate.scenePath === "string" &&
-    isNonNegativeInteger(candidate.siblingIndex)
+    isNonNegativeInteger(candidate.siblingIndex) &&
+    typeof candidate.expectedStateEpoch === "string" &&
+    isNonNegativeInteger(candidate.expectedStateRevision) &&
+    isStateRevision(candidate.stateEpoch, candidate.stateRevision)
+  );
+}
+
+function isStateRevision(epoch: unknown, revision: unknown): boolean {
+  return (
+    typeof epoch === "string" &&
+    epoch.length > 0 &&
+    typeof revision === "number" &&
+    Number.isSafeInteger(revision) &&
+    revision > 0
   );
 }
 

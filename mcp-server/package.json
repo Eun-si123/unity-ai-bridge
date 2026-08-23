@@ -18,7 +18,8 @@
     "verify:diagnostics": "npm run build && node dist/src/dev/verify-diagnostics-unity.js",
     "verify:compiler-error": "npm run build && node dist/src/dev/verify-diagnostics-unity.js --require-compiler-error",
     "verify:resolver": "npm run build && node dist/src/dev/verify-object-resolver-unity.js",
-    "verify:capabilities": "npm run build && node dist/src/dev/verify-agent-capabilities-unity.js"
+    "verify:capabilities": "npm run build && node dist/src/dev/verify-agent-capabilities-unity.js",
+    "verify:state-revision": "npm run build && node dist/src/dev/verify-state-revision-unity.js"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "2.0.0",
