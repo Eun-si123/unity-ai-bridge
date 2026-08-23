@@ -1,0 +1,55 @@
+{
+  "protocolVersion": "0",
+  "requestId": "req-prefab-property-apply-1",
+  "ok": true,
+  "result": {
+    "mutationId": "prefab-property-apply-example-1",
+    "replayed": false,
+    "applied": true,
+    "componentGlobalObjectId": "GlobalObjectId_V1-2-99c9720ab356a0642a771bea13969a05-2044531345-0",
+    "gameObjectGlobalObjectId": "GlobalObjectId_V1-2-99c9720ab356a0642a771bea13969a05-2044531344-0",
+    "propertyPath": "m_IsTrigger",
+    "propertyType": "Boolean",
+    "prefabPath": "Assets/Prefabs/Example.prefab",
+    "prefabGuid": "1234567890abcdef1234567890abcdef",
+    "expectedPrefabDependencyHash": "0123456789abcdef0123456789abcdef",
+    "dependencyHashAfter": "abcdef0123456789abcdef0123456789",
+    "prefabOverrideBefore": true,
+    "prefabOverrideAfter": false,
+    "sourceMatchesInstanceAfter": true,
+    "sceneWasDirtyBefore": true,
+    "sceneIsDirtyAfter": true,
+    "expectedStateEpoch": "example-state-epoch",
+    "expectedStateRevision": 62,
+    "stateEpoch": "example-state-epoch",
+    "stateRevision": 63,
+    "property": {
+      "path": "m_IsTrigger",
+      "displayName": "Is Trigger",
+      "depth": 0,
+      "propertyType": "Boolean",
+      "isArray": false,
+      "arraySize": -1,
+      "hasVisibleChildren": false,
+      "valueKind": "boolean",
+      "stringValue": "",
+      "longValue": 0,
+      "doubleValue": 0,
+      "boolValue": true,
+      "objectReferenceGlobalObjectId": "",
+      "objectReferenceInstanceId": 0,
+      "objectReferenceName": "",
+      "objectReferenceType": ""
+    }
+  },
+  "warnings": [
+    "Applying a Prefab property override is a persistent Prefab Asset disk write; the bridge does not advertise Unity Undo for this asset change."
+  ],
+  "changedTargets": [],
+  "dirtyState": "dirty",
+  "undo": {
+    "available": false,
+    "groupName": ""
+  },
+  "compileState": "idle"
+}
