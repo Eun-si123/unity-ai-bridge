@@ -10,6 +10,22 @@ namespace UnityAiBridge.Editor.Execution
         ActiveSceneUnavailable,
     }
 
+    internal sealed class EditorMutationOutcome
+    {
+        public bool changed;
+        public bool verified;
+        public bool rolledBack;
+        public bool rollbackVerified;
+        public EditorStateRevisionSnapshot stateBefore;
+        public EditorStateRevisionSnapshot stateAfter;
+    }
+
+    internal sealed class EditorMutationExecution<T>
+    {
+        public T value;
+        public EditorMutationOutcome outcome;
+    }
+
     internal sealed class EditorMutationPreflightException : InvalidOperationException
     {
         public EditorMutationPreflightException(EditorMutationPreflightFailure failure, string message)
@@ -31,18 +47,41 @@ namespace UnityAiBridge.Editor.Execution
 
     internal sealed class EditorMutationVerificationException : InvalidOperationException
     {
-        public EditorMutationVerificationException(string message)
+        public EditorMutationVerificationException(string message, EditorMutationOutcome outcome)
             : base(message)
         {
+            Outcome = outcome;
         }
+
+        public EditorMutationOutcome Outcome { get; }
+    }
+
+    internal sealed class EditorMutationRollbackVerificationException : InvalidOperationException
+    {
+        public EditorMutationRollbackVerificationException(
+            string message,
+            Exception innerException,
+            EditorMutationOutcome outcome)
+            : base(message, innerException)
+        {
+            Outcome = outcome;
+        }
+
+        public EditorMutationOutcome Outcome { get; }
     }
 
     internal sealed class EditorMutationRollbackException : InvalidOperationException
     {
-        public EditorMutationRollbackException(string message, Exception innerException)
+        public EditorMutationRollbackException(
+            string message,
+            Exception innerException,
+            EditorMutationOutcome outcome)
             : base(message, innerException)
         {
+            Outcome = outcome;
         }
+
+        public EditorMutationOutcome Outcome { get; }
     }
 
     internal sealed class EditorMutationContext
@@ -55,10 +94,15 @@ namespace UnityAiBridge.Editor.Execution
         public EditorStateRevisionSnapshot stateBefore;
         public EditorStateRevisionSnapshot stateAfter;
         public EditorMutationLifecycleRecord lifecycle;
+        public EditorMutationOutcome outcome;
 
         public void MarkUndoRecorded()
         {
             undoRecorded = true;
+            if (outcome != null)
+            {
+                outcome.changed = true;
+            }
         }
     }
 
@@ -72,7 +116,7 @@ namespace UnityAiBridge.Editor.Execution
             Func<EditorMutationContext, T> mutate,
             Func<EditorMutationContext, T, bool> verify)
         {
-            return Execute(
+            return ExecuteWithOutcome(
                 operation,
                 undoGroupName,
                 string.Empty,
@@ -80,7 +124,8 @@ namespace UnityAiBridge.Editor.Execution
                 string.Empty,
                 string.Empty,
                 mutate,
-                verify);
+                verify,
+                null).value;
         }
 
         public static T Execute<T>(
@@ -91,7 +136,7 @@ namespace UnityAiBridge.Editor.Execution
             Func<EditorMutationContext, T> mutate,
             Func<EditorMutationContext, T, bool> verify)
         {
-            return Execute(
+            return ExecuteWithOutcome(
                 operation,
                 undoGroupName,
                 expectedStateEpoch,
@@ -99,7 +144,8 @@ namespace UnityAiBridge.Editor.Execution
                 string.Empty,
                 string.Empty,
                 mutate,
-                verify);
+                verify,
+                null).value;
         }
 
         public static T Execute<T>(
@@ -107,6 +153,190 @@ namespace UnityAiBridge.Editor.Execution
             string undoGroupName,
             string expectedStateEpoch,
             long expectedStateRevision,
+            string mutationId,
+            string intentFingerprint,
+            Func<EditorMutationContext, T> mutate,
+            Func<EditorMutationContext, T, bool> verify)
+        {
+            return ExecuteWithOutcome(
+                operation,
+                undoGroupName,
+                expectedStateEpoch,
+                expectedStateRevision,
+                mutationId,
+                intentFingerprint,
+                mutate,
+                verify,
+                null).value;
+        }
+
+        public static EditorMutationExecution<T> ExecuteWithOutcome<T>(
+            string operation,
+            string undoGroupName,
+            string expectedStateEpoch,
+            long expectedStateRevision,
+            string mutationId,
+            string intentFingerprint,
+            Func<EditorMutationContext, T> mutate,
+            Func<EditorMutationContext, T, bool> verify,
+            Func<EditorMutationContext, T, bool> verifyRollback)
+        {
+            ValidateArguments(
+                operation,
+                undoGroupName,
+                mutationId,
+                intentFingerprint,
+                mutate,
+                verify);
+
+            var lifecycleEnabled = !string.IsNullOrWhiteSpace(mutationId);
+            if (isExecuting)
+            {
+                throw new EditorMutationBusyException(
+                    $"Another Unity AI Bridge mutation is already executing; '{operation}' was not started.");
+            }
+
+            var context = RunPreflight(
+                operation,
+                undoGroupName,
+                expectedStateEpoch,
+                expectedStateRevision);
+
+            if (lifecycleEnabled)
+            {
+                context.lifecycle = EditorMutationLifecycle.Begin(
+                    operation,
+                    mutationId,
+                    intentFingerprint,
+                    context.stateBefore);
+            }
+
+            Undo.IncrementCurrentGroup();
+            context.undoGroup = Undo.GetCurrentGroup();
+            Undo.SetCurrentGroupName(undoGroupName);
+
+            var result = default(T);
+            var hasResult = false;
+
+            isExecuting = true;
+            try
+            {
+                result = mutate(context);
+                hasResult = true;
+
+                if (!verify(context, result))
+                {
+                    throw new EditorMutationVerificationException(
+                        $"{operation} changed Unity state, but native verification did not confirm the requested result.",
+                        context.outcome);
+                }
+
+                context.outcome.verified = true;
+                Undo.CollapseUndoOperations(context.undoGroup);
+                context.stateAfter = EditorStateRevision.Advance();
+                context.outcome.stateAfter = context.stateAfter;
+                EditorMutationLifecycle.MarkCompleted(context.lifecycle, context.stateAfter);
+
+                return new EditorMutationExecution<T>
+                {
+                    value = result,
+                    outcome = context.outcome,
+                };
+            }
+            catch (Exception primaryException)
+            {
+                if (context.undoRecorded)
+                {
+                    try
+                    {
+                        Undo.RevertAllInCurrentGroup();
+                        context.outcome.rolledBack = true;
+                        context.stateAfter = EditorStateRevision.Advance();
+                        context.outcome.stateAfter = context.stateAfter;
+                    }
+                    catch (Exception rollbackException)
+                    {
+                        context.stateAfter = EditorStateRevision.Advance();
+                        context.outcome.stateAfter = context.stateAfter;
+                        try
+                        {
+                            EditorMutationLifecycle.MarkRollbackFailed(context.lifecycle, context.stateAfter);
+                        }
+                        catch
+                        {
+                            // The rollback failure remains the primary safety signal.
+                        }
+
+                        throw new EditorMutationRollbackException(
+                            $"{operation} failed and its Undo transaction could not be reverted cleanly.",
+                            new AggregateException(primaryException, rollbackException),
+                            context.outcome);
+                    }
+
+                    if (verifyRollback != null && hasResult)
+                    {
+                        try
+                        {
+                            if (!verifyRollback(context, result))
+                            {
+                                EditorMutationLifecycle.MarkRollbackVerificationFailed(
+                                    context.lifecycle,
+                                    context.stateAfter);
+                                throw new EditorMutationRollbackVerificationException(
+                                    $"{operation} was reverted through Unity Undo, but native rollback verification did not confirm the expected post-rollback state.",
+                                    primaryException,
+                                    context.outcome);
+                            }
+
+                            context.outcome.rollbackVerified = true;
+                            EditorMutationLifecycle.MarkFailedRolledBack(context.lifecycle, context.stateAfter);
+                        }
+                        catch (EditorMutationRollbackVerificationException)
+                        {
+                            throw;
+                        }
+                        catch (Exception rollbackVerificationException)
+                        {
+                            try
+                            {
+                                EditorMutationLifecycle.MarkRollbackVerificationFailed(
+                                    context.lifecycle,
+                                    context.stateAfter);
+                            }
+                            catch
+                            {
+                                // The rollback verification failure remains the primary safety signal.
+                            }
+
+                            throw new EditorMutationRollbackVerificationException(
+                                $"{operation} was reverted through Unity Undo, but rollback verification raised an exception.",
+                                new AggregateException(primaryException, rollbackVerificationException),
+                                context.outcome);
+                        }
+                    }
+                    else
+                    {
+                        EditorMutationLifecycle.MarkFailedRolledBack(context.lifecycle, context.stateAfter);
+                    }
+                }
+                else
+                {
+                    context.stateAfter = EditorStateRevision.Capture();
+                    context.outcome.stateAfter = context.stateAfter;
+                    EditorMutationLifecycle.MarkFailedNoMutation(context.lifecycle, context.stateAfter);
+                }
+
+                throw;
+            }
+            finally
+            {
+                isExecuting = false;
+            }
+        }
+
+        private static void ValidateArguments<T>(
+            string operation,
+            string undoGroupName,
             string mutationId,
             string intentFingerprint,
             Func<EditorMutationContext, T> mutate,
@@ -138,86 +368,6 @@ namespace UnityAiBridge.Editor.Execution
                 throw new ArgumentException(
                     "mutationId and intentFingerprint must either both be supplied or both be omitted.");
             }
-
-            if (isExecuting)
-            {
-                throw new EditorMutationBusyException(
-                    $"Another Unity AI Bridge mutation is already executing; '{operation}' was not started.");
-            }
-
-            var context = RunPreflight(
-                operation,
-                undoGroupName,
-                expectedStateEpoch,
-                expectedStateRevision);
-
-            if (lifecycleEnabled)
-            {
-                context.lifecycle = EditorMutationLifecycle.Begin(
-                    operation,
-                    mutationId,
-                    intentFingerprint,
-                    context.stateBefore);
-            }
-
-            Undo.IncrementCurrentGroup();
-            context.undoGroup = Undo.GetCurrentGroup();
-            Undo.SetCurrentGroupName(undoGroupName);
-
-            isExecuting = true;
-            try
-            {
-                var result = mutate(context);
-                if (!verify(context, result))
-                {
-                    throw new EditorMutationVerificationException(
-                        $"{operation} changed Unity state, but native verification did not confirm the requested result.");
-                }
-
-                Undo.CollapseUndoOperations(context.undoGroup);
-                context.stateAfter = EditorStateRevision.Advance();
-                EditorMutationLifecycle.MarkCompleted(context.lifecycle, context.stateAfter);
-                return result;
-            }
-            catch (Exception primaryException)
-            {
-                if (context.undoRecorded)
-                {
-                    try
-                    {
-                        Undo.RevertAllInCurrentGroup();
-                        context.stateAfter = EditorStateRevision.Advance();
-                        EditorMutationLifecycle.MarkFailedRolledBack(context.lifecycle, context.stateAfter);
-                    }
-                    catch (Exception rollbackException)
-                    {
-                        context.stateAfter = EditorStateRevision.Advance();
-                        try
-                        {
-                            EditorMutationLifecycle.MarkRollbackFailed(context.lifecycle, context.stateAfter);
-                        }
-                        catch
-                        {
-                            // The rollback failure remains the primary safety signal.
-                        }
-
-                        throw new EditorMutationRollbackException(
-                            $"{operation} failed and its Undo transaction could not be reverted cleanly.",
-                            new AggregateException(primaryException, rollbackException));
-                    }
-                }
-                else
-                {
-                    context.stateAfter = EditorStateRevision.Capture();
-                    EditorMutationLifecycle.MarkFailedNoMutation(context.lifecycle, context.stateAfter);
-                }
-
-                throw;
-            }
-            finally
-            {
-                isExecuting = false;
-            }
         }
 
         private static EditorMutationContext RunPreflight(
@@ -242,6 +392,16 @@ namespace UnityAiBridge.Editor.Execution
             }
 
             EditorStateRevision.RequireCurrent(expectedStateEpoch, expectedStateRevision);
+            var stateBefore = EditorStateRevision.Capture();
+            var outcome = new EditorMutationOutcome
+            {
+                changed = false,
+                verified = false,
+                rolledBack = false,
+                rollbackVerified = false,
+                stateBefore = stateBefore,
+                stateAfter = null,
+            };
 
             return new EditorMutationContext
             {
@@ -250,9 +410,10 @@ namespace UnityAiBridge.Editor.Execution
                 undoGroup = -1,
                 activeScene = scene,
                 undoRecorded = false,
-                stateBefore = EditorStateRevision.Capture(),
+                stateBefore = stateBefore,
                 stateAfter = null,
                 lifecycle = null,
+                outcome = outcome,
             };
         }
     }
