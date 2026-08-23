@@ -20,6 +20,7 @@ const expectedCapabilities = [
   "prefab.inspect",
   "prefab.instantiate",
   "prefab.asset.create",
+  "prefab.property.apply",
   "scene.save",
   "transform.get",
   "transform.set",
@@ -57,6 +58,7 @@ try {
     "unity_inspect_prefab",
     "unity_instantiate_prefab",
     "unity_create_prefab_asset",
+    "unity_apply_prefab_property_override",
   ]) {
     if (!tools.some((tool) => tool.name === required)) {
       throw new Error(`MCP server did not advertise ${required}.`);
