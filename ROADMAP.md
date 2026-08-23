@@ -107,9 +107,9 @@ Minimum capabilities:
 
 Some narrow primitives were proven early in Phase 1; Phase 2 generalizes them into a common execution core.
 
-- 🟨 Main-thread dispatcher hardened — verified for status, hierarchy, diagnostics, and the first GameObject-create write path; broader tool coverage pending
+- 🟨 Main-thread dispatcher hardened — verified for status, hierarchy, diagnostics, resolver, and the first GameObject-create write path; broader tool coverage pending
 - ⬜ Structured scene/state snapshot suitable for preflight and verification
-- 🟨 Stable object resolver — implementation and Node tests exist on the current Phase 2 branch; real Unity runtime verification remains pending
+- ✅ Stable object resolver — live Unity 6000.3.21f1 verification re-resolved a created GameObject by `GlobalObjectId`; after Undo the same identifier returned `found=false`
 - ⬜ State revision / stale-state detection
 - ⬜ Serialized conflicting writes
 - 🟨 Undo integration — verified for bounded GameObject create; generalized transaction grouping pending
@@ -120,10 +120,10 @@ Some narrow primitives were proven early in Phase 1; Phase 2 generalizes them in
 - ✅ Reconnection and connection generations — verified for local single-editor lifecycle
 - 🟨 Agent capability/version negotiation — a real Phase 2 test exposed a stale compiled Unity Agent that accepted the connection but did not support the newly advertised `object.resolve`; explicit capability/version negotiation should prevent this mismatch from reaching command execution
 - 🟨 Timeout/cancellation behavior — request deadlines/timeouts exist; broader cancellation semantics pending
-- 🟨 Duplicate/replayed request protection — verified for immediate same-session `gameObject.create`; generalized mutation semantics pending
+- 🟨 Duplicate/replayed request protection — immediate same-session replay is deduplicated and a replay whose cached target was Undone/deleted is rejected as `stale_target/mutation_replay_stale`; generalized mutation semantics pending
 - ⬜ Preflight validation framework
-- 🟨 Native readback after writes — implemented for the current GameObject-create Phase 2 branch; real Unity verification pending
-- ⬜ Semantic verification of intended state
+- 🟨 Native readback after writes — verified for the bounded GameObject-create identity/existence contract; generalized readback pending
+- 🟨 Semantic verification of intended state — verified for create target identity/existence and stale-replay absence; broader property/state verification pending
 - ⬜ Rollback on failed verification
 - ⬜ Verification that rollback itself restored the expected state
 - ⬜ Unity EditMode test coverage for the common execution core
