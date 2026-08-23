@@ -5,7 +5,8 @@ import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 
 const timeoutMs = 120_000;
 const pollIntervalMs = 300;
-const destinationPath = "Assets/UnityAiBridge_Prefab_Create_Verify.prefab";
+const verificationRunId = `${Date.now()}_${randomUUID().replaceAll("-", "")}`;
+const destinationPath = `Assets/UnityAiBridge_Prefab_Create_Verify_${verificationRunId}.prefab`;
 
 const client = new Client({
   name: "unity-ai-bridge-prefab-asset-create-verifier",
@@ -40,6 +41,7 @@ try {
   console.log(
     `[Unity AI Bridge] Unity connection ready: ${requireString(status, "unityVersion")} / ${requireString(status, "activeScene")}`,
   );
+  console.log(`[Unity AI Bridge] Verification destination: ${destinationPath}`);
 
   await requireDestinationAbsent();
 
@@ -218,7 +220,7 @@ async function requireDestinationAbsent(): Promise<void> {
   });
   if (record(result)?.isError !== true) {
     throw new Error(
-      `Verification destination already exists at '${destinationPath}'. Delete it in Unity's Project window before retrying.`,
+      `Verification destination unexpectedly already exists at '${destinationPath}'. This should not happen for a unique verifier path.`,
     );
   }
   const text = readText(result);
