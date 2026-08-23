@@ -33,6 +33,7 @@ namespace UnityAiBridge.Editor.Commands
             "gameObject.create",
             "gameObject.update",
             "gameObject.delete",
+            "component.inspect",
             "scene.save",
             "transform.get",
             "transform.set",
