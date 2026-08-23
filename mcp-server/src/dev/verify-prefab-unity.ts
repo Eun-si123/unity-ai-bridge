@@ -35,6 +35,12 @@ try {
     }
   }
 
+  console.log("[Unity AI Bridge] Waiting for Unity Editor to connect to the local bridge...");
+  const connectedStatus = await waitForUnityConnection();
+  console.log(
+    `[Unity AI Bridge] Unity connection ready: ${requireString(connectedStatus, "unityVersion")} / ${requireString(connectedStatus, "activeScene")}`,
+  );
+
   const inspectionResult = await client.callTool({
     name: "unity_inspect_prefab",
     arguments: { path: prefabPath, maxDepth: 4, maxNodes: 25 },
@@ -155,6 +161,38 @@ try {
   process.exitCode = 1;
 } finally {
   await client.close();
+}
+
+async function waitForUnityConnection(): Promise<Record<string, unknown>> {
+  const deadline = Date.now() + timeoutMs;
+  let lastObservation = "No status returned.";
+
+  while (Date.now() < deadline) {
+    try {
+      const result = await client.callTool({ name: "unity_get_status", arguments: {} });
+      if (record(result)?.isError !== true) {
+        const status = record(result.structuredContent);
+        if (status !== null &&
+            typeof status.unityVersion === "string" &&
+            typeof status.activeScene === "string" &&
+            typeof status.stateEpoch === "string" &&
+            typeof status.stateRevision === "number") {
+          return status;
+        }
+        lastObservation = `Invalid status payload: ${JSON.stringify(result.structuredContent)}`;
+      } else {
+        lastObservation = readText(result);
+      }
+    } catch (error) {
+      lastObservation = error instanceof Error ? error.message : String(error);
+    }
+
+    await delay(pollIntervalMs);
+  }
+
+  throw new Error(
+    `Timed out waiting for Unity Editor to connect to the local bridge. Last observation: ${lastObservation}`,
+  );
 }
 
 async function waitUntilAbsent(globalObjectId: string): Promise<void> {
