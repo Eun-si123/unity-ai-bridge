@@ -125,7 +125,7 @@ Current implementation:
 - Phase 2 `object.resolve` handler using `GlobalObjectId` native re-resolution,
 - Phase 2 native readback and stale replay validation for the bounded GameObject-create path.
 
-All Phase 1 minimum slices are runtime-verified on Windows / Unity 6000.3.21f1 as recorded in `STATUS.md`. The new Phase 2 resolver/readback code is implemented and Node-verified but still awaits successful real Unity runtime verification.
+All Phase 1 minimum slices are runtime-verified on Windows / Unity 6000.3.21f1 as recorded in `STATUS.md`. The first Phase 2 stable resolver/native readback/stale-replay slice is also runtime-verified on the same Unity target.
 
 ### `bridge-protocol/`
 
@@ -153,7 +153,7 @@ Current implementation:
 - write-risk routing and mutation-id validation for the create slice,
 - bounded diagnostics and resolver validation,
 - simulated local-bridge tests,
-- real-Unity verification helpers including the Phase 2 resolver/Undo/stale-replay verifier.
+- real-Unity verification helpers including the verified Phase 2 resolver/Undo/stale-replay verifier.
 
 Remote Streamable HTTP, hosted auth/pairing, multi-user routing, and managed-service policy are not implemented here yet.
 
