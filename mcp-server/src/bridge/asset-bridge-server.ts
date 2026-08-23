@@ -141,7 +141,11 @@ function validateSearchFolders(value: string[]): void {
     throw new Error(`searchInFolders must contain 1..${MAX_FOLDER_COUNT} project folders.`);
   }
   for (let index = 0; index < value.length; index += 1) {
-    validateProjectPath(value[index], `searchInFolders[${index}]`);
+    const folder = value[index];
+    if (folder === undefined) {
+      throw new Error(`searchInFolders[${index}] is missing.`);
+    }
+    validateProjectPath(folder, `searchInFolders[${index}]`);
   }
 }
 
