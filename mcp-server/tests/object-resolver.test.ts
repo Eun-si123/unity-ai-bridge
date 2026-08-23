@@ -38,6 +38,8 @@ const foundPayload: ObjectResolvePayload = {
   siblingIndex: 2,
   activeSelf: true,
   activeInHierarchy: true,
+  stateEpoch: "resolver-state-epoch",
+  stateRevision: 19,
 };
 
 test("local bridge sends object.resolve as a read and validates native identity payload", async () => {
@@ -121,6 +123,8 @@ test("object.resolve accepts a syntactically valid identity that is currently mi
             siblingIndex: 0,
             activeSelf: false,
             activeInHierarchy: false,
+            stateEpoch: "resolver-state-epoch",
+            stateRevision: 20,
           },
           warnings: [],
           dirtyState: "unchanged",
@@ -132,6 +136,7 @@ test("object.resolve accepts a syntactically valid identity that is currently mi
     const result = await bridge.requestResolveObject(globalObjectId);
     assert.equal(result.found, false);
     assert.equal(result.requestedGlobalObjectId, globalObjectId);
+    assert.equal(result.stateRevision, 20);
   } finally {
     await bridge.stop();
     if (client.readyState !== WebSocket.CLOSED) {
