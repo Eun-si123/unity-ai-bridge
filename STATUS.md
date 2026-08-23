@@ -19,7 +19,7 @@ Overall status: **In progress**
 
 **Phase 1 — Minimal Local End-to-End completed on 2026-08-23.** The minimum local MCP -> bridge -> Unity -> structured-result path is runtime-verified on Windows / Unity 6000.3.21f1 for editor status, active-scene hierarchy, one bounded GameObject create mutation with duplicate-retry protection, and bounded Console/compiler diagnostics.
 
-Phase 2 has since verified stable native object resolution, Agent capability preflight, a common mutation preflight/Undo transaction core, forced-failure rollback, stale-state revision rejection, same-session domain-reload mutation lifecycle protection, and the first Unity EditMode regression tests. These guarantees are still proven mainly through the bounded `gameObject.create` path and must be generalized across future write families before Phase 2 exits.
+Phase 2 has since verified stable native object resolution, Agent capability preflight, a common mutation preflight/Undo transaction core, forced-failure rollback, stale-state revision rejection, same-session domain-reload mutation lifecycle protection, Unity EditMode reliability tests, and a structured mutation verification + rollback-verification outcome contract. These guarantees are still proven mainly through the bounded `gameObject.create` path and must be generalized across future write families before Phase 2 exits.
 
 ## What exists now
 
@@ -29,7 +29,7 @@ Phase 2 has since verified stable native object resolution, Agent capability pre
 | Public-core license | Implemented | Root `LICENSE` is Apache License 2.0. The separate private `unity-ai-mcp-infra` repository is outside this repository's automatic license boundary. |
 | Core design/docs | Implemented | `AGENTS.md`, `DESIGN.md`, `DECISIONS.md`, `ROADMAP.md`, `CODEMAP.md`, `REFERENCES.md`. |
 | Unity Editor package scaffold | Verified manually | Package Manager load and Editor assembly compilation passed in Unity 6000.3.21f1 on Windows; subsequent Phase 1/2 slices compiled on the same target. |
-| Initial Unity target | Verified for current local slices | Unity 6000.3.21f1 completed real status, hierarchy, diagnostics, stable resolver, create/readback/replay, capability preflight, transaction/rollback, stale-state, domain-reload lifecycle, and EditMode test verification. Broader compatibility remains unverified. |
+| Initial Unity target | Verified for current local slices | Unity 6000.3.21f1 completed real status, hierarchy, diagnostics, stable resolver, create/readback/replay, capability preflight, transaction/rollback, stale-state, domain-reload lifecycle, EditMode tests, and structured rollback verification. Broader compatibility remains unverified. |
 | Bridge protocol v0 | Implemented | Command/result schemas, TypeScript/C# protocol types/constants, fixtures, and operation docs exist. |
 | MCP/server scaffold | Verified | Node 24.19.0 install/build/tests pass in GitHub Actions. |
 | Local WebSocket bridge server | Verified for current local slices | Real status, hierarchy, create, diagnostics, object-resolve, capability-preflighted reads, reconnect, and stale-route behavior completed against Unity 6000.3.21f1. |
@@ -41,17 +41,17 @@ Phase 2 has since verified stable native object resolution, Agent capability pre
 | Stable object resolver / `unity_resolve_object` | Verified manually + CI support | A created GameObject was re-resolved from its `GlobalObjectId` to the same native object/type/scene/name/instance metadata; after Undo, the same identifier returned `found=false`. |
 | Reconnect / stale-generation lifecycle | Verified manually + CI support | Domain reload preserved editor identity, changed `connectionGeneration`, rejected stale routing with `routing/stale_connection`, and accepted commands on the new generation. |
 | Unity Agent capability/version negotiation | Verified manually + CI support | `editor.status` advertises `agentVersion=0.0.1` plus supported operations. Non-status MCP tools preflight the required operation; missing/legacy capability metadata fails before dispatch. |
-| `gameObject.create` / `unity_create_game_object` | Verified manually + CI support | One empty root GameObject is created through the common transaction core, scene dirtying/Undo is registered, `GlobalObjectId` is returned, and native readback verifies the requested identity before success is cached. |
+| `gameObject.create` / `unity_create_game_object` | Verified manually + CI support | One empty root GameObject is created through the common transaction core, scene dirtying/Undo is registered, `GlobalObjectId` is returned, and native readback verifies the requested identity before success is cached. PR #17 reverified this production consumer after the structured verification-core refactor. |
 | Common mutation preflight | Verified for current write slice | Common checks cover compilation, valid/loaded active scene, optional expected state epoch/revision, and re-entrant mutation exclusion. |
 | Undo transaction grouping | Verified for current write slice | Common transaction opens/names/collapses an Undo group; one Ctrl+Z removes the verified create result. |
 | Mutation retry/dedup protection | Verified for same-session `gameObject.create` | Immediate identical retry returns `replayed=true` without duplication. A replay whose cached target was Undone/deleted fails closed as `stale_target/mutation_replay_stale`. |
-| Native readback + semantic verification | Verified for bounded create identity/existence | First create is re-resolved through native Unity state before success is cached. Broader property/component/asset semantic verification remains future work. |
-| Rollback on failed verification | Verified for common transaction probe | A deliberate verifier failure after creating a temporary object triggered `Undo.RevertAllInCurrentGroup`; native resolver and hierarchy then confirmed the object was gone. |
-| Rollback verification | Verified for bounded probe only | Resolver returned `found=false` and hierarchy matched zero rollback-probe objects. A reusable rollback-verification contract is not yet implemented. |
+| Native readback + semantic verification | Verified for bounded create identity/existence | First create is re-resolved through native Unity state before success is cached. Structured transaction outcomes now distinguish `changed`, `verified`, `rolledBack`, and `rollbackVerified`. Broader property/component/asset semantic verification remains future work. |
+| Rollback on failed verification | Verified for common transaction probe | A deliberate verifier failure after creating a temporary object triggered the Undo transaction rollback; native resolver and hierarchy confirmed the object was gone. |
+| Rollback verification | Verified for bounded probe + structured contract | PR #17 verified transaction-owned rollback verification: `changed=true`, `verified=false`, `rolledBack=true`, `rollbackVerifierCalled=true`, `rollbackVerified=true`, resolver `found=false`, and hierarchy match count zero. Rollback verification failure has a dedicated exception/lifecycle status rather than being reported as success. |
 | State revision / stale-state detection | Verified manually + EditMode tests | State is identified by per-Editor-session epoch + monotonic revision. Fresh state allowed one write; a different write using the stale token was rejected as `stale_state/state_revision_mismatch` before creating an object. |
 | Mutation lifecycle across compilation/domain reload | Verified manually + EditMode tests | `SessionState` lifecycle records mark `started` before mutation. A real domain reload preserved an ambiguous `started` record; retrying the same mutationId failed closed and created no object. Full Editor restart persistence is not provided. |
-| Unity EditMode reliability tests | Verified manually | `EunSung.UnityAiBridge.Editor.Tests` ran **8 Passed / 0 Failed** on Windows / Unity 6000.3.21f1: 4 state-revision tests + 4 mutation-lifecycle tests. Non-embedded package installs require the package in project `manifest.json` `testables`. |
-| Scene dirty-state policy | In progress | Create marks/reports dirty. Rollback was tested while the scene was already dirty (`sceneWasDirty=True`, `sceneIsDirty=True`), so clean-scene dirty restoration remains unverified. |
+| Unity EditMode reliability tests | Verified manually | PR #16 established 8/8 tests. PR #17 expanded the suite to **12 Passed / 0 Failed** on Windows / Unity 6000.3.21f1, including structured transaction success, verified rollback, rollback-verification failure, and lifecycle terminal-state coverage. Non-embedded package installs require the package in project `manifest.json` `testables`. |
+| Scene dirty-state policy | In progress | A PR #17 rollback probe started from a clean scene (`sceneWasDirty=False`) and ended with `sceneIsDirty=True` even though object rollback and rollback verification succeeded. Dirty-state restoration is therefore not implemented and must not be implied by `rollbackVerified=true`. |
 | Explicit save behavior | Planned | No write silently saves. An explicit save contract/tool is not yet implemented. |
 | Timeout/cancellation reconciliation | In progress | Deadlines/timeouts exist. Generalized cancellation/reconciliation for writes is not yet verified. |
 | Diagnostics / `unity_get_diagnostics` | Verified manually + CI support | Bounded Console counts/recent captured logs are returned; compiler diagnostics are captured through `CompilationPipeline` with source location metadata. |
@@ -156,8 +156,9 @@ Phase 2 evidence is intentionally recorded as bounded slices rather than claimin
 - [x] PR #14 — state epoch/revision tokens and stale-state write rejection
 - [x] PR #15 — mutation lifecycle ledger surviving real same-session script/domain reload
 - [x] PR #16 — first Unity EditMode reliability test assembly; 8/8 tests passed
+- [x] PR #17 — structured mutation verification/rollback-verification outcomes; 12/12 EditMode tests and real rollback/create regression verification passed
 
-Current next reliability slice: **generalized semantic verification + rollback verification outcome contract**, followed by explicit save/dirty-state semantics and cancellation reconciliation.
+Current next reliability slice: **scene dirty-state + explicit save semantics**, followed by cancellation reconciliation and broader write-family adoption.
 
 ## Verification log
 
@@ -243,7 +244,7 @@ Result: PASS
 Environment: Windows, Unity 6000.3.21f1
 Action: Tools -> Unity AI Bridge -> Verify Transaction Rollback
 Observed: forcedVerificationFailure=true; rollbackTargetFound=false; hierarchyMatches=0; sceneWasDirty=True; sceneIsDirty=True
-Result: PASS for object rollback; clean-scene dirty-flag restoration remains unverified
+Result: PASS for object rollback; clean-scene dirty-flag restoration remained unverified at this point
 ```
 
 ### 2026-08-23 — State revision / stale-state rejection (PR #14)
@@ -251,9 +252,8 @@ Result: PASS for object rollback; clean-scene dirty-flag restoration remains unv
 ```text
 Environment: Windows, Unity 6000.3.21f1
 Action: npm.cmd --prefix mcp-server run verify:state-revision
-Observed: initial state epoch b2ff69f157034d1caebb3c3eb104e67e revision 1; fresh write accepted; response revision 2; different write reusing stale revision 1 rejected as stale_state/state_revision_mismatch before creation; rejectedHierarchyMatches=0; after one Ctrl+Z revision=4 and acceptedHierarchyMatchesAfterUndo=0
+Observed: fresh epoch/revision accepted the first create; a different create using the now-stale snapshot failed with stale_state/state_revision_mismatch before creating a second object; rejectedHierarchyMatches=0; after one Ctrl+Z the accepted object was gone
 Result: PASS
-Notes: revision is an opaque freshness detector; conservative observers may advance it more than once for one logical edit.
 ```
 
 ### 2026-08-23 — Mutation lifecycle across real domain reload (PR #15)
@@ -261,55 +261,61 @@ Notes: revision is an opaque freshness detector; conservative observers may adva
 ```text
 Environment: Windows, Unity 6000.3.21f1
 Action: Tools -> Unity AI Bridge -> Verify Mutation Lifecycle Reload Safety
-Observed after actual compilation/domain reload: lifecycleStatus=started; domainChanged=true; retryRejected=true; hierarchyMatches=0; same mutationId was not re-executed
+Observed: lifecycleStatus=started survived script compilation/domain reload; domainChanged=true; same mutationId retryRejected=true; hierarchyMatches=0
 Result: PASS
-Limitation: SessionState does not provide full Editor-restart durability.
 ```
 
 ### 2026-08-23 — Unity EditMode reliability tests (PR #16)
 
 ```text
-Environment: Windows, Unity 6000.3.21f1, Unity Test Runner EditMode
-Setup note: non-embedded local package required com.eunsung.unity-ai-bridge in Packages/manifest.json testables
-Observed: EunSung.UnityAiBridge.Editor.Tests loaded; 8 Passed / 0 Failed
-Coverage: 4 state-revision tests + 4 mutation-lifecycle fail-closed tests
+Environment: Windows, Unity 6000.3.21f1
+Action: Test Runner -> EditMode -> Run All
+Observed: 8 Passed / 0 Failed (4 state revision + 4 mutation lifecycle tests)
+Setup note: non-embedded local package required com.eunsung.unity-ai-bridge in the consuming project's Packages/manifest.json testables array
 Result: PASS
+```
+
+### 2026-08-23 — Structured verification + rollback verification (PR #17)
+
+```text
+Environment: Windows, Unity 6000.3.21f1
+CI: Node Verification 32616243285 PASS; Phase 1 Local Bridge Verification 32616243298 PASS
+EditMode: 12 Passed / 0 Failed
+Rollback probe: forcedVerificationFailure=true; changed=true; verified=false; rolledBack=true; rollbackVerifierCalled=true; rollbackVerified=true; rollbackTargetFound=false; hierarchyMatches=0; sceneWasDirty=False; sceneIsDirty=True
+Production create regression: create replayed=false; native resolve found=true with matching GlobalObjectId/name/scene/type; immediate replay=true; after one Ctrl+Z resolver found=false; same mutationId stale replay rejected; hierarchyMatches=0
+Result: PASS for structured verification/rollback verification and create regression
+Important limitation: rollback restored native object state but did not restore a previously clean scene's dirty flag. Dirty-state restoration remains separate reliability work.
 ```
 
 ## Phase 2 — Reliability Core focus
 
-Completed/verified bounded primitives:
+Phase 2 begins from the narrow reliability primitives proven during Phase 1 and generalizes them across future write tools.
 
-1. stable object resolution,
-2. Agent capability preflight,
-3. common mutation preflight,
-4. Undo transaction grouping,
-5. native create readback,
-6. bounded semantic verification,
-7. forced-failure rollback,
-8. bounded native rollback verification,
-9. stale-state revision handling,
-10. compile/domain-reload-safe mutation lifecycle,
-11. initial Unity EditMode regression tests.
+Priority order:
 
-Current priority order:
-
-1. generalized semantic verification outcome contract,
-2. generalized rollback verification outcome contract,
-3. explicit save and clean-scene dirty-state semantics,
-4. cancellation/reconciliation behavior,
-5. broader write-family adoption and EditMode coverage.
+1. structured scene/state observation and stable object resolution,
+2. preflight validation,
+3. serialized mutation transaction/Undo grouping,
+4. native Unity readback after mutation,
+5. semantic verification of intended state,
+6. rollback on failed verification and verification of rollback,
+7. stale-state/revision handling,
+8. compile/domain-reload-safe operation lifecycle,
+9. generalized mutation idempotency/retry behavior,
+10. Unity EditMode tests for the common execution core,
+11. scene dirty-state + explicit save semantics,
+12. timeout/cancellation reconciliation,
+13. adoption across additional write families.
 
 ## Known unknowns / remaining reliability work
 
 - exact `GlobalObjectId` behavior for unsaved/new scene objects and unusual object cases,
-- mutation dedup/lifecycle persistence across a full Unity Editor restart is not provided by current `SessionState`,
-- generalized verification/rollback outcome semantics across future mutation families,
-- clean-scene dirty-flag behavior after a failed mutation rollback,
-- explicit save contract and verification,
-- generalized cancellation/reconciliation for ambiguous writes,
-- richer per-target conflict scheduling beyond the current single main-thread mutation queue/guard,
+- mutation dedup/lifecycle persistence across full Unity Editor restart is not provided by current `SessionState`,
+- clean-scene dirty restoration after rollback is not implemented; verified rollback can currently leave the scene dirty,
+- explicit save behavior is not implemented and no mutation silently saves,
+- general write serialization/idempotency/semantic verification across future mutation families remains incomplete,
 - recent Console entry text only covers the current domain-load capture window,
+- generalized cancellation/reconciliation for writes is not verified,
 - long-term Unity support matrix beyond 6000.3.21f1,
 - future multi-editor routing design,
 - remote authentication/pairing cryptography,
