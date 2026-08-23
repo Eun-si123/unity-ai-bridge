@@ -29,7 +29,7 @@ namespace UnityAiBridge.Editor.Connection
                 return true;
             }
 
-            return false;
+            return await TryHandlePrefabCommandAsync(current, command, rawJson, cancellationToken);
         }
 
         private static async Task HandleAssetSearchAsync(
