@@ -125,7 +125,8 @@ try {
     arguments: {
       componentGlobalObjectId: firstColliderId,
       propertyPath,
-      value: { kind: "boolean", boolValue: true },
+      valueKind: "boolean",
+      boolValue: true,
       mutationId: setTrueMutationId,
       expectedStateEpoch: firstComponents.stateEpoch,
       expectedStateRevision: firstComponents.stateRevision,
@@ -219,7 +220,8 @@ try {
     arguments: {
       componentGlobalObjectId: firstColliderId,
       propertyPath,
-      value: { kind: "boolean", boolValue: false },
+      valueKind: "boolean",
+      boolValue: false,
       mutationId: setFalseMutationId,
       expectedStateEpoch: firstComponents.stateEpoch,
       expectedStateRevision: firstComponents.stateRevision,
