@@ -13,6 +13,37 @@ The project is pre-alpha. Internal package version `0.0.1` does not represent a 
 - Clarified that the separate private `unity-ai-mcp-infra` repository is not automatically licensed under the public core's Apache-2.0 license.
 - Closed the Phase 0 "project license selected" governance item.
 
+### Phase 2 — Stable Object Resolution / Native Readback — Implemented, verification pending
+
+#### Added
+
+- Unity `ObjectResolverCommand` using `GlobalObjectId.TryParse` and native `GlobalObjectIdentifierToObjectSlow` re-resolution.
+- Bridge `object.resolve` and MCP `unity_resolve_object` read operations.
+- Resolver output with canonical GlobalObjectId, current transient InstanceID, object type, owner GameObject identity, scene/hierarchy hints, sibling index, and active state.
+- Explicit `found=false` result for a valid GlobalObjectId whose current target cannot be resolved.
+- `object-resolve` protocol request/result fixtures and protocol documentation.
+- Simulated Node resolver tests for found state, missing state, read-risk routing, result validation, and invalid-input rejection before Unity delivery.
+- `verify:resolver` live verifier covering create -> native resolve -> user Undo -> missing target -> same-mutation stale replay rejection -> hierarchy no-replacement check.
+
+#### Changed
+
+- First-time `gameObject.create` now re-resolves the created target through native GlobalObjectId lookup and validates identity/name/scene before caching a successful mutation result.
+- Same-mutation replay no longer trusts the cached result by itself. It re-resolves the cached GlobalObjectId and revalidates current native state before reporting `replayed=true`.
+- If the completed target was undone/deleted/moved/renamed or otherwise no longer matches, replay fails closed with `stale_target/mutation_replay_stale` rather than creating a replacement or returning stale success.
+- `unity_create_game_object` tool description now documents native readback and stale replay behavior.
+
+#### Verification so far
+
+- Feature-branch Node Verification run `32608245532`: **PASS**.
+- Feature-branch local-bridge verification run `32608245619`: **PASS**.
+- TypeScript build and all Node tests, including the new resolver tests: **PASS**.
+- Unity 6000.3.21f1 compile/runtime verification: **PENDING**.
+- Required live check: `npm.cmd --prefix mcp-server run verify:resolver`, then press Ctrl+Z once when prompted.
+
+#### Remaining limitation
+
+- This slice verifies identity/readback behavior but does not yet provide a generalized write transaction rollback framework when a first mutation changes Unity state and subsequent semantic verification fails. General rollback remains later Phase 2 work.
+
 ### Phase 1 — Console / Compiler Diagnostics — Verified slice
 
 #### Added
@@ -76,9 +107,9 @@ The project is pre-alpha. Internal package version `0.0.1` does not represent a 
 - Live `unity_get_hierarchy` readback reported `hierarchyMatches=1`; the Unity Hierarchy visibly contained one generated `MCP_Create_Verify_1787442917163` object.
 - Scene dirty state was visible and the create is registered with Unity Undo.
 
-#### Known limitation
+#### Historical limitation closed by Phase 2 implementation
 
-- Current duplicate replay trusts the cached same-session result. If the created object is manually deleted or undone before a later replay, the cached replay is not yet revalidated against native Unity state. Phase 2 native readback/verification will close this gap.
+- Phase 1 replay originally trusted the cached same-session result after manual Undo/deletion. The Phase 2 stable-resolver slice now implements native re-resolution and fail-closed stale-target rejection; that hardening still requires its own live Unity verification before being marked Verified.
 
 ### Phase 1 — Active Scene Hierarchy Read — Verified slice
 
@@ -122,7 +153,7 @@ The project is pre-alpha. Internal package version `0.0.1` does not represent a 
 - Simulated Unity WebSocket integration tests covering hello/status round-trip and the no-editor failure path.
 - Simulated explicit-route test covering propagation of `routing/stale_connection`.
 - Phase 1 design document and CI workflow.
-- `docs/TESTING.md` with repeatable Node, Unity compile, real bridge, MCP end-to-end, and reconnect verification procedures.
+- `docs/TESTING.md` with repeatable automated/manual verification procedures.
 - `verify:unity`, `verify:mcp-unity`, and `verify:reconnect` developer commands.
 
 #### Dependencies
@@ -178,9 +209,3 @@ The project is pre-alpha. Internal package version `0.0.1` does not represent a 
 - Clarified that a public GitHub repository is **not** an open-source license; the project license was still undecided at the time of the Phase 0 scaffold merge.
 - Separated accepted design decisions from implementation status in `STATUS.md`.
 - Clarified the public-core/private-managed-service boundary and third-party reference policy.
-
-### Verification at Phase 0 merge
-
-- Node/MCP dependency install, TypeScript build, and protocol smoke tests: **Verified by GitHub Actions**.
-- Unity 6000.3.21f1 package load/compile: later manually verified during Phase 1.
-- Project license: later resolved to Apache-2.0 in Unreleased.
