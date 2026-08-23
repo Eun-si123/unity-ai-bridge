@@ -4,7 +4,7 @@
   "ok": true,
   "result": {
     "gameObject": {
-      "globalObjectId": "GlobalObjectId_V1-2-00000000000000000000000000000000-1-0",
+      "globalObjectId": "GlobalObjectId_V1-2-0123456789abcdef0123456789abcdef-1-0",
       "instanceId": 101,
       "name": "Target",
       "activeSelf": true,
@@ -29,7 +29,7 @@
       {
         "index": 0,
         "missingScript": false,
-        "globalObjectId": "GlobalObjectId_V1-2-00000000000000000000000000000000-2-0",
+        "globalObjectId": "GlobalObjectId_V1-2-0123456789abcdef0123456789abcdef-2-0",
         "instanceId": 202,
         "typeName": "UnityEngine.Transform",
         "assemblyQualifiedName": "UnityEngine.Transform, UnityEngine.CoreModule",
