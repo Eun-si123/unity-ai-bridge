@@ -33,6 +33,14 @@ namespace UnityAiBridge.Editor.Commands
         }
     }
 
+    internal sealed class GameObjectCreateIncompleteException : InvalidOperationException
+    {
+        public GameObjectCreateIncompleteException(string message)
+            : base(message)
+        {
+        }
+    }
+
     internal sealed class GameObjectCreateReplayStaleException : InvalidOperationException
     {
         public GameObjectCreateReplayStaleException(string message)
@@ -142,6 +150,8 @@ namespace UnityAiBridge.Editor.Commands
                     UndoGroupName,
                     normalizedExpectedEpoch,
                     expectedStateRevision,
+                    mutationId,
+                    BuildIntentFingerprint(name, normalizedExpectedEpoch, expectedStateRevision),
                     context => CreateNativeObject(context, name),
                     (context, state) => VerifyNativeObject(context, state, name));
             }
@@ -149,6 +159,14 @@ namespace UnityAiBridge.Editor.Commands
                 when (exception.Failure == EditorMutationPreflightFailure.Compiling)
             {
                 throw new GameObjectCreateCompilingException(exception.Message);
+            }
+            catch (EditorMutationLifecycleConflictException exception)
+            {
+                throw new GameObjectCreateMutationConflictException(exception.Message);
+            }
+            catch (EditorMutationIncompleteException exception)
+            {
+                throw new GameObjectCreateIncompleteException(exception.Message);
             }
             catch (EditorMutationVerificationException exception)
             {
@@ -174,8 +192,20 @@ namespace UnityAiBridge.Editor.Commands
                 stateRevision = stateAfter.revision,
             };
 
+            // Operation-specific replay state is deliberately persisted after the common lifecycle
+            // reaches completed. If a reload interrupts this narrow gap, a same-id retry sees the
+            // completed lifecycle without a replay payload and fails closed instead of duplicating.
             SessionState.SetString(sessionKey, JsonUtility.ToJson(result));
             return result;
+        }
+
+        internal static string BuildIntentFingerprint(
+            string name,
+            string expectedStateEpoch,
+            long expectedStateRevision)
+        {
+            var epoch = expectedStateEpoch ?? string.Empty;
+            return $"name:{name.Length}:{name}|epoch:{epoch.Length}:{epoch}|revision:{expectedStateRevision}";
         }
 
         private static CreateMutationState CreateNativeObject(

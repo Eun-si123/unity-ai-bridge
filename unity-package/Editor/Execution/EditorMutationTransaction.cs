@@ -54,6 +54,7 @@ namespace UnityAiBridge.Editor.Execution
         public bool undoRecorded;
         public EditorStateRevisionSnapshot stateBefore;
         public EditorStateRevisionSnapshot stateAfter;
+        public EditorMutationLifecycleRecord lifecycle;
 
         public void MarkUndoRecorded()
         {
@@ -76,6 +77,8 @@ namespace UnityAiBridge.Editor.Execution
                 undoGroupName,
                 string.Empty,
                 0,
+                string.Empty,
+                string.Empty,
                 mutate,
                 verify);
         }
@@ -85,6 +88,27 @@ namespace UnityAiBridge.Editor.Execution
             string undoGroupName,
             string expectedStateEpoch,
             long expectedStateRevision,
+            Func<EditorMutationContext, T> mutate,
+            Func<EditorMutationContext, T, bool> verify)
+        {
+            return Execute(
+                operation,
+                undoGroupName,
+                expectedStateEpoch,
+                expectedStateRevision,
+                string.Empty,
+                string.Empty,
+                mutate,
+                verify);
+        }
+
+        public static T Execute<T>(
+            string operation,
+            string undoGroupName,
+            string expectedStateEpoch,
+            long expectedStateRevision,
+            string mutationId,
+            string intentFingerprint,
             Func<EditorMutationContext, T> mutate,
             Func<EditorMutationContext, T, bool> verify)
         {
@@ -108,6 +132,13 @@ namespace UnityAiBridge.Editor.Execution
                 throw new ArgumentNullException(nameof(verify));
             }
 
+            var lifecycleEnabled = !string.IsNullOrWhiteSpace(mutationId);
+            if (lifecycleEnabled != !string.IsNullOrEmpty(intentFingerprint))
+            {
+                throw new ArgumentException(
+                    "mutationId and intentFingerprint must either both be supplied or both be omitted.");
+            }
+
             if (isExecuting)
             {
                 throw new EditorMutationBusyException(
@@ -119,6 +150,15 @@ namespace UnityAiBridge.Editor.Execution
                 undoGroupName,
                 expectedStateEpoch,
                 expectedStateRevision);
+
+            if (lifecycleEnabled)
+            {
+                context.lifecycle = EditorMutationLifecycle.Begin(
+                    operation,
+                    mutationId,
+                    intentFingerprint,
+                    context.stateBefore);
+            }
 
             Undo.IncrementCurrentGroup();
             context.undoGroup = Undo.GetCurrentGroup();
@@ -136,6 +176,7 @@ namespace UnityAiBridge.Editor.Execution
 
                 Undo.CollapseUndoOperations(context.undoGroup);
                 context.stateAfter = EditorStateRevision.Advance();
+                EditorMutationLifecycle.MarkCompleted(context.lifecycle, context.stateAfter);
                 return result;
             }
             catch (Exception primaryException)
@@ -146,14 +187,29 @@ namespace UnityAiBridge.Editor.Execution
                     {
                         Undo.RevertAllInCurrentGroup();
                         context.stateAfter = EditorStateRevision.Advance();
+                        EditorMutationLifecycle.MarkFailedRolledBack(context.lifecycle, context.stateAfter);
                     }
                     catch (Exception rollbackException)
                     {
-                        EditorStateRevision.Advance();
+                        context.stateAfter = EditorStateRevision.Advance();
+                        try
+                        {
+                            EditorMutationLifecycle.MarkRollbackFailed(context.lifecycle, context.stateAfter);
+                        }
+                        catch
+                        {
+                            // The rollback failure remains the primary safety signal.
+                        }
+
                         throw new EditorMutationRollbackException(
                             $"{operation} failed and its Undo transaction could not be reverted cleanly.",
                             new AggregateException(primaryException, rollbackException));
                     }
+                }
+                else
+                {
+                    context.stateAfter = EditorStateRevision.Capture();
+                    EditorMutationLifecycle.MarkFailedNoMutation(context.lifecycle, context.stateAfter);
                 }
 
                 throw;
@@ -196,6 +252,7 @@ namespace UnityAiBridge.Editor.Execution
                 undoRecorded = false,
                 stateBefore = EditorStateRevision.Capture(),
                 stateAfter = null,
+                lifecycle = null,
             };
         }
     }
