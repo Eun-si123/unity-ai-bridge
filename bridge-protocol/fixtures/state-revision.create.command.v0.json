@@ -1,0 +1,17 @@
+{
+  "protocolVersion": "0",
+  "requestId": "req-state-create-1",
+  "operation": "gameObject.create",
+  "arguments": {
+    "name": "StateCheckedObject",
+    "mutationId": "mutation-state-create-1",
+    "expectedStateEpoch": "6f39b7c06e4548319fdcd8a02b388afe",
+    "expectedStateRevision": 42
+  },
+  "risk": "write",
+  "route": {
+    "editorId": "example-editor",
+    "connectionGeneration": 1787449000000
+  },
+  "deadlineUnixMs": 1787449005000
+}
