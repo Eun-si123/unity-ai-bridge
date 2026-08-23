@@ -8,6 +8,8 @@ import {
   type GameObjectCreateOptions,
   type HierarchyOptions,
   type SceneSaveOptions,
+  type TransformSetOptions,
+  type Vector3Payload,
 } from "./bridge/local-bridge-server.js";
 import { BRIDGE_PROTOCOL_VERSION } from "./protocol/bridge.js";
 
@@ -66,6 +68,87 @@ const resolveObjectInputSchema = fromJsonSchema({
       maxLength: 256,
       description:
         "Unity GlobalObjectId string to re-resolve against current native Editor state. A syntactically valid ID may still return found=false when the target no longer exists or its scene is not loaded.",
+    },
+  },
+  additionalProperties: false,
+});
+
+const transformGetInputSchema = fromJsonSchema({
+  type: "object",
+  required: ["globalObjectId"],
+  properties: {
+    globalObjectId: {
+      type: "string",
+      minLength: 1,
+      maxLength: 256,
+      description:
+        "GlobalObjectId of the GameObject whose Transform should be read. The current slice requires a GameObject target rather than silently switching from a Component to its owner.",
+    },
+  },
+  additionalProperties: false,
+});
+
+const vector3Schema = {
+  type: "object",
+  required: ["x", "y", "z"],
+  properties: {
+    x: { type: "number" },
+    y: { type: "number" },
+    z: { type: "number" },
+  },
+  additionalProperties: false,
+} as const;
+
+const transformSetInputSchema = fromJsonSchema({
+  type: "object",
+  required: [
+    "globalObjectId",
+    "localPosition",
+    "localEulerAngles",
+    "localScale",
+    "expectedStateEpoch",
+    "expectedStateRevision",
+  ],
+  properties: {
+    globalObjectId: {
+      type: "string",
+      minLength: 1,
+      maxLength: 256,
+      description: "GlobalObjectId of the active-scene GameObject to mutate.",
+    },
+    localPosition: {
+      ...vector3Schema,
+      description: "Complete local-space position to apply.",
+    },
+    localEulerAngles: {
+      ...vector3Schema,
+      description:
+        "Complete local-space Euler rotation in degrees. Unity verifies the resulting rotation as a Quaternion so equivalent Euler representations are accepted.",
+    },
+    localScale: {
+      ...vector3Schema,
+      description: "Complete local-space scale to apply. Zero and negative components are allowed by this contract.",
+    },
+    mutationId: {
+      type: "string",
+      minLength: 1,
+      maxLength: 128,
+      pattern: "^[A-Za-z0-9._:-]+$",
+      description:
+        "Optional idempotency key. Reuse exactly the same mutationId only when retrying this exact transform.set intent after an ambiguous timeout/disconnect. If omitted, the bridge generates one.",
+    },
+    expectedStateEpoch: {
+      type: "string",
+      minLength: 1,
+      maxLength: 128,
+      description:
+        "Required optimistic-concurrency epoch from the same recent observation as expectedStateRevision.",
+    },
+    expectedStateRevision: {
+      type: "integer",
+      minimum: 1,
+      description:
+        "Required optimistic-concurrency revision. The transform mutation is rejected if Unity state advanced after the observation.",
     },
   },
   additionalProperties: false,
@@ -278,6 +361,78 @@ serveStdio(() => {
         const input = args as { globalObjectId: string };
         await preflightAgentCapabilities("object.resolve", "state.revision.v1");
         const result = await bridge.requestResolveObject(input.globalObjectId);
+        return {
+          content: [{ type: "text", text: JSON.stringify(result) }],
+          structuredContent: result,
+        };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return {
+          isError: true,
+          content: [{ type: "text", text: message }],
+        };
+      }
+    },
+  );
+
+  server.registerTool(
+    "unity_get_transform",
+    {
+      description:
+        "Read the local and world Transform state of a GameObject identified by GlobalObjectId. Returns native position/rotation/scale readback plus a fresh stateEpoch/stateRevision suitable for the matching transform write tool.",
+      inputSchema: transformGetInputSchema,
+    },
+    async (args) => {
+      try {
+        const input = args as { globalObjectId: string };
+        await preflightAgentCapabilities("transform.get", "state.revision.v1");
+        const result = await bridge.requestTransform(input.globalObjectId);
+        return {
+          content: [{ type: "text", text: JSON.stringify(result) }],
+          structuredContent: result,
+        };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return {
+          isError: true,
+          content: [{ type: "text", text: message }],
+        };
+      }
+    },
+  );
+
+  server.registerTool(
+    "unity_set_transform",
+    {
+      description:
+        "Set the complete local position, local Euler rotation, and local scale of an active-scene GameObject. Requires a fresh stateEpoch/stateRevision. Unity records Undo, verifies the native Transform after the write (rotation by Quaternion equivalence), rolls back and verifies rollback on failed semantic verification, enforces the command deadline before execution, and protects ambiguous retries with mutationId replay rules.",
+      inputSchema: transformSetInputSchema,
+    },
+    async (args) => {
+      try {
+        const input = args as {
+          globalObjectId: string;
+          localPosition: Vector3Payload;
+          localEulerAngles: Vector3Payload;
+          localScale: Vector3Payload;
+          mutationId?: string;
+          expectedStateEpoch: string;
+          expectedStateRevision: number;
+        };
+        const options: TransformSetOptions = {
+          globalObjectId: input.globalObjectId,
+          localPosition: input.localPosition,
+          localEulerAngles: input.localEulerAngles,
+          localScale: input.localScale,
+          expectedStateEpoch: input.expectedStateEpoch,
+          expectedStateRevision: input.expectedStateRevision,
+        };
+        if (input.mutationId !== undefined) {
+          options.mutationId = input.mutationId;
+        }
+
+        await preflightAgentCapabilities("transform.set", "state.revision.v1");
+        const result = await bridge.requestSetTransform(options);
         return {
           content: [{ type: "text", text: JSON.stringify(result) }],
           structuredContent: result,
