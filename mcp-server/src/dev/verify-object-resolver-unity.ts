@@ -49,7 +49,7 @@ try {
   }
 
   const createPayload = created.structuredContent;
-  if (!isCreatePayload(createPayload)) {
+  if (!isCreatePayload(createPayload) || createPayload.replayed) {
     throw new Error(`Initial create returned invalid structuredContent: ${JSON.stringify(createPayload)}`);
   }
 
@@ -64,8 +64,39 @@ try {
     throw new Error(`Native resolver did not match the created GameObject: ${JSON.stringify(resolved)}`);
   }
 
-  console.log("[Unity AI Bridge] Create -> GlobalObjectId native readback PASS:");
-  console.log(JSON.stringify({ create: createPayload, resolved }, null, 2));
+  const immediateReplay = await client.callTool({
+    name: "unity_create_game_object",
+    arguments: { name, mutationId },
+  });
+  if (immediateReplay.isError) {
+    throw new Error(`Immediate same-mutation replay failed: ${readToolText(immediateReplay)}`);
+  }
+
+  const immediateReplayPayload = immediateReplay.structuredContent;
+  if (
+    !isCreatePayload(immediateReplayPayload) ||
+    !immediateReplayPayload.replayed ||
+    immediateReplayPayload.mutationId !== mutationId ||
+    immediateReplayPayload.globalObjectId !== createPayload.globalObjectId ||
+    immediateReplayPayload.name !== name
+  ) {
+    throw new Error(
+      `Immediate same-mutation replay did not return the cached target: ${JSON.stringify(immediateReplayPayload)}`,
+    );
+  }
+
+  console.log("[Unity AI Bridge] Create -> native readback -> immediate dedup replay PASS:");
+  console.log(
+    JSON.stringify(
+      {
+        create: createPayload,
+        resolved,
+        immediateReplay: immediateReplayPayload,
+      },
+      null,
+      2,
+    ),
+  );
   console.log(
     "[Unity AI Bridge] NOW press Ctrl+Z once in Unity to undo the generated MCP_Resolver_Verify object. Do not perform another Editor action first.",
   );
@@ -101,12 +132,13 @@ try {
     throw new Error(`Expected no replacement object after stale replay, but hierarchyMatches=${matches}.`);
   }
 
-  console.log("[Unity AI Bridge] Stable resolver + stale replay protection PASS:");
+  console.log("[Unity AI Bridge] Mutation transaction + stable resolver + stale replay protection PASS:");
   console.log(
     JSON.stringify(
       {
         globalObjectId: createPayload.globalObjectId,
         mutationId,
+        immediateReplay: true,
         resolverAfterUndo: "found=false",
         staleReplayError: replayError,
         hierarchyMatches: matches,
@@ -150,7 +182,7 @@ async function resolve(globalObjectId: string): Promise<ResolvePayload> {
     if (message.includes("unsupported/operation_not_supported") && message.includes("object.resolve")) {
       throw new Error(
         "Connected Unity Editor is running an older Unity AI Bridge assembly that does not implement object.resolve. " +
-          "Pull the latest phase2/stable-object-resolver branch, force Unity to reimport/recompile the Unity AI Bridge Editor scripts (or restart Unity), then rerun verify:resolver. " +
+          "Pull the latest branch, force Unity to reimport/recompile the Unity AI Bridge Editor scripts (or restart Unity), then rerun verify:resolver. " +
           `Raw tool error: ${message}`,
       );
     }
@@ -226,7 +258,7 @@ function isCreatePayload(value: unknown): value is CreatePayload {
   return (
     typeof candidate.mutationId === "string" &&
     candidate.mutationId.length > 0 &&
-    candidate.replayed === false &&
+    typeof candidate.replayed === "boolean" &&
     typeof candidate.globalObjectId === "string" &&
     candidate.globalObjectId.length > 0 &&
     typeof candidate.instanceId === "number" &&
