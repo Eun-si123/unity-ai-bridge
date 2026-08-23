@@ -1,0 +1,31 @@
+{
+  "protocolVersion": "0",
+  "requestId": "req-prefab-asset-create-1",
+  "ok": true,
+  "result": {
+    "mutationId": "prefab-asset-create-1",
+    "replayed": false,
+    "created": true,
+    "sourceGlobalObjectId": "GlobalObjectId_V1-2-1234567890abcdef1234567890abcdef-101-0",
+    "sourceName": "CreateSource",
+    "destinationPath": "Assets/CreatedByBridge.prefab",
+    "prefabGuid": "abcdef0123456789abcdef0123456789",
+    "dependencyHash": "0123456789abcdef0123456789abcdef",
+    "prefabAssetType": "Regular",
+    "rootName": "CreateSource",
+    "expectedStateEpoch": "epoch-example",
+    "expectedStateRevision": 42,
+    "stateEpoch": "epoch-example",
+    "stateRevision": 42
+  },
+  "warnings": [
+    "Prefab Asset creation is a persistent disk write and is not covered by Unity Undo."
+  ],
+  "changedTargets": [],
+  "dirtyState": "unchanged",
+  "undo": {
+    "available": false,
+    "groupName": ""
+  },
+  "compileState": "idle"
+}
