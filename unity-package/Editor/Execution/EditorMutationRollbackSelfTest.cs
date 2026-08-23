@@ -19,7 +19,6 @@ namespace UnityAiBridge.Editor.Execution
         {
             var probeName = ProbeNamePrefix + DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             var globalObjectId = string.Empty;
-            var sceneWasDirty = SceneManager.GetActiveScene().isDirty;
             var rollbackVerifierCalled = false;
             var rollbackVerified = false;
 
@@ -103,17 +102,31 @@ namespace UnityAiBridge.Editor.Execution
                     return;
                 }
 
-                var sceneIsDirty = SceneManager.GetActiveScene().isDirty;
+                if (outcome.rollbackDirtyResidue !=
+                    (!outcome.sceneWasDirtyBefore && outcome.sceneIsDirtyAfter))
+                {
+                    Fail(
+                        "Dirty-state residue classification was inconsistent: " +
+                        $"sceneWasDirtyBefore={outcome.sceneWasDirtyBefore}, " +
+                        $"sceneIsDirtyAfter={outcome.sceneIsDirtyAfter}, " +
+                        $"rollbackDirtyResidue={outcome.rollbackDirtyResidue}.");
+                    return;
+                }
+
                 Debug.Log(
-                    "[Unity AI Bridge] Transaction verification contract PASS: " +
+                    "[Unity AI Bridge] Transaction verification + dirty-state reporting PASS: " +
                     "forcedVerificationFailure=true, changed=true, verified=false, rolledBack=true, " +
                     "rollbackVerifierCalled=true, rollbackVerified=true, rollbackTargetFound=false, hierarchyMatches=0, " +
-                    $"sceneWasDirty={sceneWasDirty}, sceneIsDirty={sceneIsDirty}, globalObjectId={globalObjectId}");
+                    $"sceneWasDirtyBefore={outcome.sceneWasDirtyBefore}, " +
+                    $"sceneIsDirtyAfter={outcome.sceneIsDirtyAfter}, " +
+                    $"dirtyStateChanged={outcome.dirtyStateChanged}, " +
+                    $"rollbackDirtyResidue={outcome.rollbackDirtyResidue}, " +
+                    $"globalObjectId={globalObjectId}");
             }
             catch (Exception exception)
             {
                 Debug.LogError(
-                    "[Unity AI Bridge] Transaction verification contract FAILED: " + exception);
+                    "[Unity AI Bridge] Transaction verification + dirty-state reporting FAILED: " + exception);
             }
         }
 
@@ -144,7 +157,8 @@ namespace UnityAiBridge.Editor.Execution
 
         private static void Fail(string message)
         {
-            Debug.LogError("[Unity AI Bridge] Transaction verification contract FAILED: " + message);
+            Debug.LogError(
+                "[Unity AI Bridge] Transaction verification + dirty-state reporting FAILED: " + message);
         }
     }
 }
