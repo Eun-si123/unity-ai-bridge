@@ -6,6 +6,7 @@ import {
   type GameObjectDeleteOptions,
   type GameObjectUpdateOptions,
 } from "./bridge/editing-bridge-server.js";
+import { registerComponentTools } from "./component-tools.js";
 
 const updateInputSchema = fromJsonSchema({
   type: "object",
@@ -179,6 +180,8 @@ export function registerGameObjectEditTools(
       }
     },
   );
+
+  registerComponentTools(server, bridge);
 }
 
 async function preflight(

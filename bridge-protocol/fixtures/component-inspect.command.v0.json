@@ -1,0 +1,17 @@
+{
+  "protocolVersion": "0",
+  "requestId": "fixture-component-inspect",
+  "operation": "component.inspect",
+  "arguments": {
+    "gameObjectGlobalObjectId": "GlobalObjectId_V1-2-0123456789abcdef0123456789abcdef-1-0",
+    "maxComponents": 8,
+    "maxPropertiesPerComponent": 32,
+    "maxDepth": 3
+  },
+  "risk": "read",
+  "route": {
+    "editorId": "fixture-editor",
+    "connectionGeneration": 7
+  },
+  "deadlineUnixMs": 4102444800000
+}
