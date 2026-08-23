@@ -76,13 +76,26 @@ try {
   if (requireBoolean(created, "replayed") || !requireBoolean(created, "created")) {
     throw new Error("First Prefab Asset create did not report created=true/replayed=false.");
   }
-  if (requireString(created, "sourceGlobalObjectId") !== sourceGlobalObjectId ||
-      requireString(created, "destinationPath") !== destinationPath ||
-      requireString(created, "rootName") !== sourceName) {
-    throw new Error(`Prefab Asset create returned wrong source/path/root: ${JSON.stringify(created)}`);
+  if (
+    requireString(created, "sourceGlobalObjectId") !== sourceGlobalObjectId ||
+    requireString(created, "sourceName") !== sourceName ||
+    requireString(created, "destinationPath") !== destinationPath
+  ) {
+    throw new Error(`Prefab Asset create returned wrong source/path metadata: ${JSON.stringify(created)}`);
+  }
+  const rootName = requireString(created, "rootName");
+  if (rootName.length === 0) {
+    throw new Error(`Prefab Asset create returned an empty native rootName: ${JSON.stringify(created)}`);
   }
   const prefabGuid = requireString(created, "prefabGuid");
   const dependencyHash = requireString(created, "dependencyHash");
+
+  const sourceAfterCreate = await resolve(sourceGlobalObjectId);
+  if (!sourceAfterCreate.found || sourceAfterCreate.name !== sourceName) {
+    throw new Error(
+      `SaveAsPrefabAsset unexpectedly changed or removed the source GameObject: ${JSON.stringify(sourceAfterCreate)}`,
+    );
+  }
 
   const inspectedResult = await client.callTool({
     name: "unity_inspect_prefab",
@@ -90,9 +103,11 @@ try {
   });
   requireSuccess(inspectedResult, "created Prefab inspect");
   const inspected = requireRecord(inspectedResult.structuredContent, "created Prefab inspect");
-  if (requireString(inspected, "guid") !== prefabGuid ||
-      requireString(inspected, "dependencyHash") !== dependencyHash ||
-      requireString(inspected, "rootName") !== sourceName) {
+  if (
+    requireString(inspected, "guid") !== prefabGuid ||
+    requireString(inspected, "dependencyHash") !== dependencyHash ||
+    requireString(inspected, "rootName") !== rootName
+  ) {
     throw new Error(`Created Prefab native readback did not match: ${JSON.stringify(inspected)}`);
   }
 
@@ -108,13 +123,17 @@ try {
   });
   requireSuccess(replayResult, "Prefab Asset immediate replay");
   const replay = requireRecord(replayResult.structuredContent, "Prefab Asset replay");
-  if (!requireBoolean(replay, "replayed") ||
-      requireString(replay, "prefabGuid") !== prefabGuid ||
-      requireString(replay, "dependencyHash") !== dependencyHash) {
+  if (
+    !requireBoolean(replay, "replayed") ||
+    requireString(replay, "prefabGuid") !== prefabGuid ||
+    requireString(replay, "dependencyHash") !== dependencyHash ||
+    requireString(replay, "rootName") !== rootName
+  ) {
     throw new Error(`Prefab Asset immediate replay did not preserve identity: ${JSON.stringify(replay)}`);
   }
 
   console.log("[Unity AI Bridge] Prefab Asset create + native inspect + immediate replay PASS.");
+  console.log(`[Unity AI Bridge] Native saved Prefab root name: '${rootName}'.`);
   console.log(
     `[Unity AI Bridge] NOW delete '${destinationPath}' ONCE in Unity's Project window, then return here.`,
   );
@@ -170,8 +189,10 @@ try {
     destinationPath,
     prefabGuid,
     dependencyHash,
+    rootName,
     createMutationId,
     createVerified: true,
+    sourceUnchanged: true,
     immediateReplay: true,
     manualAssetRemovalObserved: true,
     staleReplayError,
@@ -194,11 +215,13 @@ async function waitForUnityConnection(): Promise<Record<string, unknown>> {
       const result = await client.callTool({ name: "unity_get_status", arguments: {} });
       if (record(result)?.isError !== true) {
         const status = record(result.structuredContent);
-        if (status !== null &&
-            typeof status.unityVersion === "string" &&
-            typeof status.activeScene === "string" &&
-            typeof status.stateEpoch === "string" &&
-            typeof status.stateRevision === "number") {
+        if (
+          status !== null &&
+          typeof status.unityVersion === "string" &&
+          typeof status.activeScene === "string" &&
+          typeof status.stateEpoch === "string" &&
+          typeof status.stateRevision === "number"
+        ) {
           return status;
         }
         lastObservation = `Invalid status payload: ${JSON.stringify(result.structuredContent)}`;
