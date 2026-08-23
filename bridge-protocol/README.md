@@ -28,9 +28,23 @@ Current implemented operations include:
 
 - `editor.status` — read current Unity/editor state,
 - `scene.hierarchy` — read a bounded preorder snapshot of the active scene hierarchy,
+- `editor.diagnostics` — read bounded Console counts/recent captured entries and latest compiler diagnostics,
 - `gameObject.create` — create one empty root GameObject in the active scene with write-risk metadata and mutation deduplication.
 
 `scene.hierarchy` currently accepts `maxDepth` and `maxNodes` arguments. The implementation defaults to depth 8 / 200 nodes and rejects values beyond depth 32 / 500 nodes. Returned hierarchy paths are informational; `InstanceID` is transient and is not the sole durable identity. The result also carries `GlobalObjectId` strings for scene objects where Unity can provide them.
+
+`editor.diagnostics` accepts:
+
+- `maxEntries` — 1..200, default 100,
+- `minimumSeverity` — `error`, `warning`, or `log`, default `warning`.
+
+The diagnostics result deliberately separates three coverage levels:
+
+1. current Console counts from public `ConsoleWindowUtility.GetConsoleLogCounts`,
+2. recent Console message text captured through `Application.logMessageReceivedThreaded` since the current script-domain load,
+3. the latest compiler messages observed through `CompilationPipeline`, persisted in Editor `SessionState` so the latest completed compilation snapshot can survive a successful domain reload.
+
+Unity does not expose a supported public iterator for all historical Console entry text. The early implementation therefore reports its coverage explicitly instead of depending on internal `UnityEditor.LogEntries` APIs.
 
 `gameObject.create` accepts:
 
@@ -39,7 +53,7 @@ Current implemented operations include:
 
 The Node bridge generates a mutation id when the MCP caller omits one. Unity stores completed `gameObject.create` mutation results in Editor `SessionState`; a repeated delivery using the same `mutationId` and the same `name` replays the prior result rather than creating another object. Reusing the same mutation id with different arguments is rejected. This is Phase 1 retry protection, not a general-purpose durable transaction log across full Editor restarts.
 
-Example request/result fixtures live in `fixtures/editor-status.*`, `fixtures/hierarchy.*`, and `fixtures/gameobject-create.*`.
+Example request/result fixtures live in `fixtures/editor-status.*`, `fixtures/hierarchy.*`, `fixtures/diagnostics.*`, and `fixtures/gameobject-create.*`.
 
 ## Result envelope
 
