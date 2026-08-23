@@ -19,7 +19,11 @@ namespace UnityAiBridge.Editor.Connection
         {
             if (!string.Equals(command.operation, "component.inspect", StringComparison.Ordinal))
             {
-                return false;
+                return await TryHandleComponentMutationCommandAsync(
+                    current,
+                    command,
+                    rawJson,
+                    cancellationToken);
             }
 
             if (!string.Equals(command.risk, "read", StringComparison.Ordinal))
