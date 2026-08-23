@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using UnityAiBridge.Editor.Execution;
 using UnityAiBridge.Editor.Protocol;
 using UnityEditor;
 using UnityEngine;
@@ -17,6 +18,8 @@ namespace UnityAiBridge.Editor.Commands
         public bool isCompiling;
         public string agentVersion;
         public string[] capabilities;
+        public string stateEpoch;
+        public long stateRevision;
     }
 
     internal static class EditorStatusCommand
@@ -28,12 +31,14 @@ namespace UnityAiBridge.Editor.Commands
             "editor.diagnostics",
             "object.resolve",
             "gameObject.create",
+            "state.revision.v1",
         };
 
         public static EditorStatusPayload Execute()
         {
             var projectRoot = Directory.GetParent(Application.dataPath);
             var activeScene = SceneManager.GetActiveScene();
+            var state = EditorStateRevision.Capture();
 
             return new EditorStatusPayload
             {
@@ -44,6 +49,8 @@ namespace UnityAiBridge.Editor.Commands
                 isCompiling = EditorApplication.isCompiling,
                 agentVersion = BridgeProtocol.PackageVersion,
                 capabilities = Capabilities,
+                stateEpoch = state.epoch,
+                stateRevision = state.revision,
             };
         }
     }
