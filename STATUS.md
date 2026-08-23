@@ -21,9 +21,9 @@ Completed milestones:
 
 - **Phase 0 — Foundation:** Verified, completed 2026-08-22.
 - **Phase 1 — Minimal Local End-to-End:** Verified, completed 2026-08-23.
-- **Phase 2 — Reliability Core:** Verified milestone, completed 2026-08-23 for the tool surface that actually exists at exit.
+- **Phase 2 — Reliability Core:** Verified milestone, completed 2026-08-23 for the tool surface that existed at exit.
 
-Phase 2 exit evidence and explicit non-goals are recorded in [`docs/PHASE2_EXIT_GATE.md`](docs/PHASE2_EXIT_GATE.md). Future Phase 3 write families are not automatically covered by Phase 2 merely because the common core exists; each new family must adopt and verify the relevant reliability contracts before being called Verified.
+Phase 2 exit evidence and explicit non-goals are recorded in [`docs/PHASE2_EXIT_GATE.md`](docs/PHASE2_EXIT_GATE.md). Future write families are not automatically covered merely because the common reliability core exists; each write family must adopt and verify the relevant contracts individually.
 
 ## Current verified environment
 
@@ -35,47 +35,39 @@ Phase 2 exit evidence and explicit non-goals are recorded in [`docs/PHASE2_EXIT_
 
 Broader Unity/OS compatibility is not implied.
 
-## What exists now
+## Current verified surface
 
 | Area | Status | Evidence / notes |
 |---|---|---|
 | Public GitHub repository | Verified | Repository exists and accepts commits. |
 | Public-core license | Implemented | Root `LICENSE` is Apache License 2.0. The separate private `unity-ai-mcp-infra` repository is outside this repository's automatic license boundary. |
-| Core design/docs | Implemented | `AGENTS.md`, `DESIGN.md`, `DECISIONS.md`, `ROADMAP.md`, `CODEMAP.md`, `REFERENCES.md`, and phase-specific reliability docs. |
 | Unity Editor package scaffold | Verified manually | Package Manager load and Editor assembly compilation passed repeatedly on Unity 6000.3.21f1 / Windows. |
 | MCP/server scaffold | Verified | Install/build/tests pass in GitHub Actions on Node 24.19.0. |
 | Bridge protocol v0 | Implemented | Source-defined schemas, TypeScript/C# protocol models, fixtures, risk metadata, structured results/errors. |
-| Local WebSocket bridge | Verified for current local surface | Real status, hierarchy, diagnostics, resolver, create, save, Transform read/write, GameObject update/delete, Component inspect/add/remove, reconnect, stale-route, capability-preflight, and deadline behavior exercised against live Unity. |
+| Local WebSocket bridge | Verified for current local surface | Real status, hierarchy, diagnostics, resolver, scene save, Transform, GameObject, Component, AssetDatabase reads, reconnect, stale-route, capability-preflight, and deadline behavior exercised against live Unity. |
 | Unity outbound WebSocket connection | Verified manually | Real `ClientWebSocket` connection and reconnect after domain reload succeeded. |
-| Main-thread dispatcher | Verified for current surface | Current Unity API operations run through the Editor main-thread dispatcher. PR #20 verified an expired queued write is rejected at the execution boundary before its body runs. |
-| Current single-editor serialization | Verified for current bridge path | The local Unity receive loop awaits one command handler at a time, dispatcher work executes on the Editor main thread, and the common mutation transaction has a re-entrancy guard. This is not a claim of a future multi-editor/per-target scheduler. |
-| `editor.status` / `unity_get_status` | Verified manually | Returns live Unity/project/scene/play/compile state plus Agent version/capabilities and state revision metadata. |
-| `scene.hierarchy` / `unity_get_hierarchy` | Verified manually | Returns bounded active-scene hierarchy with `GlobalObjectId`, transient `instanceId`, depth/sibling/active metadata, truncation metadata, and state token. |
-| Stable object resolver / `unity_resolve_object` | Verified manually + CI support | Created GameObject re-resolved to the same native target; after Undo the same ID returned `found=false`. |
-| Diagnostics / `unity_get_diagnostics` | Verified manually + CI support | Bounded Console counts/recent logs and compiler diagnostics with source location metadata. |
-| Agent capability/version preflight | Verified manually + CI support | Non-status tools preflight the operation against current Agent capability metadata and fail closed on missing/legacy metadata. Current verified editing capabilities include `transform.get`, `transform.set`, `gameObject.update`, `gameObject.delete`, `component.inspect`, `component.add`, and `component.remove`. |
-| State revision / stale-state detection | Verified manually + EditMode | Editor-session epoch + monotonic revision preconditions reject stale writes before mutation. |
-| Common mutation preflight | Verified for current Undo-capable writes | Compilation, valid/loaded active scene, expected state token, target validation, and re-entrant mutation exclusion are used by current create/Transform/GameObject/Component editing paths as applicable. |
-| Undo transaction grouping | Verified for create + Transform + GameObject update/delete + Component add/remove | Common transaction owns/names/collapses Undo groups. Verified Undo removed create, restored Transform, restored GameObject update state, restored a deleted GameObject, restored a removed Component, and removed an added Component. |
-| Native readback + semantic verification | Verified for create + Transform + GameObject update/delete + Component add/remove | Create re-resolves native identity; Transform reads back local TRS; GameObject update verifies name/active state; GameObject delete verifies target absence; Component add verifies component identity/owner/type; Component remove verifies target absence. |
+| Main-thread dispatcher | Verified for current surface | Current Unity API operations run through the Editor main-thread dispatcher. PR #20 proved expired queued writes are rejected before the mutation body runs. |
+| Current single-editor serialization | Verified for current bridge path | Local receive handling awaits one command at a time, dispatcher work executes on the Editor main thread, and the common mutation transaction has a re-entry guard. This is not a future multi-editor/per-target scheduler claim. |
+| `editor.status` / `unity_get_status` | Verified manually | Live Unity/project/scene/play/compile state plus Agent version/capabilities and scene-state revision metadata. |
+| `scene.hierarchy` / `unity_get_hierarchy` | Verified manually | Bounded active-scene hierarchy with `GlobalObjectId`, transient `instanceId`, hierarchy metadata, truncation metadata, and state token. |
+| `object.resolve` / `unity_resolve_object` | Verified manually + CI support | Native target re-resolution; Undo/deletion returns `found=false` instead of inventing a replacement. |
+| `editor.diagnostics` / `unity_get_diagnostics` | Verified manually + CI support | Bounded Console counts/recent logs and compiler diagnostics with source location metadata. |
+| Agent capability/version preflight | Verified manually + CI support | Non-status tools fail closed on missing/legacy capability metadata. Current verified capabilities include scene/object diagnostics, Transform, GameObject, Component, explicit scene save, and AssetDatabase read operations. |
+| State revision / stale-state detection | Verified manually + EditMode | Editor-session epoch + monotonic revision preconditions reject stale scene writes before mutation. Asset reads deliberately do not pretend this scene token is an asset-state token. |
+| Common mutation preflight | Verified for current Undo-capable writes | Compilation, valid/loaded active scene, state token where required, target validation, and re-entrant mutation exclusion. |
+| Undo transaction grouping | Verified for create + Transform + GameObject + Component writes | Verified Undo removes/restores the intended operation-specific state. |
+| Native readback + semantic verification | Verified for current writes | Create, Transform, GameObject update/delete, Component add/remove, and supported Component property writes use operation-specific native readback. |
 | Rollback on failed verification | Verified | Forced verifier failure reverted the current Undo transaction. |
-| Rollback verification | Verified for bounded probe and current mutation contracts | Native resolver/hierarchy verified target absence for the original probe; operation-specific verifiers cover Transform restoration, GameObject update/delete restoration contracts, Component-add absence rollback, and Component-remove restoration identity. |
+| Rollback verification | Verified for bounded probe and current mutation contracts | Operation-specific rollback verifiers confirm expected native restoration/absence. |
 | Mutation lifecycle across script/domain reload | Verified manually + EditMode | Same-session `SessionState` lifecycle survives real domain reload; ambiguous `started` retry fails closed. Full Editor restart persistence is not provided. |
-| `gameObject.create` / `unity_create_game_object` | Verified manually + CI support | Root GameObject create, Undo/dirty behavior, native readback, same-id replay, stale-target replay rejection, stale-state rejection. |
-| GameObject update / `gameObject.update` / `unity_update_game_object` | Verified manually + CI support | PR #23: complete desired `name` + `activeSelf`, fresh state precondition, no-op handling, Undo, native readback, same-id replay, Undo restoration, and stale replay rejection. |
-| GameObject delete / `gameObject.delete` / `unity_delete_game_object` | Verified manually + CI support | PR #23: active-scene target deletion through Unity Undo, native absence verification, same-id replay while absent, Undo restoration of the target, stale replay rejection after restoration, and verifier cleanup. |
-| Transform read / `transform.get` / `unity_get_transform` | Verified manually + CI support | PR #22 returned local/world position, local/world rotation, local Euler representation, local/lossy scale, scene/hierarchy metadata, dirty state, and fresh state token for a `GlobalObjectId` GameObject target. |
-| Transform write / `transform.set` / `unity_set_transform` | Verified manually + CI support | PR #22 set full local position/Euler/scale with required state precondition, Undo grouping, native readback, Quaternion-equivalent rotation verification, same-id replay, Undo restoration, stale replay rejection, and verifier cleanup. |
-| Component inspect / `component.inspect` / `unity_get_components` | Verified manually + CI support | PR #24: bounded native-order Component enumeration including Missing Script slots; visible `SerializedObject`/`SerializedProperty` snapshots; Component `GlobalObjectId`; Transform serialized paths; resolver ownership check; explicit truncation metadata; automatic verifier cleanup. |
-| Component add / `component.add` / `unity_add_component` | Verified manually + CI support | PR #25: exact active-scene GameObject target + exact loaded concrete Component type, TypeCache resolution, Transform-family rejection, Undo add, native component identity/owner/type readback, same-id replay, Undo removal, stale replay rejection, and cleanup. |
-| Component remove / `component.remove` / `unity_remove_component` | Verified manually + CI support | PR #25: exact Component `GlobalObjectId`, Transform-family rejection, Undo-capable removal, native absence verification, same-id replay while absent, Undo restoration of the same component identity, stale replay rejection, and cleanup. |
-| Mutation retry/dedup protection | Verified for current writes | `gameObject.create`, `scene.save`, `transform.set`, `gameObject.update`, `gameObject.delete`, `component.add`, and `component.remove` use mutation identity and same-session replay rules. Undo/change after completion causes stale replay to fail closed instead of silently reapplying/redeleting state. |
-| Dirty-state outcome reporting | Verified | PR #18 proved the transaction reports `sceneWasDirtyBefore`, `sceneIsDirtyAfter`, `dirtyStateChanged`, and `rollbackDirtyResidue`. A clean scene can remain dirty after successful object rollback; this is reported rather than hidden. |
-| Dirty-state restoration | Not implemented | Unity can leave a previously clean scene dirty after Undo rollback. Phase 2 does not claim that dirty metadata is restored. |
-| Explicit save / `scene.save` / `unity_save_active_scene` | Verified manually + CI support | PR #19: explicit destructive save to existing active-scene path only; exact path/state preconditions; native clean/file readback; same-id replay; stale pre-save token rejected. |
-| Write execution deadline | Verified manually + EditMode | PR #20: receive-time check plus execution-boundary recheck for write/destructive work. Real queued-expiry self-test reported `expiredBeforeExecution=true`, `actionExecuted=false`. Current Transform, GameObject, and Component writes use the same execution-boundary deadline path. |
-| In-flight Unity API cancellation | Not implemented by design | A Unity API call already started before deadline is not force-interrupted. Ambiguous outcome handling relies on mutation lifecycle + mutation identity/reconciliation rather than unsafe mid-API interruption. |
-| Unity EditMode reliability/editing suite | Verified manually | Suite grew 8/8 (#16) -> 12/12 (#17) -> 14/14 (#18) -> 16/16 (#19) -> 19/19 (#20) -> 23/23 (#22) -> 29/29 (#23) -> 33/33 (#24) -> **39/39 (#25)** on Unity 6000.3.21f1. Non-embedded package installs require the package name in the consuming project's `Packages/manifest.json` `testables`. |
+| Mutation retry/dedup protection | Verified for current writes | Create, scene save, Transform, GameObject, Component add/remove/property writes use mutation identity and same-session replay rules. Undo/change after completion causes stale replay failure instead of silent reapplication. |
+| Dirty-state outcome reporting | Verified | Clean-scene rollback can leave Unity dirty metadata; the bridge reports this explicitly instead of hiding it. |
+| Dirty-state restoration | Not implemented | A previously clean scene can remain dirty after an Undo-based rollback. |
+| Explicit scene save / `unity_save_active_scene` | Verified manually + CI support | Existing saved active-scene path only; exact path/state preconditions; native clean/file verification; replay and stale-state protection. |
+| Write execution deadline | Verified manually + EditMode | Receive-time and execution-boundary checks prevent a queued expired write from beginning. |
+| In-flight Unity API cancellation | Not implemented by design | An already-started Unity API call is not force-interrupted; mutation identity/lifecycle handle ambiguous outcomes. |
+| Asset search / `asset.search` / `unity_search_assets` | Verified manually + CI support | PR #27: bounded Unity `AssetDatabase.FindAssets` search, deterministic path ordering, `Assets`/`Packages` scope validation, SceneAsset live verification. |
+| Asset inspect / `asset.inspect` / `unity_inspect_asset` | Verified manually + CI support | PR #27: exact asset-file inspection returning GUID/path/main type/importer/labels, `GetAssetDependencyHash`, bounded direct dependencies; folder paths fail closed. |
 | Remote gateway / Easy Connect | Planned | Not implemented. |
 | Pairing/authentication | Planned | Not implemented. |
 | Multi-user/editor routing | Planned | Local bridge intentionally supports one active editor only. |
@@ -85,7 +77,7 @@ Broader Unity/OS compatibility is not implied.
 
 ✅ **Completed 2026-08-22.**
 
-Verified/implemented foundation includes repository boundaries, contributor/AI grounding rules, architecture and decisions, public roadmap, provenance rules, Unity target selection, source scaffold, pinned Node dependency graph, bridge protocol v0, initial CI, Unity package load/compile, and Apache-2.0 public-core licensing.
+Verified/implemented foundation includes repository boundaries, contributor/AI grounding rules, architecture and decisions, provenance rules, Unity target selection, source scaffold, pinned Node dependency graph, bridge protocol v0, initial CI, Unity package load/compile, and Apache-2.0 public-core licensing.
 
 ## Phase 1 — Minimal Local End-to-End
 
@@ -104,252 +96,137 @@ MCP client
    -> MCP result
 ```
 
-Verified minimum capabilities:
-
-- editor status,
-- active-scene hierarchy,
-- one empty root GameObject create mutation,
-- mutation ID replay protection,
-- bounded Console/compiler diagnostics,
-- real compiler error source-location capture,
-- domain-reload reconnect and stale connection-generation rejection.
-
-Compiler diagnostic verification captured intentional `CS0103` for `Assets/MCPCompileErrorTest.cs`, line 5, column 21. That temporary test file must not remain in a normal consuming project.
+Verified minimum capabilities included editor status, hierarchy, empty root GameObject creation, mutation replay protection, diagnostics, real compiler source-location capture, and domain-reload reconnect/stale-generation rejection.
 
 ## Phase 2 — Reliability Core
 
-✅ **Completed 2026-08-23 for the current implemented surface.**
+✅ **Completed 2026-08-23 for the implemented surface at exit.**
 
 Verified slices:
 
-- [x] PR #10 — stable native resolver, create readback, stale replay rejection
-- [x] PR #11 — Agent version/capability metadata + MCP capability preflight
+- [x] PR #10 — stable resolver / create native readback / stale replay
+- [x] PR #11 — Agent version/capability metadata + MCP preflight
 - [x] PR #12 — common mutation preflight + Undo transaction core
-- [x] PR #13 — forced semantic-verification failure + actual Undo rollback
-- [x] PR #14 — state epoch/revision + stale-state write rejection
-- [x] PR #15 — same-session mutation lifecycle surviving real domain reload
-- [x] PR #16 — first EditMode reliability suite; 8/8
-- [x] PR #17 — structured verification/rollback-verification contract; 12/12
-- [x] PR #18 — dirty-state reporting; 14/14
-- [x] PR #19 — explicit active-scene save; 16/16
-- [x] PR #20 — write/destructive execution-boundary deadlines; 19/19
+- [x] PR #13 — forced semantic-verification failure + real rollback
+- [x] PR #14 — state epoch/revision + stale-state rejection
+- [x] PR #15 — same-session lifecycle surviving domain reload
+- [x] PR #16 — EditMode reliability suite 8/8
+- [x] PR #17 — structured verification/rollback-verification 12/12
+- [x] PR #18 — dirty-state reporting 14/14
+- [x] PR #19 — explicit active-scene save 16/16
+- [x] PR #20 — write execution-boundary deadlines 19/19
 
-See [`docs/PHASE2_EXIT_GATE.md`](docs/PHASE2_EXIT_GATE.md) for the exit-gate mapping and explicit limitations.
-
-### Phase 2 exit decision
-
-The existing local surface demonstrates that normal reconnect/domain reload, stale state, unsupported Agent capability skew, duplicate delivery, failed verification/rollback, explicit persistence, and queued deadline expiry do not silently duplicate the current mutations or claim success without the expected evidence.
-
-Phase 2 completion does **not** pre-verify future Phase 3 mutation families. New writes must adopt the common reliability contracts individually.
-
-## Verification highlights
-
-### Local heartbeat / reconnect
-
-```text
-Environment: Windows + Unity 6000.3.21f1
-Observed: real WebSocket hello/status PASS; MCP unity_get_status PASS; domain reload reconnect PASS; stale generation rejected; new-generation status PASS
-Result: PASS
-```
-
-### Hierarchy
-
-```text
-Observed: live SampleScene hierarchy returned with non-empty GlobalObjectId metadata after fixing a Unity 6000.3 API signature mismatch.
-Result: PASS
-```
-
-### First create + replay
-
-```text
-Observed: first create replayed=false; identical same-id retry replayed=true; native/hierarchy readback matched one object.
-Result: PASS
-```
-
-### Diagnostics
-
-```text
-Observed: bounded Console counts/recent entries plus compiler snapshot; intentional CS0103 returned severity/message/file/line/column metadata.
-Result: PASS
-```
-
-### Stable resolver + stale replay
-
-```text
-Observed: resolver found the created target; after one Undo found=false; same mutationId retry failed stale_target/mutation_replay_stale; hierarchyMatches=0.
-Result: PASS
-```
-
-### State revision
-
-```text
-Observed: fresh state accepted one write; second different write with the stale token was rejected before mutation; rejectedHierarchyMatches=0.
-Result: PASS
-```
-
-### Domain-reload lifecycle
-
-```text
-Observed: lifecycleStatus=started survived real script/domain reload; domainChanged=true; same mutationId retryRejected=true; hierarchyMatches=0.
-Result: PASS
-```
-
-### Structured rollback verification
-
-```text
-Observed: forcedVerificationFailure=true; changed=true; verified=false; rolledBack=true; rollbackVerifierCalled=true; rollbackVerified=true; rollback target absent; hierarchyMatches=0.
-Result: PASS
-```
-
-### Dirty-state policy
-
-```text
-Saved/clean scene before probe: sceneWasDirtyBefore=false
-After verified object rollback: sceneIsDirtyAfter=true; dirtyStateChanged=true; rollbackDirtyResidue=true
-Result: PASS for explicit reporting; dirty metadata restoration is not implemented.
-```
-
-### Explicit scene save
-
-```text
-Initial revision=45
-Save: replayed=false; saved=true; wasDirty=true; isDirty=false; revision 45 -> 46
-Same-id retry: replayed=true; remained clean at revision 46
-New save with old revision 45: stale_state/state_revision_mismatch
-Result: PASS
-```
-
-### Execution-boundary deadline
-
-```text
-Self-test: queued 75 ms blocker ahead of 10 ms-deadline guarded action
-Observed: expiredBeforeExecution=true; actionExecuted=false
-EditMode: 19 Passed / 0 Failed
-Result: PASS
-```
-
-### Phase 3 Transform read/write (PR #22)
-
-```text
-Environment: Windows + Unity 6000.3.21f1
-CI: Node Verification 32619697919 PASS; Phase 1 Local Bridge Verification 32619697897 PASS
-EditMode: 23 Passed / 0 Failed
-Target: GlobalObjectId_V1-2-99c9720ab356a0642a771bea13969a05-1006617028-0
-Initial local TRS: position=(0,0,0), Euler=(0,0,0), scale=(1,1,1)
-Requested local TRS: position=(1.25,-2.5,3.75), Euler=(15,30,45), scale=(1.5,0.75,2)
-Observed: native readback matched requested position/scale and Quaternion-equivalent rotation; immediate same-id replay=true; one Undo restored initial Transform; same mutation retry after Undo failed stale_target/mutation_replay_stale; second Undo removed the temporary object
-Verifier summary: writeVerified=true; immediateReplay=true; undoRestoredInitialTransform=true; temporaryObjectRemoved=true
-Result: PASS
-```
-
-### Phase 3 GameObject update/delete (PR #23)
-
-```text
-Environment: Windows + Unity 6000.3.21f1
-CI: Node Verification 32620455952 PASS; Phase 1 Local Bridge Verification 32620455981 PASS
-EditMode: 29 Passed / 0 Failed
-Target: GlobalObjectId_V1-2-99c9720ab356a0642a771bea13969a05-1454343624-0
-Update: updateVerified=true; updateReplay=true; updateUndoRestored=true; retry after Undo -> stale_target/mutation_replay_stale
-Delete: deleteVerified=true; deleteReplay=true; deleteUndoRestored=true; retry after Undo -> stale_target/mutation_replay_stale
-Cleanup: cleanupDeleted=true
-Result: PASS
-```
-
-### Phase 3 Component inspection (PR #24)
-
-```text
-Environment: Windows + Unity 6000.3.21f1
-CI latest pre-doc head: Node Verification 32622017786 PASS; Phase 1 Local Bridge Verification 32622017813 PASS
-EditMode: 33 Passed / 0 Failed
-GameObject: GlobalObjectId_V1-2-99c9720ab356a0642a771bea13969a05-2044531344-0
-Transform Component: GlobalObjectId_V1-2-99c9720ab356a0642a771bea13969a05-2044531345-0
-Observed Transform serialized paths: m_LocalRotation, m_LocalPosition, m_LocalScale and child scalar paths, plus m_ConstrainProportionsScale
-Resolver: componentResolved=true; ownerMatches=true
-Cleanup: cleanupDeleted=true; temporaryObjectRemoved=true
-Initial test-only all-zero GlobalObjectId fixture was rejected by Unity 6000.3; fixture changed to a parseable non-zero GUID and the corrected suite passed 33/33. Production Component inspection code was unchanged by that correction.
-Result: PASS
-```
-
-### Phase 3 Component add/remove (PR #25)
-
-```text
-Environment: Windows + Unity 6000.3.21f1
-CI: Node Verification 32623143372 PASS; Phase 1 Local Bridge Verification 32623143406 PASS
-EditMode: 39 Passed / 0 Failed
-GameObject: GlobalObjectId_V1-2-99c9720ab356a0642a771bea13969a05-1958447166-0
-BoxCollider Component: GlobalObjectId_V1-2-99c9720ab356a0642a771bea13969a05-1958447168-0
-Add: addVerified=true; addReplay=true; Undo removed the added Component; retry after Undo -> stale_target/mutation_replay_stale
-Remove: removeVerified=true; removeReplay=true; Undo restored the same Component identity; retry after Undo -> stale_target/mutation_replay_stale
-Cleanup: cleanupDeleted=true; temporaryObjectRemoved=true
-Result: PASS
-```
+See [`docs/PHASE2_EXIT_GATE.md`](docs/PHASE2_EXIT_GATE.md) for the detailed exit mapping and limitations.
 
 ## Phase 3 — Useful Unity Editing Core
 
-Current objective: add a small, useful editing surface without bypassing the reliability rules proven in Phase 2.
+Current objective: provide a small but genuinely useful Unity editing/inspection surface without arbitrary code execution while retaining the reliability rules proven in Phase 2.
 
-Verified Phase 3 slices:
+### Verified slices
 
-1. **Transform read/update for a resolved GameObject — Verified.**
-   - `unity_get_transform`
-   - `unity_set_transform`
-   - complete local position/Euler/scale write contract
-   - native semantic readback
-   - Undo restoration
-   - same-id replay + stale replay rejection
-   - 23/23 EditMode suite on Unity 6000.3.21f1
+1. **Transform read/update — PR #22**
+   - `unity_get_transform`, `unity_set_transform`
+   - full local position/Euler/scale write contract
+   - Quaternion-equivalent rotation verification
+   - same-id replay, Undo restoration, stale-replay rejection, cleanup
+   - **23/23 EditMode** on Unity 6000.3.21f1
 
-2. **GameObject update/delete — Verified.**
-   - `unity_update_game_object`
-   - `unity_delete_game_object`
-   - update name + `activeSelf` with native verification
-   - Undo-capable hierarchy deletion with native absence verification
-   - same-id replay + stale replay rejection after Undo
-   - verifier cleanup
-   - 29/29 EditMode suite on Unity 6000.3.21f1
+2. **GameObject update/delete — PR #23**
+   - `unity_update_game_object`, `unity_delete_game_object`
+   - native name/active-state and deletion verification
+   - same-id replay, Undo restoration, stale-replay rejection, cleanup
+   - **29/29 EditMode**
 
-3. **Component inspection — Verified.**
+3. **Component inspection — PR #24**
    - `unity_get_components`
    - bounded native-order Component enumeration including Missing Script slots
    - Component `GlobalObjectId`, type/assembly/script metadata
-   - visible `SerializedObject` / `SerializedProperty` snapshot instead of unrestricted reflection
-   - explicit component/property/depth truncation metadata
-   - resolver ownership verification for returned Transform Component ID
-   - automatic verifier cleanup
-   - 33/33 EditMode suite on Unity 6000.3.21f1
+   - visible `SerializedObject` / `SerializedProperty` snapshots
+   - resolver ownership verification and cleanup
+   - **33/33 EditMode**
 
-4. **Component add/remove — Verified.**
-   - `unity_add_component`
-   - `unity_remove_component`
-   - exact loaded concrete Component type for add; exact Component `GlobalObjectId` for remove
-   - Transform/RectTransform family rejected in this first mutation slice
-   - Unity Undo for both mutation directions
-   - native identity/owner/type verification for add and native absence verification for remove
-   - same-id replay + stale replay rejection after Undo
-   - automatic verifier cleanup
-   - 39/39 EditMode suite on Unity 6000.3.21f1
+4. **Component add/remove — PR #25**
+   - `unity_add_component`, `unity_remove_component`
+   - exact loaded concrete Component type / exact Component identity
+   - Transform-family rejection in this bounded mutation contract
+   - Undo, native identity/absence verification, replay/stale-replay, cleanup
+   - **39/39 EditMode**
 
-Next candidates:
+5. **Component property edit — PR #26**
+   - `unity_set_component_property`
+   - exact Component `GlobalObjectId` + exact visible property path
+   - first supported value kinds: Boolean, Integer, Float/number, String, Vector3
+   - hidden paths, `m_Script`, Transform/RectTransform, unsupported/coerced values rejected
+   - live BoxCollider `m_IsTrigger`, `m_Center`, `m_Size` native readback
+   - same-id replay, Undo restoration of `m_Size`, stale-replay rejection, cleanup
+   - **45/45 EditMode**
 
-1. component property edit,
-2. asset search/inspect,
-3. prefab workflows,
-4. script workflows,
-5. Play Mode and Test Runner controls.
+6. **Asset search/inspect — PR #27**
+   - `unity_search_assets`, `unity_inspect_asset`
+   - Unity AssetDatabase as source of truth; no raw recursive filesystem scan
+   - bounded/deterministic search under `Assets` or `Packages`
+   - exact asset-file inspect with GUID, main type, importer type, labels, dependency hash, direct dependencies
+   - scene-state revision is not reused as fake asset concurrency metadata
+   - live `Assets/Scenes/SampleScene.unity` GUID/path/hash stability verified
+   - `maxDependencies=0` verified; folder inspection rejected as designed
+   - **50/50 EditMode**
+
+### Current next candidates
+
+1. prefab inspect/create/apply workflows,
+2. script read/write workflows,
+3. Play Mode and Test Runner controls,
+4. diagnostics extensions where they unlock real workflows,
+5. explicit Undo/recovery tools where useful to clients.
 
 No arbitrary C# execution fallback is planned for these capabilities.
+
+## Verification highlights for the latest Phase 3 slices
+
+### Component property edit — PR #26
+
+```text
+Environment: Windows + Unity 6000.3.21f1
+CI: Node Verification 32625196758 PASS; Phase 1 Local Bridge Verification 32625196748 PASS
+EditMode: 45 Passed / 0 Failed
+BoxCollider m_IsTrigger: native write/readback + replay PASS
+BoxCollider m_Center: Vector3 native write/readback PASS
+BoxCollider m_Size: native write/readback + replay PASS
+Undo restored prior m_Size; retry after Undo -> stale_target/mutation_replay_stale
+Cleanup deleted temporary GameObject
+Result: PASS
+```
+
+### Asset search/inspect — PR #27
+
+```text
+Environment: Windows + Unity 6000.3.21f1
+CI: Node Verification 32626184911 PASS; Phase 1 Local Bridge Verification 32626184986 PASS
+EditMode: 50 Passed / 0 Failed
+Filter: t:Scene
+Selected: Assets/Scenes/SampleScene.unity
+GUID: 99c9720ab356a0642a771bea13969a05
+Main type: UnityEditor.SceneAsset
+Importer: UnityEditor.AssetImporter
+Dependency hash: 036af77983a498dbf9d9c31b6c19a348
+Direct dependencies: 4
+Repeated GUID stable=true; repeated hash stable=true
+maxDependencies=0 honored=true
+Folder inspect -> stale_target/asset_unavailable as designed
+Result: PASS
+```
 
 ## Known limitations / future work
 
 - Exact `GlobalObjectId` behavior for every unsaved/new-scene/unusual object case is not exhaustively characterized.
 - `SessionState` mutation lifecycle does not survive a full Unity Editor restart.
 - Clean-scene dirty metadata restoration after Undo rollback is not implemented.
-- An already-started Unity API call is not force-cancelled when deadline later expires.
-- Component inspection/add/remove are verified for the current bounded contracts; arbitrary serialized-property mutation is not implemented yet and will require property-type-specific validation/readback semantics rather than a generic unsafe setter.
-- Component add resolves currently loaded concrete Component types through Unity TypeCache and deliberately rejects the Transform/RectTransform family in this first slice.
-- Asset snapshots/search remain unimplemented.
-- Current Transform write targets a GameObject `GlobalObjectId` and deliberately does not silently reinterpret a Component ID as its owner GameObject.
-- GameObject delete and Component remove are classified destructive because they remove Editor state, but the current active-scene implementations record Unity Undo and were verified to restore their targets through Undo.
+- An already-started Unity API call is not force-cancelled when its deadline later expires.
+- Component property edit currently covers only the explicitly supported first-slice value kinds and visible non-Transform properties; enums, object references, arrays/lists, managed references, colors and other complex serialized forms remain future work.
+- Component add resolves currently loaded concrete Component types through Unity TypeCache and deliberately rejects Transform/RectTransform in the current contract.
+- Asset search/inspection is read-only. Asset/importer mutation, move/rename/delete, source-file text workflows, and prefab mutation remain unimplemented.
+- Asset `dependencyHash` is an observation of Unity asset dependency/import state, not a replacement for GUID identity and not yet a complete optimistic-concurrency protocol for future asset writes.
+- Current Transform write targets a GameObject `GlobalObjectId` and does not silently reinterpret a Component ID as its owner.
 - Recent Console text covers only the current domain-load capture window.
 - Unity support beyond 6000.3.21f1 is unverified.
 - Multi-editor routing, remote authentication/pairing, remote gateway hosting, and ChatGPT submission/integration remain later-phase work.

@@ -1,0 +1,30 @@
+{
+  "protocolVersion": "0",
+  "requestId": "fixture-asset-inspect",
+  "ok": true,
+  "result": {
+    "guid": "0123456789abcdef0123456789abcdef",
+    "path": "Assets/Scenes/SampleScene.unity",
+    "name": "SampleScene",
+    "extension": ".unity",
+    "mainTypeName": "UnityEditor.SceneAsset",
+    "mainAssetInstanceId": 123,
+    "mainAssetName": "SampleScene",
+    "importerTypeName": "",
+    "dependencyHash": "89abcdef0123456789abcdef01234567",
+    "labels": [],
+    "directDependencyCount": 1,
+    "returnedDependencyCount": 1,
+    "dependenciesTruncated": false,
+    "directDependencies": [
+      {
+        "guid": "abcdefabcdefabcdefabcdefabcdefab",
+        "path": "Assets/Materials/Test.mat",
+        "mainTypeName": "UnityEngine.Material"
+      }
+    ]
+  },
+  "warnings": [],
+  "dirtyState": "unchanged",
+  "compileState": "idle"
+}

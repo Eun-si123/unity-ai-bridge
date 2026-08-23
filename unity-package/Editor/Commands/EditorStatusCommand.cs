@@ -37,6 +37,8 @@ namespace UnityAiBridge.Editor.Commands
             "component.add",
             "component.remove",
             "component.property.set",
+            "asset.search",
+            "asset.inspect",
             "scene.save",
             "transform.get",
             "transform.set",

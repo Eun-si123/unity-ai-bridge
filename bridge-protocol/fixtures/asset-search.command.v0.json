@@ -1,0 +1,16 @@
+{
+  "protocolVersion": "0",
+  "requestId": "fixture-asset-search",
+  "operation": "asset.search",
+  "arguments": {
+    "filter": "t:Scene",
+    "searchInFolders": ["Assets"],
+    "maxResults": 20
+  },
+  "risk": "read",
+  "route": {
+    "editorId": "fixture-editor",
+    "connectionGeneration": 1
+  },
+  "deadlineUnixMs": 4102444800000
+}

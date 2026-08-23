@@ -19,6 +19,15 @@ namespace UnityAiBridge.Editor.Connection
         {
             if (!string.Equals(command.operation, "component.inspect", StringComparison.Ordinal))
             {
+                if (await TryHandleAssetCommandAsync(
+                        current,
+                        command,
+                        rawJson,
+                        cancellationToken))
+                {
+                    return true;
+                }
+
                 if (await TryHandleComponentPropertyCommandAsync(
                         current,
                         command,
