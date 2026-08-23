@@ -513,7 +513,9 @@ namespace UnityAiBridge.Editor.Connection
                         name,
                         mutationId,
                         expectedStateEpoch,
-                        expectedStateRevision));
+                        expectedStateRevision),
+                    command.deadlineUnixMs,
+                    command.operation);
                 var response = new BridgeGameObjectCreateResultDto
                 {
                     protocolVersion = BridgeProtocol.Version,
@@ -542,6 +544,16 @@ namespace UnityAiBridge.Editor.Connection
                 };
 
                 await SendJsonAsync(current, JsonUtility.ToJson(response), cancellationToken);
+            }
+            catch (EditorDispatchDeadlineExceededException exception)
+            {
+                await SendErrorAsync(
+                    current,
+                    command.requestId,
+                    "timeout",
+                    "deadline_exceeded",
+                    exception.Message,
+                    cancellationToken);
             }
             catch (GameObjectCreateCompilingException exception)
             {
@@ -660,7 +672,9 @@ namespace UnityAiBridge.Editor.Connection
                         expectedScenePath,
                         mutationId,
                         expectedStateEpoch,
-                        expectedStateRevision));
+                        expectedStateRevision),
+                    command.deadlineUnixMs,
+                    command.operation);
                 var response = new BridgeSceneSaveResultDto
                 {
                     protocolVersion = BridgeProtocol.Version,
@@ -678,6 +692,16 @@ namespace UnityAiBridge.Editor.Connection
                 };
 
                 await SendJsonAsync(current, JsonUtility.ToJson(response), cancellationToken);
+            }
+            catch (EditorDispatchDeadlineExceededException exception)
+            {
+                await SendErrorAsync(
+                    current,
+                    command.requestId,
+                    "timeout",
+                    "deadline_exceeded",
+                    exception.Message,
+                    cancellationToken);
             }
             catch (SceneSaveCompilingException exception)
             {
