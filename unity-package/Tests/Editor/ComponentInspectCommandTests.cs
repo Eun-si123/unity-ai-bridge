@@ -8,6 +8,8 @@ namespace UnityAiBridge.Editor.Tests
 {
     public sealed class ComponentInspectCommandTests
     {
+        // Non-zero asset GUID keeps this fixture syntactically parseable without requiring
+        // the referenced object to exist in the consuming Unity project.
         private const string ParseableGlobalObjectId =
             "GlobalObjectId_V1-2-0123456789abcdef0123456789abcdef-1-0";
 
