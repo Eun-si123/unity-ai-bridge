@@ -61,7 +61,7 @@ try {
     console.log("[Unity AI Bridge] Live diagnostics read PASS:");
     console.log(JSON.stringify(diagnostics, null, 2));
     console.log(
-      "[Unity AI Bridge] NOTE: this proves the live bounded diagnostics path. Run verify:compiler-error while intentionally triggering one temporary C# compiler error to verify message/file/line capture end-to-end.",
+      "[Unity AI Bridge] NOTE: this proves the live bounded diagnostics path. Run verify:compiler-error while intentionally triggering one temporary C# compiler error to verify message/file/line/column capture end-to-end.",
     );
   }
 
@@ -118,7 +118,7 @@ async function waitForCompilerError(): Promise<Record<string, unknown>> {
 
       const compilation = lastDiagnostics.latestCompilation as Record<string, unknown>;
       const messages = compilation.messages as unknown[];
-      if (messages.some(isCompilerError)) {
+      if (messages.some(isCompilerErrorWithLocation)) {
         return lastDiagnostics;
       }
     }
@@ -127,15 +127,29 @@ async function waitForCompilerError(): Promise<Record<string, unknown>> {
   }
 
   throw new Error(
-    `Timed out waiting for a captured compiler error. Last diagnostics: ${JSON.stringify(lastDiagnostics)}`,
+    `Timed out waiting for a captured compiler error with file/line/column metadata. Last diagnostics: ${JSON.stringify(lastDiagnostics)}`,
   );
 }
 
-function isCompilerError(value: unknown): boolean {
+function isCompilerErrorWithLocation(value: unknown): boolean {
   if (typeof value !== "object" || value === null) {
     return false;
   }
-  return (value as Record<string, unknown>).severity === "error";
+
+  const candidate = value as Record<string, unknown>;
+  return (
+    candidate.severity === "error" &&
+    typeof candidate.message === "string" &&
+    candidate.message.length > 0 &&
+    typeof candidate.file === "string" &&
+    candidate.file.length > 0 &&
+    typeof candidate.line === "number" &&
+    Number.isSafeInteger(candidate.line) &&
+    candidate.line > 0 &&
+    typeof candidate.column === "number" &&
+    Number.isSafeInteger(candidate.column) &&
+    candidate.column > 0
+  );
 }
 
 function readToolText(result: { content: Array<{ type: string; text?: string }> }): string {
