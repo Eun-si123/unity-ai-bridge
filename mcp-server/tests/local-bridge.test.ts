@@ -31,6 +31,8 @@ const status: EditorStatusPayload = {
 const hierarchy: HierarchyPayload = {
   sceneName: "SampleScene",
   scenePath: "Assets/Scenes/SampleScene.unity",
+  stateEpoch: "test-state-epoch",
+  stateRevision: 12,
   rootCount: 1,
   returnedNodeCount: 2,
   maxDepth: 3,
