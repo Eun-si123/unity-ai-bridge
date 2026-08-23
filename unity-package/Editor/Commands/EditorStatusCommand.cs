@@ -31,6 +31,8 @@ namespace UnityAiBridge.Editor.Commands
             "editor.diagnostics",
             "object.resolve",
             "gameObject.create",
+            "gameObject.update",
+            "gameObject.delete",
             "scene.save",
             "transform.get",
             "transform.set",
