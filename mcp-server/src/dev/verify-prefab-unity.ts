@@ -121,7 +121,7 @@ try {
       expectedStateRevision: stateRevision,
     },
   });
-  if (!staleReplay.isError) {
+  if (record(staleReplay)?.isError !== true) {
     throw new Error("Prefab same-id replay unexpectedly recreated the instance after Undo.");
   }
   const staleReplayError = readText(staleReplay);
@@ -182,19 +182,32 @@ async function resolve(globalObjectId: string): Promise<ResolvedObject> {
 
 type ResolvedObject = { found: boolean; isGameObject: boolean; name: string };
 
-function requireSuccess(result: { isError?: boolean; content: Array<{ type: string; text?: string }> }, label: string): void {
-  if (result.isError) throw new Error(`${label} failed: ${readText(result)}`);
+function requireSuccess(result: unknown, label: string): void {
+  if (record(result)?.isError === true) {
+    throw new Error(`${label} failed: ${readText(result)}`);
+  }
 }
 
-function readText(result: { content: Array<{ type: string; text?: string }> }): string {
-  return result.content.find((block) => block.type === "text")?.text ?? "tool returned no text";
+function readText(value: unknown): string {
+  const content = record(value)?.content;
+  if (!Array.isArray(content)) return "tool returned no text";
+  for (const block of content) {
+    const item = record(block);
+    if (item?.type === "text" && typeof item.text === "string") return item.text;
+  }
+  return "tool returned no text";
+}
+
+function record(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null ? value as Record<string, unknown> : null;
 }
 
 function requireRecord(value: unknown, label: string): Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+  const item = record(value);
+  if (item === null || Array.isArray(value)) {
     throw new Error(`${label} was not an object.`);
   }
-  return value as Record<string, unknown>;
+  return item;
 }
 
 function requireArray(value: Record<string, unknown>, key: string): unknown[] {
