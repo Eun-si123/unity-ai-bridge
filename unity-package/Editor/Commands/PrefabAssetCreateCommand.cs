@@ -25,11 +25,6 @@ namespace UnityAiBridge.Editor.Commands
         public long stateRevision;
     }
 
-    internal sealed class PrefabAssetCreateUnavailableException : InvalidOperationException
-    {
-        public PrefabAssetCreateUnavailableException(string message) : base(message) { }
-    }
-
     internal sealed class PrefabAssetCreateCompilingException : InvalidOperationException
     {
         public PrefabAssetCreateCompilingException(string message) : base(message) { }
@@ -38,6 +33,11 @@ namespace UnityAiBridge.Editor.Commands
     internal sealed class PrefabAssetCreatePlayModeException : InvalidOperationException
     {
         public PrefabAssetCreatePlayModeException(string message) : base(message) { }
+    }
+
+    internal sealed class PrefabAssetCreateUnavailableException : InvalidOperationException
+    {
+        public PrefabAssetCreateUnavailableException(string message) : base(message) { }
     }
 
     internal sealed class PrefabAssetCreateDestinationOccupiedException : InvalidOperationException
@@ -108,12 +108,7 @@ namespace UnityAiBridge.Editor.Commands
             string expectedStateEpoch,
             long expectedStateRevision)
         {
-            ValidateArguments(
-                sourceGlobalObjectId,
-                destinationPath,
-                mutationId,
-                expectedStateEpoch,
-                expectedStateRevision);
+            ValidateArguments(sourceGlobalObjectId, destinationPath, mutationId, expectedStateEpoch, expectedStateRevision);
 
             if (EditorApplication.isCompiling)
             {
@@ -135,12 +130,7 @@ namespace UnityAiBridge.Editor.Commands
                 {
                     throw new InvalidOperationException("The cached prefab.asset.create result is invalid.");
                 }
-                EnsureSameIntent(
-                    cached,
-                    sourceGlobalObjectId,
-                    destinationPath,
-                    expectedStateEpoch,
-                    expectedStateRevision);
+                EnsureSameIntent(cached, sourceGlobalObjectId, destinationPath, expectedStateEpoch, expectedStateRevision);
                 EnsureReplayStillMatches(cached);
                 var replayState = EditorStateRevision.Capture();
                 cached.replayed = true;
@@ -152,6 +142,7 @@ namespace UnityAiBridge.Editor.Commands
 
             EditorStateRevision.RequireCurrent(expectedStateEpoch, expectedStateRevision);
             var source = RequireSource(sourceGlobalObjectId);
+            var sourceNameBefore = source.name ?? string.Empty;
             EnsureDestinationAvailable(destinationPath);
 
             var stateBefore = EditorStateRevision.Capture();
@@ -161,11 +152,7 @@ namespace UnityAiBridge.Editor.Commands
                 lifecycle = EditorMutationLifecycle.Begin(
                     Operation,
                     mutationId,
-                    BuildIntentFingerprint(
-                        sourceGlobalObjectId,
-                        destinationPath,
-                        expectedStateEpoch,
-                        expectedStateRevision),
+                    BuildIntentFingerprint(sourceGlobalObjectId, destinationPath, expectedStateEpoch, expectedStateRevision),
                     stateBefore);
             }
             catch (EditorMutationLifecycleConflictException exception)
@@ -188,7 +175,17 @@ namespace UnityAiBridge.Editor.Commands
             PrefabInspectPayload inspected;
             try
             {
-                inspected = VerifyCreatedAsset(source, sourceGlobalObjectId, destinationPath);
+                // SaveAsPrefabAsset normally imports immediately, but force the exact new asset to
+                // complete its import before semantic readback so GUID/hash/type observations are deterministic.
+                AssetDatabase.ImportAsset(
+                    destinationPath,
+                    ImportAssetOptions.ForceSynchronousImport | ImportAssetOptions.ForceUpdate);
+                inspected = VerifyCreatedAsset(
+                    source,
+                    sourceGlobalObjectId,
+                    sourceNameBefore,
+                    savedRoot,
+                    destinationPath);
             }
             catch (Exception exception)
             {
@@ -203,7 +200,7 @@ namespace UnityAiBridge.Editor.Commands
                 replayed = false,
                 created = true,
                 sourceGlobalObjectId = sourceGlobalObjectId,
-                sourceName = source.name ?? string.Empty,
+                sourceName = sourceNameBefore,
                 destinationPath = destinationPath,
                 prefabGuid = inspected.guid,
                 dependencyHash = inspected.dependencyHash,
@@ -240,8 +237,7 @@ namespace UnityAiBridge.Editor.Commands
             }
             if (destinationPath.Length > MaximumDestinationPathLength)
             {
-                throw new ArgumentOutOfRangeException(
-                    nameof(destinationPath),
+                throw new ArgumentOutOfRangeException(nameof(destinationPath),
                     $"destinationPath must be at most {MaximumDestinationPathLength} characters.");
             }
             if (destinationPath.Contains("\\") || destinationPath.StartsWith("/", StringComparison.Ordinal) ||
@@ -312,11 +308,14 @@ namespace UnityAiBridge.Editor.Commands
         private static PrefabInspectPayload VerifyCreatedAsset(
             GameObject source,
             string sourceGlobalObjectId,
+            string sourceNameBefore,
+            GameObject savedRoot,
             string destinationPath)
         {
             var sourceReadback = ObjectResolverCommand.Execute(sourceGlobalObjectId);
             if (!sourceReadback.found || !sourceReadback.isGameObject ||
-                !string.Equals(sourceReadback.name, source.name ?? string.Empty, StringComparison.Ordinal))
+                !string.Equals(sourceReadback.name, sourceNameBefore, StringComparison.Ordinal) ||
+                !string.Equals(source.name ?? string.Empty, sourceNameBefore, StringComparison.Ordinal))
             {
                 throw new PrefabAssetCreateVerificationException(
                     "The source GameObject changed or disappeared while verifying Prefab Asset creation.");
@@ -327,13 +326,20 @@ namespace UnityAiBridge.Editor.Commands
                     "SaveAsPrefabAsset unexpectedly changed the source scene GameObject into a Prefab instance.");
             }
 
-            var inspected = PrefabInspectCommand.Execute(destinationPath, 0, 1);
-            if (string.IsNullOrEmpty(inspected.guid) || string.IsNullOrEmpty(inspected.dependencyHash) ||
-                !string.Equals(inspected.rootName, source.name ?? string.Empty, StringComparison.Ordinal) ||
-                inspected.returnedNodeCount != 1)
+            if (!PrefabUtility.IsPartOfPrefabAsset(savedRoot) ||
+                !string.Equals(AssetDatabase.GetAssetPath(savedRoot), destinationPath, StringComparison.Ordinal))
             {
                 throw new PrefabAssetCreateVerificationException(
-                    "Unity created a Prefab Asset, but native GUID/hash/root readback did not match the requested source.");
+                    "Unity returned a saved Prefab root that does not belong to the requested destination asset.");
+            }
+
+            var inspected = PrefabInspectCommand.Execute(destinationPath, 0, 1);
+            if (string.IsNullOrEmpty(inspected.guid) || string.IsNullOrEmpty(inspected.dependencyHash) ||
+                string.IsNullOrEmpty(inspected.rootName) || inspected.returnedNodeCount != 1 ||
+                !string.Equals(inspected.rootName, savedRoot.name ?? string.Empty, StringComparison.Ordinal))
+            {
+                throw new PrefabAssetCreateVerificationException(
+                    $"Unity created a Prefab Asset, but native readback was inconsistent. savedRootName='{savedRoot.name}', inspectedRootName='{inspected.rootName}', guid='{inspected.guid}', dependencyHash='{inspected.dependencyHash}', returnedNodeCount={inspected.returnedNodeCount}.");
             }
             return inspected;
         }
@@ -341,12 +347,15 @@ namespace UnityAiBridge.Editor.Commands
         private static void CleanupCreatedAsset(string destinationPath, string verificationMessage)
         {
             var deleted = AssetDatabase.DeleteAsset(destinationPath);
+            // Asset deletion can leave a short-lived database observation behind until refresh.
+            // Force a synchronous refresh before proving cleanup absence.
+            AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
             var guidAfter = AssetDatabase.AssetPathToGUID(destinationPath);
             var remaining = AssetDatabase.LoadMainAssetAtPath(destinationPath);
             if (!deleted || !string.IsNullOrEmpty(guidAfter) || remaining != null)
             {
                 throw new PrefabAssetCreateCleanupException(
-                    $"Prefab Asset verification failed and cleanup could not prove removal of '{destinationPath}'. Original verification error: {verificationMessage}");
+                    $"Prefab Asset verification failed and cleanup could not prove removal of '{destinationPath}'. deleted={deleted}, guidAfter='{guidAfter}', remaining={(remaining != null ? remaining.name : "<null>")}. Original verification error: {verificationMessage}");
             }
         }
 
@@ -385,9 +394,7 @@ namespace UnityAiBridge.Editor.Commands
         {
             if (string.IsNullOrWhiteSpace(mutationId) || mutationId.Length > MaximumMutationIdLength)
             {
-                throw new ArgumentException(
-                    $"mutationId must be 1..{MaximumMutationIdLength} characters.",
-                    nameof(mutationId));
+                throw new ArgumentException($"mutationId must be 1..{MaximumMutationIdLength} characters.", nameof(mutationId));
             }
             for (var index = 0; index < mutationId.Length; index++)
             {
