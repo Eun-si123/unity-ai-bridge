@@ -140,8 +140,8 @@ See [`docs/PHASE2_EXIT_GATE.md`](docs/PHASE2_EXIT_GATE.md).
 
 Target tool families, in approximate implementation order:
 
-- 🟨 GameObject/Transform editing beyond the verified empty-root create primitive
-- ⬜ GameObject update/delete
+- ✅ Transform read/update for a resolved GameObject — `unity_get_transform` + `unity_set_transform` verified on Windows / Unity 6000.3.21f1 with native readback, same-id replay, Undo restoration, stale-replay rejection, cleanup, and **23 Passed / 0 Failed** EditMode tests
+- 🟨 GameObject editing beyond create — empty-root create is verified; update/delete remain pending
 - ⬜ Component inspect/add/remove/edit
 - ⬜ Asset search/inspect
 - ⬜ Prefab inspect/create/apply workflows
