@@ -142,10 +142,10 @@ namespace UnityAiBridge.Editor.Commands
                 return cached;
             }
 
-            CreateMutationState mutationState;
+            EditorMutationExecution<CreateMutationState> execution;
             try
             {
-                mutationState = EditorMutationTransaction.Execute(
+                execution = EditorMutationTransaction.ExecuteWithOutcome(
                     "gameObject.create",
                     UndoGroupName,
                     normalizedExpectedEpoch,
@@ -153,7 +153,8 @@ namespace UnityAiBridge.Editor.Commands
                     mutationId,
                     BuildIntentFingerprint(name, normalizedExpectedEpoch, expectedStateRevision),
                     context => CreateNativeObject(context, name),
-                    (context, state) => VerifyNativeObject(context, state, name));
+                    (context, state) => VerifyNativeObject(context, state, name),
+                    (_, state) => VerifyNativeRollback(state));
             }
             catch (EditorMutationPreflightException exception)
                 when (exception.Failure == EditorMutationPreflightFailure.Compiling)
@@ -173,6 +174,13 @@ namespace UnityAiBridge.Editor.Commands
                 throw new GameObjectCreateReadbackException(exception.Message);
             }
 
+            if (!execution.outcome.changed || !execution.outcome.verified || execution.outcome.rolledBack)
+            {
+                throw new InvalidOperationException(
+                    "gameObject.create transaction returned an inconsistent successful verification outcome.");
+            }
+
+            var mutationState = execution.value;
             var readback = mutationState.readback;
             var stateAfter = EditorStateRevision.Capture();
             var result = new GameObjectCreatePayload
@@ -254,6 +262,17 @@ namespace UnityAiBridge.Editor.Commands
                     readback.scenePath,
                     context.activeScene.path ?? string.Empty,
                     StringComparison.Ordinal);
+        }
+
+        private static bool VerifyNativeRollback(CreateMutationState state)
+        {
+            if (state == null || string.IsNullOrEmpty(state.globalObjectId))
+            {
+                return false;
+            }
+
+            var readback = ObjectResolverCommand.Execute(state.globalObjectId);
+            return !readback.found;
         }
 
         private static void EnsureReplayStillMatches(

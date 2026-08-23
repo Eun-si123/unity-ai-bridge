@@ -107,26 +107,26 @@ Minimum capabilities:
 
 Some narrow primitives were proven early in Phase 1; Phase 2 generalizes them into a common execution core.
 
-- 🟨 Main-thread dispatcher hardened — verified for status, hierarchy, diagnostics, resolver, and the first GameObject-create write path; broader tool coverage pending
-- ⬜ Structured scene/state snapshot suitable for preflight and verification
+- 🟨 Main-thread dispatcher hardened — verified for current status/hierarchy/diagnostics/resolver/create paths; broader tool coverage pending
+- 🟨 Structured scene/state snapshot suitable for preflight and verification — epoch/revision + bounded hierarchy/state metadata exist; richer component/asset snapshots remain pending
 - ✅ Stable object resolver — live Unity 6000.3.21f1 verification re-resolved a created GameObject by `GlobalObjectId`; after Undo the same identifier returned `found=false`
-- ⬜ State revision / stale-state detection
-- ⬜ Serialized conflicting writes
-- 🟨 Undo integration — verified for bounded GameObject create; generalized transaction grouping pending
-- 🟨 Scene dirty-state reporting — exercised by create; generalized behavior pending
-- ⬜ Explicit save behavior
-- 🟨 Compilation observation — compiler diagnostics are captured; full operation lifecycle across compilation/reload remains pending
-- ✅ Domain reload recovery — verified for local connection/status lifecycle
+- ✅ State revision / stale-state detection — stale epoch/revision write preconditions are rejected before mutation
+- 🟨 Serialized conflicting writes — current single-editor common mutation guard prevents re-entrant writes; richer per-target scheduling remains pending
+- ✅ Undo transaction grouping — common write transaction opens/collapses an Undo group and one Undo removes the verified create
+- 🟨 Scene dirty-state policy — create marks dirty; a verified rollback from a previously clean scene currently leaves the scene dirty, so restoration semantics remain pending
+- ⬜ Explicit save behavior — no mutation silently saves; explicit save contract remains pending
+- ✅ Compilation/domain-reload mutation lifecycle — same-session ambiguous `started` mutations survive real domain reload and fail closed on same-id retry
+- ✅ Domain reload recovery — verified for connection/status and mutation lifecycle
 - ✅ Reconnection and connection generations — verified for local single-editor lifecycle
-- 🟨 Agent capability/version negotiation — a real Phase 2 test exposed a stale compiled Unity Agent that accepted the connection but did not support the newly advertised `object.resolve`; explicit capability/version negotiation should prevent this mismatch from reaching command execution
-- 🟨 Timeout/cancellation behavior — request deadlines/timeouts exist; broader cancellation semantics pending
-- 🟨 Duplicate/replayed request protection — immediate same-session replay is deduplicated and a replay whose cached target was Undone/deleted is rejected as `stale_target/mutation_replay_stale`; generalized mutation semantics pending
-- ⬜ Preflight validation framework
-- 🟨 Native readback after writes — verified for the bounded GameObject-create identity/existence contract; generalized readback pending
-- 🟨 Semantic verification of intended state — verified for create target identity/existence and stale-replay absence; broader property/state verification pending
-- ⬜ Rollback on failed verification
-- ⬜ Verification that rollback itself restored the expected state
-- ⬜ Unity EditMode test coverage for the common execution core
+- ✅ Agent capability/version negotiation — live Agent advertises version/operations and MCP preflights required capabilities before non-status dispatch
+- 🟨 Timeout/cancellation behavior — request deadlines/timeouts exist; write cancellation/reconciliation remains pending
+- 🟨 Duplicate/replayed request protection — verified for current create path and same-session lifecycle; generalized write-family semantics and full-restart durability remain pending
+- ✅ Preflight validation framework — common compile/scene/state-revision/re-entrant checks are used by current create write
+- 🟨 Native readback after writes — verified for bounded GameObject-create identity/existence; generalized readback pending
+- 🟨 Semantic verification of intended state — structured `changed/verified/rolledBack/rollbackVerified` outcomes are verified for create/rollback probe; broader property/component/asset verification pending
+- ✅ Rollback on failed verification — forced verifier failure reverts the current Undo transaction
+- ✅ Verification that rollback restored the operation-specific native state — transaction-owned rollback verifier confirmed target absence; rollback-verification failures have a dedicated failure path
+- ✅ Unity EditMode test coverage for the current common reliability core — 12/12 tests passed on Unity 6000.3.21f1
 
 ### Exit gate
 

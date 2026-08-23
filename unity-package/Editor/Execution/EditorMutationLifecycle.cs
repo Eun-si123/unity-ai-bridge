@@ -43,6 +43,7 @@ namespace UnityAiBridge.Editor.Execution
         internal const string FailedRolledBackStatus = "failed_rolled_back";
         internal const string FailedNoMutationStatus = "failed_no_mutation";
         internal const string RollbackFailedStatus = "rollback_failed";
+        internal const string RollbackVerificationFailedStatus = "rollback_verification_failed";
 
         private const string SessionKeyPrefix = "UnityAiBridge.MutationLifecycle.v1.";
 
@@ -126,6 +127,17 @@ namespace UnityAiBridge.Editor.Execution
             EditorStateRevisionSnapshot stateAfter)
         {
             MarkTerminal(record, RollbackFailedStatus, "rollback_failed", stateAfter);
+        }
+
+        public static void MarkRollbackVerificationFailed(
+            EditorMutationLifecycleRecord record,
+            EditorStateRevisionSnapshot stateAfter)
+        {
+            MarkTerminal(
+                record,
+                RollbackVerificationFailedStatus,
+                "rollback_verification_failed",
+                stateAfter);
         }
 
         public static EditorMutationLifecycleRecord Read(string mutationId)

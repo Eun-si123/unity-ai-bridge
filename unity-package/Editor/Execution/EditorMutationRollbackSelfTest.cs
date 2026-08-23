@@ -20,12 +20,18 @@ namespace UnityAiBridge.Editor.Execution
             var probeName = ProbeNamePrefix + DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             var globalObjectId = string.Empty;
             var sceneWasDirty = SceneManager.GetActiveScene().isDirty;
+            var rollbackVerifierCalled = false;
+            var rollbackVerified = false;
 
             try
             {
-                EditorMutationTransaction.Execute(
+                EditorMutationTransaction.ExecuteWithOutcome(
                     Operation,
                     UndoGroupName,
+                    string.Empty,
+                    0,
+                    string.Empty,
+                    string.Empty,
                     context =>
                     {
                         var gameObject = new GameObject(probeName);
@@ -44,16 +50,47 @@ namespace UnityAiBridge.Editor.Execution
                         globalObjectId = globalObjectIds[0].ToString();
                         return globalObjectId;
                     },
-                    (_, __) => false);
+                    (_, __) => false,
+                    (_, createdGlobalObjectId) =>
+                    {
+                        rollbackVerifierCalled = true;
+                        var readback = ObjectResolverCommand.Execute(createdGlobalObjectId);
+                        var hierarchyMatches = CountHierarchyMatches(
+                            SceneManager.GetActiveScene(),
+                            probeName);
+                        rollbackVerified = !readback.found && hierarchyMatches == 0;
+                        return rollbackVerified;
+                    });
 
                 throw new InvalidOperationException(
                     "Rollback probe unexpectedly reported transaction success after forced verification failure.");
             }
-            catch (EditorMutationVerificationException)
+            catch (EditorMutationVerificationException exception)
             {
                 if (string.IsNullOrEmpty(globalObjectId))
                 {
                     Fail("Rollback probe did not capture a GlobalObjectId before verification failed.");
+                    return;
+                }
+
+                if (!rollbackVerifierCalled || !rollbackVerified)
+                {
+                    Fail(
+                        $"Transaction rollback verifier did not confirm rollback: called={rollbackVerifierCalled}, verified={rollbackVerified}.");
+                    return;
+                }
+
+                var outcome = exception.Outcome;
+                if (outcome == null ||
+                    !outcome.changed ||
+                    outcome.verified ||
+                    !outcome.rolledBack ||
+                    !outcome.rollbackVerified)
+                {
+                    Fail(
+                        "Structured rollback outcome was inconsistent: " +
+                        $"changed={outcome?.changed}, verified={outcome?.verified}, " +
+                        $"rolledBack={outcome?.rolledBack}, rollbackVerified={outcome?.rollbackVerified}.");
                     return;
                 }
 
@@ -62,20 +99,21 @@ namespace UnityAiBridge.Editor.Execution
                 if (readback.found || hierarchyMatches != 0)
                 {
                     Fail(
-                        $"Rollback readback failed: found={readback.found}, hierarchyMatches={hierarchyMatches}, globalObjectId={globalObjectId}.");
+                        $"Final rollback readback failed: found={readback.found}, hierarchyMatches={hierarchyMatches}, globalObjectId={globalObjectId}.");
                     return;
                 }
 
                 var sceneIsDirty = SceneManager.GetActiveScene().isDirty;
                 Debug.Log(
-                    "[Unity AI Bridge] Transaction rollback self-test PASS: " +
-                    $"forcedVerificationFailure=true, rollbackTargetFound=false, hierarchyMatches=0, " +
+                    "[Unity AI Bridge] Transaction verification contract PASS: " +
+                    "forcedVerificationFailure=true, changed=true, verified=false, rolledBack=true, " +
+                    "rollbackVerifierCalled=true, rollbackVerified=true, rollbackTargetFound=false, hierarchyMatches=0, " +
                     $"sceneWasDirty={sceneWasDirty}, sceneIsDirty={sceneIsDirty}, globalObjectId={globalObjectId}");
             }
             catch (Exception exception)
             {
                 Debug.LogError(
-                    "[Unity AI Bridge] Transaction rollback self-test FAILED: " + exception);
+                    "[Unity AI Bridge] Transaction verification contract FAILED: " + exception);
             }
         }
 
@@ -106,7 +144,7 @@ namespace UnityAiBridge.Editor.Execution
 
         private static void Fail(string message)
         {
-            Debug.LogError("[Unity AI Bridge] Transaction rollback self-test FAILED: " + message);
+            Debug.LogError("[Unity AI Bridge] Transaction verification contract FAILED: " + message);
         }
     }
 }
