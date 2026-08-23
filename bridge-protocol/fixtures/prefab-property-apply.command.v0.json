@@ -1,0 +1,15 @@
+{
+  "protocolVersion": "0",
+  "requestId": "req-prefab-property-apply-1",
+  "operation": "prefab.property.apply",
+  "arguments": {
+    "componentGlobalObjectId": "GlobalObjectId_V1-2-99c9720ab356a0642a771bea13969a05-2044531345-0",
+    "propertyPath": "m_IsTrigger",
+    "prefabPath": "Assets/Prefabs/Example.prefab",
+    "expectedPrefabDependencyHash": "0123456789abcdef0123456789abcdef",
+    "mutationId": "prefab-property-apply-example-1",
+    "expectedStateEpoch": "example-state-epoch",
+    "expectedStateRevision": 62
+  },
+  "risk": "destructive"
+}
