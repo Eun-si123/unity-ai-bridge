@@ -54,6 +54,21 @@ const diagnosticsInputSchema = fromJsonSchema({
   additionalProperties: false,
 });
 
+const resolveObjectInputSchema = fromJsonSchema({
+  type: "object",
+  required: ["globalObjectId"],
+  properties: {
+    globalObjectId: {
+      type: "string",
+      minLength: 1,
+      maxLength: 256,
+      description:
+        "Unity GlobalObjectId string to re-resolve against current native Editor state. A syntactically valid ID may still return found=false when the target no longer exists or its scene is not loaded.",
+    },
+  },
+  additionalProperties: false,
+});
+
 const createGameObjectInputSchema = fromJsonSchema({
   type: "object",
   required: ["name"],
@@ -192,10 +207,35 @@ serveStdio(() => {
   );
 
   server.registerTool(
+    "unity_resolve_object",
+    {
+      description:
+        "Re-resolve a Unity GlobalObjectId against current native Editor state. Use this before mutations when a target came from an earlier snapshot. Returns found=false instead of inventing a replacement when the target no longer exists. Instance IDs and hierarchy paths are returned only as current hints; the GlobalObjectId remains the stable identity input.",
+      inputSchema: resolveObjectInputSchema,
+    },
+    async (args) => {
+      try {
+        const input = args as { globalObjectId: string };
+        const result = await bridge.requestResolveObject(input.globalObjectId);
+        return {
+          content: [{ type: "text", text: JSON.stringify(result) }],
+          structuredContent: result,
+        };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return {
+          isError: true,
+          content: [{ type: "text", text: message }],
+        };
+      }
+    },
+  );
+
+  server.registerTool(
     "unity_create_game_object",
     {
       description:
-        "Create one empty root GameObject in the active Unity scene. This is a write operation. Unity registers Undo, marks the scene dirty, and deduplicates repeated delivery when the same mutationId and arguments are reused. If a write fails ambiguously, retry only with the mutationId reported by the failed call.",
+        "Create one empty root GameObject in the active Unity scene. This is a write operation. Unity registers Undo, marks the scene dirty, verifies the created target through native GlobalObjectId readback, and deduplicates repeated delivery when the same mutationId and arguments are reused. A replay re-resolves the cached target and fails closed if that object was undone, deleted, moved, or otherwise no longer matches the completed mutation. If a write fails ambiguously, retry only with the mutationId reported by the failed call.",
       inputSchema: createGameObjectInputSchema,
     },
     async (args) => {
