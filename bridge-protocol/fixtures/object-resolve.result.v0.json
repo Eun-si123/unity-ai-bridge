@@ -1,0 +1,26 @@
+{
+  "protocolVersion": "0",
+  "requestId": "resolve-example-1",
+  "ok": true,
+  "result": {
+    "requestedGlobalObjectId": "GlobalObjectId_V1-2-99c9720ab356a0642a771bea13969a05-1399885475-0",
+    "found": true,
+    "canonicalGlobalObjectId": "GlobalObjectId_V1-2-99c9720ab356a0642a771bea13969a05-1399885475-0",
+    "instanceId": -2810,
+    "name": "MCP_Create_Verify_1787442917163",
+    "objectType": "UnityEngine.GameObject",
+    "isGameObject": true,
+    "isComponent": false,
+    "owningGameObjectGlobalObjectId": "GlobalObjectId_V1-2-99c9720ab356a0642a771bea13969a05-1399885475-0",
+    "owningGameObjectInstanceId": -2810,
+    "sceneName": "SampleScene",
+    "scenePath": "Assets/Scenes/SampleScene.unity",
+    "hierarchyPath": "MCP_Create_Verify_1787442917163",
+    "siblingIndex": 3,
+    "activeSelf": true,
+    "activeInHierarchy": true
+  },
+  "warnings": [],
+  "dirtyState": "unchanged",
+  "compileState": "idle"
+}
