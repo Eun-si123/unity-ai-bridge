@@ -9,124 +9,66 @@ Unity AI Bridge aims to make safe AI control of the Unity Editor easy enough tha
 ## Roadmap principles
 
 - Capability gates matter more than dates.
-- A feature does not advance because code merely exists; it advances when the required verification evidence exists.
-- Reliability, Undo, reconnect behavior, object identity, and security are product features, not cleanup work.
-- The project will not chase a 300+ tool count before the core is trustworthy.
+- A feature advances only with implementation plus relevant verification evidence.
+- Reliability, Undo, reconnect behavior, object identity, and security are product features.
+- The project will not chase a huge tool count before the core is trustworthy.
 - ChatGPT is an important target, but the public core remains provider-neutral.
 
 ## Legend
 
 - ⬜ Planned
 - 🟨 In progress
-- ✅ Verified milestone
+- ✅ Verified milestone/slice
 - ⛔ Blocked
-
-These roadmap markers describe milestone progress only. `STATUS.md` is authoritative for individual implementation claims.
 
 ---
 
 # Phase 0 — Foundation
 
-**Goal:** make the repository safe for humans and AI agents to continue without relying on lost conversation context.
-
 **State:** ✅ Verified milestone — completed 2026-08-22
 
-- ✅ Public/private repository boundary defined
-- ✅ AI/contributor hallucination guardrails documented
-- ✅ Architecture boundaries documented
-- ✅ Durable design blueprint documented
-- ✅ Architecture decisions recorded
-- ✅ Third-party provenance rules established
-- ✅ Public roadmap created
-- ✅ Initial Unity support target selected and pinned — Unity 6000.3.21f1
-- ✅ Initial source tree scaffolded and exercised
-- ✅ TypeScript/runtime/dependency versions pinned with generated lockfile
-- ✅ Bridge protocol v0 schema/types/fixtures defined
-- ✅ Initial automated build/test commands verified in CI
-- ✅ Unity package load/compile verified on Windows / Unity 6000.3.21f1
-- ✅ Project license selected — Apache License 2.0 for the public core
+Foundation established repository/architecture boundaries, AI grounding rules, provenance, Unity target, source scaffold, pinned dependencies, bridge protocol v0, CI, package compile/load, and Apache-2.0 public-core licensing.
 
 ### Exit gate
 
-✅ **Passed.**
+✅ Passed.
 
 ---
 
 # Phase 1 — Minimal Local End-to-End
 
-**Goal:** prove complete requests can travel from MCP to Unity and back correctly, then establish the minimum useful local tool slice.
-
 **State:** ✅ Verified milestone — completed 2026-08-23
 
-Verified foundation:
-
-- ✅ Real Unity package load/compile on Unity 6000.3.21f1
-- ✅ Real local WebSocket hello and `editor.status` round trip
-- ✅ Real MCP stdio handshake and `unity_get_status`
-- ✅ Active scene / Play Mode / compilation state as structured data
-- ✅ Request IDs, deadlines, routing generation checks, timeout/disconnect handling
-- ✅ Structured bridge errors including real stale-connection rejection
-- ✅ Domain-reload reconnect with stable editor identity and new `connectionGeneration`
-- ✅ Post-reconnect command success
-- ✅ Bounded active-scene hierarchy with `GlobalObjectId`
-- ✅ One empty root GameObject create mutation
-- ✅ Duplicate-retry protection
-- ✅ Bounded Console/compiler diagnostics
-- ✅ Real compiler error with severity/message/file/line/column metadata
+Verified MCP -> local bridge -> Unity main-thread -> structured result path, including status, hierarchy, first GameObject create, duplicate-retry protection, diagnostics, compiler source locations, and domain-reload reconnect/stale-generation protection.
 
 ### Exit gate
 
-✅ **Passed on 2026-08-23.**
+✅ Passed.
 
 ---
 
 # Phase 2 — Reliability Core
 
-**Goal:** make AI changes recoverable and resilient to normal Unity lifecycle events.
+**State:** ✅ Verified milestone — completed 2026-08-23 for the surface implemented at exit
 
-**State:** ✅ Verified milestone — completed 2026-08-23 for the tool surface implemented at exit
+Verified foundations include:
 
-Phase 2 established the common safety contract that future write tools must adopt individually.
+- ✅ stable `GlobalObjectId` resolver
+- ✅ state epoch/revision + stale-state rejection
+- ✅ current single-editor serialization + mutation re-entry guard
+- ✅ main-thread mutation execution
+- ✅ common mutation preflight
+- ✅ Undo transaction grouping
+- ✅ semantic native readback
+- ✅ rollback + rollback verification
+- ✅ same-session mutation lifecycle across domain reload
+- ✅ capability/version preflight
+- ✅ receive-time + execution-boundary deadlines
+- ✅ explicit active-scene save
+- ✅ dirty-state outcome reporting
+- ✅ Phase 2 EditMode reliability suite: **19/19**
 
-- ✅ Main-thread execution for current bridge operations
-- 🟨 Structured scene/state snapshot — epoch/revision + bounded hierarchy/state metadata are available; richer Component/Asset snapshots move with Phase 3 tool families
-- ✅ Stable object resolver using Unity `GlobalObjectId`
-- ✅ State revision / stale-state rejection
-- ✅ Current single-editor command serialization + mutation re-entry guard
-- ✅ Undo transaction grouping for Undo-capable mutation paths
-- ✅ Dirty-state outcome reporting, including explicit rollback dirty residue
-- ✅ Explicit active-scene save operation
-- ✅ Compilation/domain-reload mutation lifecycle for the current Editor session
-- ✅ Domain reload recovery and new connection generation
-- ✅ Agent capability/version preflight
-- ✅ Receive-time + execution-boundary deadline checks for current writes
-- ✅ Duplicate/replayed request protection for current writes
-- ✅ Common mutation preflight framework
-- ✅ Native readback for the current create write
-- ✅ Structured semantic verification outcome contract
-- ✅ Rollback on failed verification
-- ✅ Native verification that rollback restored operation-specific state
-- ✅ Unity EditMode reliability suite — **19 Passed / 0 Failed** on Unity 6000.3.21f1
-
-Verified slices:
-
-- ✅ PR #10 — stable resolver / create readback / stale replay
-- ✅ PR #11 — capability negotiation/preflight
-- ✅ PR #12 — common transaction + Undo core
-- ✅ PR #13 — forced rollback probe
-- ✅ PR #14 — state revision / stale-state rejection
-- ✅ PR #15 — domain-reload-safe same-session mutation lifecycle
-- ✅ PR #16 — 8/8 EditMode reliability tests
-- ✅ PR #17 — structured verification + rollback verification, 12/12
-- ✅ PR #18 — dirty-state reporting, 14/14
-- ✅ PR #19 — explicit scene save, 16/16
-- ✅ PR #20 — execution-boundary deadlines, 19/19
-
-### Exit gate
-
-✅ **Passed for the current implemented surface.** Normal reconnect/domain reload, stale state, retry/replay, Agent capability skew, failed verification/rollback, explicit persistence, and queued deadline expiry do not silently duplicate the current writes or report success without the expected native evidence.
-
-Important limits remain explicit rather than being promoted to fake completion: full Editor-restart mutation persistence is not implemented, Undo rollback may leave a clean scene dirty, an already-started Unity API call is not force-interrupted, and future Phase 3 write families still require their own native semantic verification.
+Known Phase 2 limits remain explicit: full Editor-restart transaction persistence is not implemented, Undo rollback may leave a clean scene dirty, and already-started Unity API calls are not force-interrupted.
 
 See [`docs/PHASE2_EXIT_GATE.md`](docs/PHASE2_EXIT_GATE.md).
 
@@ -134,29 +76,32 @@ See [`docs/PHASE2_EXIT_GATE.md`](docs/PHASE2_EXIT_GATE.md).
 
 # Phase 3 — Useful Unity Editing Core
 
-**Goal:** move from technical demo to something that can perform normal Unity development work without arbitrary code execution.
+**Goal:** perform normal Unity inspection/editing work without arbitrary code execution while carrying the Phase 2 reliability rules into each new write family.
 
 **State:** 🟨 In progress — entered 2026-08-23
 
-Target tool families, in approximate implementation order:
+Verified slices:
 
-- ✅ Transform read/update — `unity_get_transform` + `unity_set_transform`, native readback/replay/Undo/stale-replay/cleanup, **23/23** EditMode
-- ✅ GameObject update/delete — `unity_update_game_object` + `unity_delete_game_object`, native verification/replay/Undo/stale-replay/cleanup, **29/29** EditMode
-- ✅ Component inspect — `unity_get_components`, bounded visible serialized snapshots + Component identity/ownership, **33/33** EditMode
-- ✅ Component add/remove — `unity_add_component` + `unity_remove_component`, exact Component identities + Undo/native verification/replay, **39/39** EditMode
-- ✅ Component property edit — `unity_set_component_property`, bounded visible Boolean/Integer/Float/String/Vector3 writes with native readback, Undo and stale replay protection, **45/45** EditMode
-- ✅ Asset search/inspect — `unity_search_assets` + `unity_inspect_asset`, bounded Unity AssetDatabase search and exact asset metadata/dependency inspection, **50/50** EditMode
-- 🟨 Prefab inspect/create/apply workflows — next major editing slice
+- ✅ Transform read/update — `unity_get_transform` + `unity_set_transform`, **23/23** EditMode
+- ✅ GameObject update/delete — `unity_update_game_object` + `unity_delete_game_object`, **29/29** EditMode
+- ✅ Component inspect — `unity_get_components`, **33/33** EditMode
+- ✅ Component add/remove — `unity_add_component` + `unity_remove_component`, **39/39** EditMode
+- ✅ Component property edit — `unity_set_component_property`, **45/45** EditMode
+- ✅ Asset search/inspect — `unity_search_assets` + `unity_inspect_asset`, **50/50** EditMode
+- ✅ Prefab inspect + linked scene instantiate — `unity_inspect_prefab` + `unity_instantiate_prefab`, **56/56** EditMode
+- 🟨 Prefab Asset authoring / Apply Overrides — next Prefab slice
 - ⬜ Script read/write workflows
-- ⬜ Diagnostics beyond the Phase 1 minimum where additional coverage is useful
+- ⬜ Diagnostics extensions where they unlock concrete workflows
 - ⬜ Play Mode control
 - ⬜ Unity Test Runner control
 - ⬜ Explicit Undo/recovery tools where useful to clients
 
+Prefab verification now covers bounded Prefab Asset hierarchy/component inspection, GUID + dependencyHash observation, dual scene/asset preconditions for instantiate, linked `PrefabUtility.InstantiatePrefab`, native linkage readback, immediate replay, Undo removal, and stale-replay rejection after Undo.
+
 Reliability requirements inherited from Phase 2:
 
 - stable target resolution,
-- stale-state or domain-appropriate concurrency preconditions,
+- scene- or domain-appropriate concurrency preconditions,
 - explicit risk classification,
 - main-thread execution,
 - Undo grouping where applicable,
@@ -165,30 +110,31 @@ Reliability requirements inherited from Phase 2:
 - mutation identity/replay semantics,
 - execution-boundary deadline enforcement,
 - explicit dirty/save behavior,
-- automated + real Unity verification before a write family is marked Verified.
+- automated + real Unity verification before write families become Verified.
 
 Supporting work:
 
-- ✅ Capability/version reporting foundation already exists
-- ✅ Bounded structured Component inspection foundation
-- ✅ Bounded AssetDatabase search/inspection foundation
-- 🟨 Consistent risk classification — current read/write/destructive operations classified; new tools must follow the same scheme
-- ⬜ Broader tool-schema compatibility tests as the surface grows
-- ⬜ Better structured error explanations for AI clients
+- ✅ capability/version reporting foundation
+- ✅ bounded structured Component inspection
+- ✅ bounded AssetDatabase search/inspection
+- ✅ first Prefab asset-side precondition using Unity dependencyHash
+- 🟨 consistent risk classification as new operations are added
+- ⬜ broader tool-schema compatibility tests as the surface grows
+- ⬜ better structured error explanations for AI clients
 
 ### Exit gate
 
-A small Unity project can be meaningfully inspected and edited from an MCP client without relying on arbitrary code execution, and the useful editing operations retain Phase 2 reliability guarantees.
+A small Unity project can be meaningfully inspected and edited from an MCP client without arbitrary code execution, and the useful editing operations retain the reliability guarantees required for their domains.
 
 ---
 
 # Phase 4 — Easy Connect / Remote Gateway
 
-**Goal:** remove local networking/MCP setup from the normal user experience.
-
 **State:** ⬜ Planned
 
-Target user experience:
+Goal: remove local networking/MCP setup from the normal user experience.
+
+Target experience:
 
 ```text
 Install Unity package
@@ -198,114 +144,77 @@ Install Unity package
  -> connected
 ```
 
-Engineering targets:
-
-- ⬜ Outbound secure Unity WebSocket
-- ⬜ Remote Streamable HTTP MCP endpoint
-- ⬜ Short-lived pairing flow
-- ⬜ Scoped connection credentials
-- ⬜ User/workspace/editor routing model
-- ⬜ Multiple editor instances
-- ⬜ Strict cross-user isolation tests
-- ⬜ Rate limits and abuse controls
-- ⬜ Presence/disconnect state
-- ⬜ Self-hosted remote deployment path
+Targets include secure outbound Unity WebSocket, remote Streamable HTTP MCP endpoint, short-lived pairing, scoped credentials, editor routing, multi-editor isolation, rate limits, disconnect/presence state, and a self-hosted deployment path.
 
 ### Exit gate
 
-Two different users with multiple Unity Editors can connect concurrently and automated isolation tests prove that commands cannot cross account/editor boundaries.
+Two different users with multiple Unity Editors can connect concurrently and automated isolation tests prove commands cannot cross account/editor boundaries.
 
 ---
 
 # Phase 5 — ChatGPT Integration Beta
 
-**Goal:** make Unity AI Bridge usable from ChatGPT through the supported integration path available at release time.
-
 **State:** ⬜ Planned
 
-- ⬜ Verify current OpenAI integration requirements at implementation time
-- ⬜ Thin ChatGPT-facing adapter/metadata
-- ⬜ Tool descriptions optimized for safe model use
-- ⬜ Authentication/pairing UX
-- ⬜ Destructive-action policy/confirmation behavior
-- ⬜ End-to-end tests through the real ChatGPT integration
-- ⬜ Beginner installation documentation
-- ⬜ Private beta
-- ⬜ Public directory/submission work if eligible
+Targets:
+
+- verify current OpenAI integration requirements at implementation time,
+- thin ChatGPT-facing adapter/metadata,
+- tool descriptions optimized for safe model use,
+- authentication/pairing UX,
+- destructive-action policy behavior,
+- real end-to-end integration tests,
+- beginner installation docs,
+- private beta and public submission work if eligible.
 
 ### Exit gate
 
-A new user can install the Unity side, connect from ChatGPT using documented steps, perform core editing tasks, and recover from normal failures without editing MCP configuration manually.
+A new user can install the Unity side, connect from ChatGPT using documented steps, perform core editing tasks, and recover from normal failures without manually editing MCP configuration.
 
 ---
 
 # Phase 6 — Multi-Provider Integrations
 
-**Goal:** prove the core is genuinely provider-neutral.
-
 **State:** ⬜ Planned
 
-Potential targets, subject to current platform support:
-
-- ⬜ Claude remote MCP/connector path
-- ⬜ Codex MCP path
-- ⬜ Gemini/Gemini CLI integration path
-- ⬜ Other standards-compliant MCP clients
-- ⬜ Compatibility test matrix
-
-### Exit gate
-
-The same core tool contracts work across multiple independent MCP clients without vendor-specific logic leaking into Unity handlers.
+Potential targets include Claude, Codex, Gemini/Gemini CLI, and other standards-compliant MCP clients, with a compatibility test matrix proving the public core stays provider-neutral.
 
 ---
 
 # Phase 7 — Advanced Unity Domains
 
-**Goal:** expand coverage after the execution core is trustworthy.
-
 **State:** ⬜ Planned
 
-Candidate domains, prioritized by real demand and testability:
+Candidate domains, prioritized by demand and testability:
 
-- ⬜ Terrain
-- ⬜ NavMesh
-- ⬜ Animation/Animator
-- ⬜ UI and UI Toolkit
-- ⬜ Lighting
-- ⬜ Particles/VFX
-- ⬜ Shader Graph
-- ⬜ Profiler / memory / frame diagnostics
-- ⬜ Build tooling
-- ⬜ Package Manager
-- ⬜ Multiplayer Play Mode
-- ⬜ GameView/screenshot inspection
+- Terrain
+- NavMesh
+- Animation/Animator
+- UI and UI Toolkit
+- Lighting
+- Particles/VFX
+- Shader Graph
+- Profiler / memory / frame diagnostics
+- Build tooling
+- Package Manager
+- Multiplayer Play Mode
+- GameView/screenshot inspection
 
-The list is intentionally not a promise that every domain will ship.
+This list is not a promise that every domain will ship.
 
 ---
 
 # Phase 8 — Extensibility and Ecosystem
 
-**Goal:** let advanced teams extend Unity AI Bridge without forking the core.
-
 **State:** ⬜ Planned
 
-Possible work:
-
-- ⬜ Safe custom-tool extension API
-- ⬜ Capability discovery/lazy advanced tools
-- ⬜ Third-party package adapters
-- ⬜ Versioned extension contracts
-- ⬜ Extension validation/security guidance
-- ⬜ Examples and templates
-
-Arbitrary code execution is not considered a substitute for a proper extension system.
+Possible work includes a safe custom-tool extension API, lazy capability discovery, third-party package adapters, versioned extension contracts, validation/security guidance, and templates. Arbitrary code execution is not considered a substitute for a real extension system.
 
 ---
 
 # Not on the early roadmap
 
-These are intentionally deferred unless requirements change:
+Intentionally deferred:
 
 - 300+ tools for marketing purposes
 - arbitrary shell/process control
@@ -314,13 +223,13 @@ These are intentionally deferred unless requirements change:
 - Unity Hub account automation
 - multi-agent orchestration
 - TeamForge integration
-- billing/monetization systems before the product itself works reliably
+- billing/monetization before the product works reliably
 
 ---
 
 # Version direction
 
-Exact versions are not promises, but the likely semantic progression is:
+Likely semantic progression, not a release promise:
 
 ```text
 0.0.x  foundation / protocol experiments
@@ -333,13 +242,11 @@ Exact versions are not promises, but the likely semantic progression is:
        and repeatable real-world usage justify it
 ```
 
-Do not bump a version merely to make the project appear mature.
+Do not bump versions merely to make the project appear mature.
 
 ---
 
 # How roadmap items move
-
-For a roadmap item to move toward completion:
 
 1. implementation exists,
 2. relevant automated/manual verification is performed,
