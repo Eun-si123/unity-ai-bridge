@@ -7,6 +7,7 @@ import {
   type DiagnosticsOptions,
   type GameObjectCreateOptions,
   type HierarchyOptions,
+  type SceneSaveOptions,
 } from "./bridge/local-bridge-server.js";
 import { BRIDGE_PROTOCOL_VERSION } from "./protocol/bridge.js";
 
@@ -100,6 +101,42 @@ const createGameObjectInputSchema = fromJsonSchema({
       minimum: 1,
       description:
         "Optional optimistic-concurrency revision from the same observation as expectedStateEpoch. The write is rejected if Unity state has advanced.",
+    },
+  },
+  additionalProperties: false,
+});
+
+const saveSceneInputSchema = fromJsonSchema({
+  type: "object",
+  required: ["expectedScenePath", "expectedStateEpoch", "expectedStateRevision"],
+  properties: {
+    expectedScenePath: {
+      type: "string",
+      minLength: 1,
+      maxLength: 512,
+      description:
+        "Exact active scene asset path from a recent Unity observation, for example Assets/Scenes/SampleScene.unity. The save is rejected if the active scene changed.",
+    },
+    mutationId: {
+      type: "string",
+      minLength: 1,
+      maxLength: 128,
+      pattern: "^[A-Za-z0-9._:-]+$",
+      description:
+        "Optional retry identity. Reuse only for an ambiguous retry of this exact save intent. If omitted, the bridge generates one and includes it in ambiguous failure text.",
+    },
+    expectedStateEpoch: {
+      type: "string",
+      minLength: 1,
+      maxLength: 128,
+      description:
+        "Required optimistic-concurrency epoch from the same recent observation as expectedStateRevision.",
+    },
+    expectedStateRevision: {
+      type: "integer",
+      minimum: 1,
+      description:
+        "Required optimistic-concurrency revision. The disk save is rejected if Unity state advanced after the observation.",
     },
   },
   additionalProperties: false,
@@ -283,6 +320,46 @@ serveStdio(() => {
 
         await preflightAgentCapabilities("gameObject.create", "state.revision.v1");
         const result = await bridge.requestCreateGameObject(options);
+        return {
+          content: [{ type: "text", text: JSON.stringify(result) }],
+          structuredContent: result,
+        };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return {
+          isError: true,
+          content: [{ type: "text", text: message }],
+        };
+      }
+    },
+  );
+
+  server.registerTool(
+    "unity_save_active_scene",
+    {
+      description:
+        "Explicitly persist the currently active saved Unity scene to its existing .unity file. This is a destructive disk-write operation and has no Unity Undo. It requires the exact scene path plus stateEpoch/stateRevision from a recent observation so a changed scene or stale snapshot is rejected instead of saving newer/unreviewed state. Unsaved scenes with no asset path are rejected rather than opening an interactive Save As dialog.",
+      inputSchema: saveSceneInputSchema,
+    },
+    async (args) => {
+      try {
+        const input = args as {
+          expectedScenePath: string;
+          mutationId?: string;
+          expectedStateEpoch: string;
+          expectedStateRevision: number;
+        };
+        const options: SceneSaveOptions = {
+          expectedScenePath: input.expectedScenePath,
+          expectedStateEpoch: input.expectedStateEpoch,
+          expectedStateRevision: input.expectedStateRevision,
+        };
+        if (input.mutationId !== undefined) {
+          options.mutationId = input.mutationId;
+        }
+
+        await preflightAgentCapabilities("scene.save", "state.revision.v1");
+        const result = await bridge.requestSaveScene(options);
         return {
           content: [{ type: "text", text: JSON.stringify(result) }],
           structuredContent: result,

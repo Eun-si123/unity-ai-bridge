@@ -249,6 +249,12 @@ namespace UnityAiBridge.Editor.Connection
                 return;
             }
 
+            if (string.Equals(command.operation, "scene.save", StringComparison.Ordinal))
+            {
+                await HandleSceneSaveAsync(current, command, cancellationToken);
+                return;
+            }
+
             await SendErrorAsync(
                 current,
                 command.requestId,
@@ -599,6 +605,192 @@ namespace UnityAiBridge.Editor.Connection
             }
         }
 
+        private static async Task HandleSceneSaveAsync(
+            ClientWebSocket current,
+            BridgeCommandDto command,
+            CancellationToken cancellationToken)
+        {
+            if (!string.Equals(command.risk, "destructive", StringComparison.Ordinal))
+            {
+                await SendErrorAsync(
+                    current,
+                    command.requestId,
+                    "validation",
+                    "risk_mismatch",
+                    "scene.save requires risk='destructive' because it persists Unity state to disk and has no Undo.",
+                    cancellationToken);
+                return;
+            }
+
+            var expectedScenePath = command.arguments != null
+                ? command.arguments.expectedScenePath
+                : null;
+            var mutationId = command.arguments != null ? command.arguments.mutationId : null;
+            var expectedStateEpoch = command.arguments != null
+                ? command.arguments.expectedStateEpoch
+                : null;
+            var expectedStateRevision = command.arguments != null
+                ? command.arguments.expectedStateRevision
+                : 0;
+
+            try
+            {
+                SceneSaveCommand.ValidateArguments(
+                    expectedScenePath,
+                    mutationId,
+                    expectedStateEpoch,
+                    expectedStateRevision);
+            }
+            catch (ArgumentException exception)
+            {
+                await SendErrorAsync(
+                    current,
+                    command.requestId,
+                    "validation",
+                    "invalid_arguments",
+                    exception.Message,
+                    cancellationToken);
+                return;
+            }
+
+            try
+            {
+                var result = await EditorMainThreadDispatcher.InvokeAsync(
+                    () => SceneSaveCommand.Execute(
+                        expectedScenePath,
+                        mutationId,
+                        expectedStateEpoch,
+                        expectedStateRevision));
+                var response = new BridgeSceneSaveResultDto
+                {
+                    protocolVersion = BridgeProtocol.Version,
+                    requestId = command.requestId,
+                    ok = true,
+                    result = result,
+                    warnings = Array.Empty<string>(),
+                    dirtyState = result.isDirty ? "dirty" : "clean",
+                    undo = new BridgeUndoDto
+                    {
+                        available = false,
+                        groupName = string.Empty,
+                    },
+                    compileState = "idle",
+                };
+
+                await SendJsonAsync(current, JsonUtility.ToJson(response), cancellationToken);
+            }
+            catch (SceneSaveCompilingException exception)
+            {
+                await SendErrorAsync(
+                    current,
+                    command.requestId,
+                    "compile_reload",
+                    "editor_compiling",
+                    exception.Message,
+                    cancellationToken);
+            }
+            catch (SceneSavePlayModeException exception)
+            {
+                await SendErrorAsync(
+                    current,
+                    command.requestId,
+                    "policy",
+                    "play_mode_blocked",
+                    exception.Message,
+                    cancellationToken);
+            }
+            catch (EditorStateStaleException exception)
+            {
+                await SendErrorAsync(
+                    current,
+                    command.requestId,
+                    "stale_state",
+                    "state_revision_mismatch",
+                    exception.Message,
+                    cancellationToken);
+            }
+            catch (SceneSaveSceneMismatchException exception)
+            {
+                await SendErrorAsync(
+                    current,
+                    command.requestId,
+                    "stale_state",
+                    "active_scene_mismatch",
+                    exception.Message,
+                    cancellationToken);
+            }
+            catch (SceneSaveUnavailableException exception)
+            {
+                await SendErrorAsync(
+                    current,
+                    command.requestId,
+                    "policy",
+                    "scene_save_unavailable",
+                    exception.Message,
+                    cancellationToken);
+            }
+            catch (SceneSaveMutationConflictException exception)
+            {
+                await SendErrorAsync(
+                    current,
+                    command.requestId,
+                    "validation",
+                    "mutation_id_conflict",
+                    exception.Message,
+                    cancellationToken);
+            }
+            catch (SceneSaveIncompleteException exception)
+            {
+                await SendErrorAsync(
+                    current,
+                    command.requestId,
+                    "stale_state",
+                    "save_outcome_incomplete",
+                    exception.Message,
+                    cancellationToken);
+            }
+            catch (SceneSaveReplayStaleException exception)
+            {
+                await SendErrorAsync(
+                    current,
+                    command.requestId,
+                    "stale_state",
+                    "save_replay_stale",
+                    exception.Message,
+                    cancellationToken);
+            }
+            catch (SceneSaveVerificationException exception)
+            {
+                await SendErrorAsync(
+                    current,
+                    command.requestId,
+                    "unity_api",
+                    "scene_save_verification_failed",
+                    exception.Message,
+                    cancellationToken);
+            }
+            catch (SceneSaveFailedException exception)
+            {
+                await SendErrorAsync(
+                    current,
+                    command.requestId,
+                    "unity_api",
+                    "scene_save_failed",
+                    exception.Message,
+                    cancellationToken);
+            }
+            catch (Exception exception)
+            {
+                await SendErrorAsync(
+                    current,
+                    command.requestId,
+                    "unity_api",
+                    "scene_save_failed",
+                    exception.Message,
+                    cancellationToken);
+            }
+        }
+
         private static async Task SendHelloAsync(
             ClientWebSocket current,
             EditorIdentity identity,
@@ -748,6 +940,7 @@ namespace UnityAiBridge.Editor.Connection
             public string globalObjectId;
             public string name;
             public string mutationId;
+            public string expectedScenePath;
             public string expectedStateEpoch;
             public long expectedStateRevision;
         }
@@ -832,6 +1025,19 @@ namespace UnityAiBridge.Editor.Connection
             public GameObjectCreatePayload result;
             public string[] warnings;
             public BridgeChangedTargetDto[] changedTargets;
+            public string dirtyState;
+            public BridgeUndoDto undo;
+            public string compileState;
+        }
+
+        [Serializable]
+        private sealed class BridgeSceneSaveResultDto
+        {
+            public string protocolVersion;
+            public string requestId;
+            public bool ok;
+            public SceneSavePayload result;
+            public string[] warnings;
             public string dirtyState;
             public BridgeUndoDto undo;
             public string compileState;

@@ -2,7 +2,7 @@ export const BRIDGE_PROTOCOL_VERSION = "0" as const;
 
 export type BridgeProtocolVersion = typeof BRIDGE_PROTOCOL_VERSION;
 export type RiskClass = "read" | "write" | "destructive" | "privileged";
-export type DirtyState = "unchanged" | "dirty" | "unknown";
+export type DirtyState = "unchanged" | "dirty" | "clean" | "unknown";
 export type CompileState = "idle" | "compiling" | "failed" | "unknown";
 
 export interface BridgeRoute {
@@ -25,6 +25,7 @@ export type BridgeErrorCategory =
   | "policy"
   | "routing"
   | "stale_target"
+  | "stale_state"
   | "timeout"
   | "unity_api"
   | "compile_reload"
