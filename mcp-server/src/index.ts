@@ -2,7 +2,8 @@ import { McpServer, fromJsonSchema } from "@modelcontextprotocol/server";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 
 import { requireAgentCapability } from "./agent/capabilities.js";
-import { ComponentPropertyBridgeServer } from "./bridge/component-property-bridge-server.js";
+import { registerAssetTools } from "./asset-tools.js";
+import { AssetBridgeServer } from "./bridge/asset-bridge-server.js";
 import {
   type DiagnosticsOptions,
   type GameObjectCreateOptions,
@@ -14,7 +15,7 @@ import {
 import { registerGameObjectEditTools } from "./gameobject-edit-tools.js";
 import { BRIDGE_PROTOCOL_VERSION } from "./protocol/bridge.js";
 
-const bridge = new ComponentPropertyBridgeServer();
+const bridge = new AssetBridgeServer();
 const bridgePort = await bridge.start();
 console.error(`[Unity AI Bridge] Local bridge listening on ws://127.0.0.1:${bridgePort}`);
 
@@ -257,6 +258,7 @@ serveStdio(() => {
   });
 
   registerGameObjectEditTools(server, bridge);
+  registerAssetTools(server, bridge);
 
   server.registerTool(
     "unity_get_status",
