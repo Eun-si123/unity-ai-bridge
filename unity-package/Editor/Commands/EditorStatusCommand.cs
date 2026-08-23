@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using UnityAiBridge.Editor.Protocol;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -14,10 +15,21 @@ namespace UnityAiBridge.Editor.Commands
         public string activeScene;
         public bool isPlaying;
         public bool isCompiling;
+        public string agentVersion;
+        public string[] capabilities;
     }
 
     internal static class EditorStatusCommand
     {
+        private static readonly string[] Capabilities =
+        {
+            "editor.status",
+            "scene.hierarchy",
+            "editor.diagnostics",
+            "object.resolve",
+            "gameObject.create",
+        };
+
         public static EditorStatusPayload Execute()
         {
             var projectRoot = Directory.GetParent(Application.dataPath);
@@ -30,6 +42,8 @@ namespace UnityAiBridge.Editor.Commands
                 activeScene = string.IsNullOrEmpty(activeScene.path) ? activeScene.name : activeScene.path,
                 isPlaying = EditorApplication.isPlaying,
                 isCompiling = EditorApplication.isCompiling,
+                agentVersion = BridgeProtocol.PackageVersion,
+                capabilities = Capabilities,
             };
         }
     }

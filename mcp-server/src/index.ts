@@ -1,6 +1,7 @@
 import { McpServer, fromJsonSchema } from "@modelcontextprotocol/server";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 
+import { requireAgentCapability } from "./agent/capabilities.js";
 import {
   LocalBridgeServer,
   type DiagnosticsOptions,
@@ -91,6 +92,11 @@ const createGameObjectInputSchema = fromJsonSchema({
   additionalProperties: false,
 });
 
+async function preflightAgentCapability(operation: string): Promise<void> {
+  const status = await bridge.requestEditorStatus();
+  requireAgentCapability(status, operation);
+}
+
 let shuttingDown = false;
 const shutdown = async (): Promise<void> => {
   if (shuttingDown) {
@@ -118,7 +124,7 @@ serveStdio(() => {
     "unity_get_status",
     {
       description:
-        "Read the connected Unity Editor version, project, active scene, Play Mode state, and compilation state.",
+        "Read the connected Unity Editor version, project, active scene, Play Mode state, compilation state, Unity AI Bridge Agent version, and advertised bridge-operation capabilities.",
     },
     async () => {
       try {
@@ -155,6 +161,7 @@ serveStdio(() => {
           options.maxNodes = input.maxNodes;
         }
 
+        await preflightAgentCapability("scene.hierarchy");
         const hierarchy = await bridge.requestHierarchy(options);
         return {
           content: [{ type: "text", text: JSON.stringify(hierarchy) }],
@@ -191,6 +198,7 @@ serveStdio(() => {
           options.minimumSeverity = input.minimumSeverity;
         }
 
+        await preflightAgentCapability("editor.diagnostics");
         const diagnostics = await bridge.requestDiagnostics(options);
         return {
           content: [{ type: "text", text: JSON.stringify(diagnostics) }],
@@ -216,6 +224,7 @@ serveStdio(() => {
     async (args) => {
       try {
         const input = args as { globalObjectId: string };
+        await preflightAgentCapability("object.resolve");
         const result = await bridge.requestResolveObject(input.globalObjectId);
         return {
           content: [{ type: "text", text: JSON.stringify(result) }],
@@ -246,6 +255,7 @@ serveStdio(() => {
           options.mutationId = input.mutationId;
         }
 
+        await preflightAgentCapability("gameObject.create");
         const result = await bridge.requestCreateGameObject(options);
         return {
           content: [{ type: "text", text: JSON.stringify(result) }],
