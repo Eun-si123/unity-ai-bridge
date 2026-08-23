@@ -109,5 +109,36 @@ namespace UnityAiBridge.Editor.Tests
             Assert.That(exception, Is.Not.Null);
             StringAssert.Contains("terminal lifecycle status 'completed'", exception.Message);
         }
+
+        [Test]
+        public void RollbackVerificationFailureIsTerminalAndFailsClosed()
+        {
+            var stateBefore = EditorStateRevision.Capture();
+            var record = EditorMutationLifecycle.Begin(
+                "gameObject.create",
+                mutationId,
+                "intent-a",
+                stateBefore);
+            var stateAfter = EditorStateRevision.Capture();
+            EditorMutationLifecycle.MarkRollbackVerificationFailed(record, stateAfter);
+
+            var persisted = EditorMutationLifecycle.Read(mutationId);
+            Assert.That(
+                persisted.status,
+                Is.EqualTo(EditorMutationLifecycle.RollbackVerificationFailedStatus));
+            Assert.That(persisted.failureKind, Is.EqualTo("rollback_verification_failed"));
+
+            var exception = Assert.Throws<EditorMutationIncompleteException>(() =>
+                EditorMutationLifecycle.Begin(
+                    "gameObject.create",
+                    mutationId,
+                    "intent-a",
+                    stateAfter));
+
+            Assert.That(exception, Is.Not.Null);
+            StringAssert.Contains(
+                "terminal lifecycle status 'rollback_verification_failed'",
+                exception.Message);
+        }
     }
 }
