@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using UnityAiBridge.Editor.Commands;
 using UnityAiBridge.Editor.Dispatch;
+using UnityAiBridge.Editor.Execution;
 using UnityAiBridge.Editor.Protocol;
 using UnityEditor;
 using UnityEngine;
@@ -472,10 +473,20 @@ namespace UnityAiBridge.Editor.Connection
 
             var name = command.arguments != null ? command.arguments.name : null;
             var mutationId = command.arguments != null ? command.arguments.mutationId : null;
+            var expectedStateEpoch = command.arguments != null
+                ? command.arguments.expectedStateEpoch
+                : null;
+            var expectedStateRevision = command.arguments != null
+                ? command.arguments.expectedStateRevision
+                : 0;
 
             try
             {
-                GameObjectCreateCommand.ValidateArguments(name, mutationId);
+                GameObjectCreateCommand.ValidateArguments(
+                    name,
+                    mutationId,
+                    expectedStateEpoch,
+                    expectedStateRevision);
             }
             catch (ArgumentException exception)
             {
@@ -492,7 +503,11 @@ namespace UnityAiBridge.Editor.Connection
             try
             {
                 var result = await EditorMainThreadDispatcher.InvokeAsync(
-                    () => GameObjectCreateCommand.Execute(name, mutationId));
+                    () => GameObjectCreateCommand.Execute(
+                        name,
+                        mutationId,
+                        expectedStateEpoch,
+                        expectedStateRevision));
                 var response = new BridgeGameObjectCreateResultDto
                 {
                     protocolVersion = BridgeProtocol.Version,
@@ -529,6 +544,16 @@ namespace UnityAiBridge.Editor.Connection
                     command.requestId,
                     "compile_reload",
                     "editor_compiling",
+                    exception.Message,
+                    cancellationToken);
+            }
+            catch (EditorStateStaleException exception)
+            {
+                await SendErrorAsync(
+                    current,
+                    command.requestId,
+                    "stale_state",
+                    "state_revision_mismatch",
                     exception.Message,
                     cancellationToken);
             }
@@ -723,6 +748,8 @@ namespace UnityAiBridge.Editor.Connection
             public string globalObjectId;
             public string name;
             public string mutationId;
+            public string expectedStateEpoch;
+            public long expectedStateRevision;
         }
 
         [Serializable]
