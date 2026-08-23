@@ -476,7 +476,11 @@ namespace UnityAiBridge.Editor.Commands
             for (var index = 0; index < mutationId.Length; index++)
             {
                 var value = mutationId[index];
-                var allowed = char.IsLetterOrDigit(value) || value == '-' || value == '_' || value == '.' || value == ':';
+                var allowed =
+                    (value >= 'a' && value <= 'z') ||
+                    (value >= 'A' && value <= 'Z') ||
+                    (value >= '0' && value <= '9') ||
+                    value == '-' || value == '_' || value == '.' || value == ':';
                 if (!allowed)
                 {
                     throw new ArgumentException(
