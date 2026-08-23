@@ -1,8 +1,8 @@
 import { McpServer, fromJsonSchema } from "@modelcontextprotocol/server";
 
 import { requireAgentCapability } from "./agent/capabilities.js";
+import { ComponentPropertyBridgeServer } from "./bridge/component-property-bridge-server.js";
 import {
-  EditingBridgeServer,
   type GameObjectDeleteOptions,
   type GameObjectUpdateOptions,
 } from "./bridge/editing-bridge-server.js";
@@ -95,7 +95,7 @@ const deleteInputSchema = fromJsonSchema({
 
 export function registerGameObjectEditTools(
   server: McpServer,
-  bridge: EditingBridgeServer,
+  bridge: ComponentPropertyBridgeServer,
 ): void {
   server.registerTool(
     "unity_update_game_object",
@@ -185,7 +185,7 @@ export function registerGameObjectEditTools(
 }
 
 async function preflight(
-  bridge: EditingBridgeServer,
+  bridge: ComponentPropertyBridgeServer,
   ...capabilities: string[]
 ): Promise<void> {
   const status = await bridge.requestEditorStatus();

@@ -14,6 +14,7 @@ const expectedCapabilities = [
   "component.inspect",
   "component.add",
   "component.remove",
+  "component.property.set",
   "scene.save",
   "transform.get",
   "transform.set",
@@ -45,6 +46,7 @@ try {
     "unity_get_components",
     "unity_add_component",
     "unity_remove_component",
+    "unity_set_component_property",
   ]) {
     if (!tools.some((tool) => tool.name === required)) {
       throw new Error(`MCP server did not advertise ${required}.`);

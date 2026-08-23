@@ -1,0 +1,68 @@
+{
+  "protocolVersion": "0",
+  "requestId": "req-component-property-set-001",
+  "ok": true,
+  "result": {
+    "mutationId": "component-property-set-001",
+    "replayed": false,
+    "changed": true,
+    "requestedComponentGlobalObjectId": "GlobalObjectId_V1-2-0123456789abcdef0123456789abcdef-3-0",
+    "requestedPropertyPath": "m_Center",
+    "requestedValue": {
+      "kind": "vector3",
+      "vector3Value": {
+        "x": 1.25,
+        "y": -2.5,
+        "z": 3.75
+      }
+    },
+    "expectedStateEpoch": "example-epoch",
+    "expectedStateRevision": 41,
+    "component": {
+      "globalObjectId": "GlobalObjectId_V1-2-0123456789abcdef0123456789abcdef-3-0",
+      "instanceId": 303,
+      "typeName": "UnityEngine.BoxCollider",
+      "assemblyQualifiedName": "UnityEngine.BoxCollider, UnityEngine.PhysicsModule",
+      "gameObjectGlobalObjectId": "GlobalObjectId_V1-2-0123456789abcdef0123456789abcdef-1-0",
+      "gameObjectInstanceId": 101,
+      "gameObjectName": "Target",
+      "sceneName": "SampleScene",
+      "scenePath": "Assets/Scenes/SampleScene.unity",
+      "componentIndex": 1,
+      "stateEpoch": "example-epoch",
+      "stateRevision": 42
+    },
+    "property": {
+      "path": "m_Center",
+      "displayName": "Center",
+      "depth": 0,
+      "propertyType": "Vector3",
+      "isArray": false,
+      "arraySize": -1,
+      "hasVisibleChildren": true,
+      "valueKind": "vector3",
+      "stringValue": "(1.25,-2.5,3.75)",
+      "longValue": 0,
+      "doubleValue": 0,
+      "boolValue": false,
+      "objectReferenceGlobalObjectId": "",
+      "objectReferenceInstanceId": 0,
+      "objectReferenceName": "",
+      "objectReferenceType": ""
+    }
+  },
+  "warnings": [],
+  "changedTargets": [
+    {
+      "globalObjectId": "GlobalObjectId_V1-2-0123456789abcdef0123456789abcdef-3-0",
+      "instanceId": 303,
+      "name": "UnityEngine.BoxCollider"
+    }
+  ],
+  "dirtyState": "dirty",
+  "undo": {
+    "available": true,
+    "groupName": "Unity AI Bridge: Set Component Property"
+  },
+  "compileState": "idle"
+}

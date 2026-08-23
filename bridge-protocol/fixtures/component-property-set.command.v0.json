@@ -1,0 +1,26 @@
+{
+  "protocolVersion": "0",
+  "requestId": "req-component-property-set-001",
+  "operation": "component.property.set",
+  "arguments": {
+    "componentGlobalObjectId": "GlobalObjectId_V1-2-0123456789abcdef0123456789abcdef-3-0",
+    "propertyPath": "m_Center",
+    "value": {
+      "kind": "vector3",
+      "vector3Value": {
+        "x": 1.25,
+        "y": -2.5,
+        "z": 3.75
+      }
+    },
+    "mutationId": "component-property-set-001",
+    "expectedStateEpoch": "example-epoch",
+    "expectedStateRevision": 41
+  },
+  "risk": "write",
+  "route": {
+    "editorId": "example-editor",
+    "connectionGeneration": 7
+  },
+  "deadlineUnixMs": 1900000000000
+}

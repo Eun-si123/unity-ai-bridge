@@ -32,6 +32,10 @@ Current implemented operations include:
 - `gameObject.create` — create one empty root GameObject in the active scene with write-risk metadata, native readback, and mutation deduplication,
 - `gameObject.update` — set the complete GameObject name + `activeSelf` state with Undo, native verification, stale-state protection, and mutation replay protection,
 - `gameObject.delete` — delete one active-scene GameObject hierarchy through Unity Undo with native absence verification and replay protection,
+- `component.inspect` — inspect bounded native-order Components and visible serialized properties for one GameObject,
+- `component.add` — add one exact concrete Component type with Unity Undo and native identity/type/owner verification,
+- `component.remove` — remove one exact Component identity with Unity Undo, native absence verification, and restoration-aware replay protection,
+- `component.property.set` — set one exact visible supported `SerializedProperty` on one exact non-Transform Component with Undo, semantic readback, rollback verification, and replay protection,
 - `transform.get` — read local/world Transform state for one GameObject target,
 - `transform.set` — atomically set the complete local position/Euler rotation/scale tuple with Undo, native verification, rollback verification, stale-state protection, and mutation replay protection,
 - `scene.save` — explicitly persist the active scene to its existing `.unity` asset path with destructive-risk metadata and stale-state protection,
@@ -67,6 +71,29 @@ The contract intentionally uses complete desired values rather than ambiguous op
 `gameObject.delete` is classified `risk=destructive` because it removes a GameObject hierarchy from the current Editor scene, including child GameObjects under normal Unity semantics. Unlike `scene.save`, this operation is still Undo-capable: Unity uses `Undo.DestroyObjectImmediate`, verifies that the target `GlobalObjectId` no longer resolves, and the common transaction can restore the hierarchy if verification fails. The rollback verifier checks the restored target identity/name/active state/child count/scene/hierarchy/sibling metadata.
 
 A completed same-id delete replay succeeds only while the original target remains absent from the same active scene. If the user Undoes the deletion so the target exists again, the replay fails closed with `stale_target/mutation_replay_stale` instead of deleting the restored object a second time.
+
+`component.inspect` accepts a GameObject `GlobalObjectId` plus bounded component/property/depth limits. Unity enumerates native Component slots in order, reports Missing Script slots explicitly, and snapshots visible serialized properties through `SerializedObject` / `SerializedProperty`. Each real Component includes its own `GlobalObjectId`, type/assembly metadata, script asset path when applicable, bounded property snapshot, and truncation metadata. This is an inspection surface, not unrestricted reflection.
+
+`component.add` accepts:
+
+- `gameObjectGlobalObjectId` — exact active-scene GameObject owner,
+- `typeName` — exact loaded concrete Component full name or assembly-qualified name,
+- `mutationId` — same-session retry identity,
+- `expectedStateEpoch` and `expectedStateRevision` — required fresh state precondition.
+
+Unity resolves the requested type from its loaded Component type set, rejects abstract/generic/non-Component types and the Transform/RectTransform family, adds through Unity Undo, and verifies the new Component `GlobalObjectId`, owner, and concrete type. Same-id replay succeeds only while that exact completed Component still exists. If Undo/removal makes it disappear, replay fails closed rather than adding a replacement.
+
+`component.remove` accepts the exact Component `GlobalObjectId`, mutation identity, and a fresh state token. GameObject identities are not silently reinterpreted. Transform/RectTransform removal is rejected. Unity removes the target through Undo, verifies native target absence, and the rollback verifier requires restoration of the same Component identity/owner/type/index/scene. A completed same-id replay succeeds only while the target remains absent; Undo restoration makes the replay fail closed.
+
+`component.property.set` accepts:
+
+- `componentGlobalObjectId` — exact non-Transform Component target,
+- `propertyPath` — exact visible serialized-property path from Component inspection,
+- an explicit typed `value` (`boolean`, `integer`, `number`, `string`, or `vector3` in the first slice),
+- `mutationId` — same-session retry identity,
+- `expectedStateEpoch` and `expectedStateRevision` — required fresh state precondition.
+
+The generic property mutation enumerates `NextVisible` and only accepts a path present in that visible surface. It rejects hidden paths, `m_Script`, read-only properties, Transform/RectTransform targets, unsupported serialized types, non-finite numeric/vector input, and value-kind/type mismatches rather than coercing values. Unity applies the value through `SerializedObject.ApplyModifiedProperties`, re-resolves the same Component/property, and verifies the requested native value. On failed semantic verification the common transaction reverts Unity Undo and the property-specific rollback verifier checks the original typed value plus Component identity/owner/type/index/scene. A same-id replay re-reads native state; if the property was Undone or otherwise changed, replay fails with `stale_target/mutation_replay_stale` instead of reapplying it. See [`COMPONENT_PROPERTY_EDIT.md`](COMPONENT_PROPERTY_EDIT.md).
 
 `transform.get` accepts one `globalObjectId` and currently requires that identity to resolve directly to a `GameObject`. It does not silently reinterpret a Component identity as its owner. The result returns:
 
@@ -112,7 +139,7 @@ A completed `scene.save` may replay under the same `mutationId` only while the a
 
 Diagnostics results include current Console error/warning/log counts, recent captured Console messages, latest compiler warning/error messages, compilation state, truncation flags, and explicit coverage strings. Recent Console text is captured from the current domain load forward; the implementation does not depend on unsupported/internal `UnityEditor.LogEntries`. Compiler messages are observed through Unity's compilation pipeline and include source file/line/column metadata when Unity provides them.
 
-Example request/result fixtures live in `fixtures/editor-status.*`, `fixtures/hierarchy.*`, `fixtures/object-resolve.*`, `fixtures/gameobject-create.*`, `fixtures/gameobject-update.*`, `fixtures/gameobject-delete.*`, `fixtures/transform-get.*`, `fixtures/transform-set.*`, `fixtures/scene-save.*`, and `fixtures/diagnostics.*`.
+Example request/result fixtures live in `fixtures/editor-status.*`, `fixtures/hierarchy.*`, `fixtures/object-resolve.*`, `fixtures/gameobject-create.*`, `fixtures/gameobject-update.*`, `fixtures/gameobject-delete.*`, `fixtures/component-inspect.*`, `fixtures/component-add.*`, `fixtures/component-remove.*`, `fixtures/component-property-set.*`, `fixtures/transform-get.*`, `fixtures/transform-set.*`, `fixtures/scene-save.*`, and `fixtures/diagnostics.*`.
 
 ## Result envelope
 
@@ -125,6 +152,10 @@ For a first-time `gameObject.create`, Unity reports the scene as dirty and inclu
 A first-time changed `gameObject.update` reports the current target plus `changed=true`, a dirty scene, and an available Undo group. A native no-op can report `changed=false` and no new Undo mutation. A replay never creates a new Undo mutation.
 
 A first-time `gameObject.delete` reports verified target deletion plus an available Undo group. Its `changedTargets` list is empty because the target no longer exists after the operation; the deleted target metadata remains in the operation result. A replay reports no new Undo mutation.
+
+A successful first-time `component.add` reports the created Component target, a dirty scene, and an available Undo group. `component.remove` reports verified target absence and an Undo group but no changed target identity because the Component no longer exists after completion.
+
+A changed first-time `component.property.set` reports the Component target, `changed=true`, a dirty scene, and an available Undo group. A native no-op reports `changed=false` with no new Undo group. A same-id replay reports `replayed=true` and does not create another write/Undo record.
 
 A successful first-time `transform.set` reports the target as changed, the scene as dirty, and an available Undo group. A replay reports `replayed: true`, no new changed target, and no new Undo group because no second mutation was executed.
 
