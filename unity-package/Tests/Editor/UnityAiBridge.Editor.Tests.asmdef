@@ -1,0 +1,21 @@
+{
+  "name": "EunSung.UnityAiBridge.Editor.Tests",
+  "rootNamespace": "UnityAiBridge.Editor.Tests",
+  "references": [
+    "EunSung.UnityAiBridge.Editor"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": false,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false,
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ]
+}
