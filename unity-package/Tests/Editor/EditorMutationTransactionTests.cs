@@ -58,6 +58,12 @@ namespace UnityAiBridge.Editor.Tests
                 Assert.That(execution.outcome.verified, Is.True);
                 Assert.That(execution.outcome.rolledBack, Is.False);
                 Assert.That(execution.outcome.rollbackVerified, Is.False);
+                Assert.That(execution.outcome.rollbackDirtyResidue, Is.False);
+                Assert.That(
+                    execution.outcome.dirtyStateChanged,
+                    Is.EqualTo(
+                        execution.outcome.sceneWasDirtyBefore !=
+                        execution.outcome.sceneIsDirtyAfter));
                 Assert.That(execution.outcome.stateBefore, Is.Not.Null);
                 Assert.That(execution.outcome.stateAfter, Is.Not.Null);
             }
@@ -102,6 +108,11 @@ namespace UnityAiBridge.Editor.Tests
             Assert.That(exception.Outcome.verified, Is.False);
             Assert.That(exception.Outcome.rolledBack, Is.True);
             Assert.That(exception.Outcome.rollbackVerified, Is.True);
+            Assert.That(
+                exception.Outcome.dirtyStateChanged,
+                Is.EqualTo(
+                    exception.Outcome.sceneWasDirtyBefore !=
+                    exception.Outcome.sceneIsDirtyAfter));
             Assert.That(exception.Outcome.stateAfter, Is.Not.Null);
         }
 
@@ -134,6 +145,38 @@ namespace UnityAiBridge.Editor.Tests
             Assert.That(exception.Outcome.rolledBack, Is.True);
             Assert.That(exception.Outcome.rollbackVerified, Is.False);
             Assert.That(exception.Outcome.stateAfter, Is.Not.Null);
+        }
+
+        [Test]
+        public void DirtyStateClassifierReportsResidueOnlyForCleanToDirtyRollback()
+        {
+            var outcome = new EditorMutationOutcome
+            {
+                rolledBack = true,
+                sceneWasDirtyBefore = false,
+            };
+
+            EditorMutationTransaction.ApplyDirtyStateAfter(outcome, true);
+
+            Assert.That(outcome.sceneIsDirtyAfter, Is.True);
+            Assert.That(outcome.dirtyStateChanged, Is.True);
+            Assert.That(outcome.rollbackDirtyResidue, Is.True);
+        }
+
+        [Test]
+        public void DirtyStateClassifierDoesNotCallPreexistingDirtyStateResidue()
+        {
+            var outcome = new EditorMutationOutcome
+            {
+                rolledBack = true,
+                sceneWasDirtyBefore = true,
+            };
+
+            EditorMutationTransaction.ApplyDirtyStateAfter(outcome, true);
+
+            Assert.That(outcome.sceneIsDirtyAfter, Is.True);
+            Assert.That(outcome.dirtyStateChanged, Is.False);
+            Assert.That(outcome.rollbackDirtyResidue, Is.False);
         }
 
         private sealed class TestState : ScriptableObject
