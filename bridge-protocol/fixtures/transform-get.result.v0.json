@@ -1,0 +1,26 @@
+{
+  "protocolVersion": "0",
+  "requestId": "transform-get-1",
+  "ok": true,
+  "result": {
+    "globalObjectId": "GlobalObjectId_V1-2-00000000000000000000000000000000-1-0",
+    "instanceId": 101,
+    "name": "Target",
+    "sceneName": "SampleScene",
+    "scenePath": "Assets/Scenes/SampleScene.unity",
+    "hierarchyPath": "Target",
+    "sceneIsDirty": false,
+    "localPosition": { "x": 0, "y": 0, "z": 0 },
+    "localEulerAngles": { "x": 0, "y": 0, "z": 0 },
+    "localRotation": { "x": 0, "y": 0, "z": 0, "w": 1 },
+    "localScale": { "x": 1, "y": 1, "z": 1 },
+    "worldPosition": { "x": 0, "y": 0, "z": 0 },
+    "worldRotation": { "x": 0, "y": 0, "z": 0, "w": 1 },
+    "lossyScale": { "x": 1, "y": 1, "z": 1 },
+    "stateEpoch": "example-editor-session",
+    "stateRevision": 12
+  },
+  "warnings": [],
+  "dirtyState": "unchanged",
+  "compileState": "idle"
+}
