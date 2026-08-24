@@ -27,11 +27,16 @@ On **2026-08-24**, the non-embedded development-install flow and expanded packag
 - guarded package reimport / test-assembly discovery: PASS
 - `EunSung.UnityAiBridge.Editor.Tests` visible in EditMode Test Runner: PASS
 - `EunSung.UnityAiBridge.PlayMode.Tests` visible in PlayMode Test Runner: PASS
-- historical EditMode suite milestones: 75/75, 80/80, 81/81, 85/85, 89/89, 93/93, 97/97, 98/98
-- current verified EditMode suite after PR #48 PlayMode Test Runner contract coverage: **100 Passed / 0 Failed**
-- dedicated PlayMode verifier assembly: **1 Passed / 0 Failed**
+- historical EditMode suite milestones: 75/75, 80/80, 81/81, 85/85, 89/89, 93/93, 97/97, 98/98, 100/100
+- current verified EditMode suite after PR #49 bounded Test Framework discovery coverage: **105 Passed / 0 Failed**
+- dedicated PlayMode verifier assembly from PR #48: **1 Passed / 0 Failed**
 
-`STATUS.md` records the current verified baseline and the exact runtime evidence for each later write/lifecycle/job family.
+The package visibility/bootstrap feature and Test Framework discovery API are distinct:
+
+- package bootstrap makes package tests visible by managing `testables` for supported development installs and performing one guarded reimport when needed,
+- `test.list` / MCP `unity_list_tests` reads the native Test Framework tree after tests are visible and returns exact assembly/leaf selectors without running tests.
+
+`STATUS.md` records the current verified baseline and the exact runtime evidence for each later write/lifecycle/job/read family.
 
 ## Prefab property apply integration test
 
@@ -98,6 +103,29 @@ npm --prefix mcp-server run verify:playmode-tests
 The live gate verifies exact PlayMode selection, Test Framework-owned Edit -> Play -> Edit lifecycle, one stable Unity `runGuid`, immediate/completed same-id replay without duplicate scheduling, conflicting same-id selection rejection, exactly one clean passing terminal result, final stable Edit Mode, preserved Enter Play Mode settings, and proof that the verifier test actually ran inside Play Mode across a frame.
 
 The expanded ordinary EditMode suite completed **100/100** before the PlayMode Test Runner extension was marked Verified.
+
+## Test Framework discovery tests
+
+PR #49 adds five non-lifecycle EditMode tests for discovery argument normalization, numeric bounds, and past-end cursor semantics. The ordinary package suite does not recursively retrieve the full Test Framework tree; the actual asynchronous native discovery path is verified separately through MCP:
+
+```text
+npm --prefix mcp-server run verify:test-discovery
+```
+
+The live gate verified:
+
+- native discovery of `EunSung.UnityAiBridge.Editor.Tests` with `testCaseCount=105`,
+- exactly five `TestDiscoveryControlTests` leaf selectors,
+- deterministic ordinal ordering,
+- one-result paging and monotonic past-end cursor behavior,
+- native discovery of `EunSung.UnityAiBridge.PlayMode.Tests` with exactly one test,
+- the exact selector `UnityAiBridge.PlayMode.Tests.PlayModeVerifierTests.RunsOneFrameInsidePlayMode`,
+- unknown exact assembly rejection,
+- stable final Edit Mode,
+- unchanged scene state epoch/revision,
+- `projectMutated=false`.
+
+The expanded ordinary EditMode suite completed **105/105** before Test Framework discovery was marked Verified.
 
 ## Manual fallback
 
