@@ -96,6 +96,8 @@ Both operations return the same bounded result shape:
 - `issuesTruncated`
 - `errorMessage` for run-level framework/prebuild errors
 
+For a terminal `completed` result, `selectedTestCaseCount` is the actual number of terminal test outcomes represented by `passCount + failCount + skipCount + inconclusiveCount`. It is **not** copied from `ICallbacks.RunStarted(ITestAdaptor).TestCaseCount`, because Unity's public callback receives the full loaded test tree even when the execution filter selects only one test. While a run is only `scheduled` or `running`, the first slice leaves this count at `0` rather than reporting a misleading loaded-tree size.
+
 Each issue contains:
 
 - `fullName`
