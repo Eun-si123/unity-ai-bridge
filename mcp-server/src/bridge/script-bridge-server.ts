@@ -1,4 +1,4 @@
-import { PrefabPropertyBridgeServer } from "./prefab-property-bridge-server.js";
+import { AssetBridgeServer } from "./asset-bridge-server.js";
 
 export interface ScriptReadOptions {
   path: string;
@@ -30,7 +30,7 @@ const DEFAULT_MAX_CHARS = 20_000;
 const MAX_CHARS = 100_000;
 const MAX_PATH_LENGTH = 512;
 
-export class ScriptBridgeServer extends PrefabPropertyBridgeServer {
+export class ScriptBridgeServer extends AssetBridgeServer {
   public async requestReadScript(
     options: ScriptReadOptions,
     timeoutMs = 5000,
@@ -68,7 +68,7 @@ function validateScriptPath(path: string): void {
   if (path.includes("\\")) {
     throw new Error("path must use Unity project-relative forward slashes.");
   }
-  if (!path.endsWith(".cs") && !path.endsWith(".CS") && !/\.cs$/i.test(path)) {
+  if (!/\.cs$/i.test(path)) {
     throw new Error("script.read requires an exact .cs asset path.");
   }
   if (!path.startsWith("Assets/") && !path.startsWith("Packages/")) {
