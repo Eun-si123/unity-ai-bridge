@@ -261,6 +261,15 @@ namespace UnityAiBridge.Editor.Testing
             return BuildIntentFingerprint(assemblyName, names);
         }
 
+        internal static int CountCompletedTestCasesForVerification(
+            int passCount,
+            int failCount,
+            int skipCount,
+            int inconclusiveCount)
+        {
+            return CountCompletedTestCases(passCount, failCount, skipCount, inconclusiveCount);
+        }
+
         internal static void ClearForVerification(string mutationId)
         {
             if (string.IsNullOrWhiteSpace(mutationId))
@@ -378,7 +387,11 @@ namespace UnityAiBridge.Editor.Testing
             {
                 journal.startedUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             }
-            journal.selectedTestCaseCount = Math.Max(0, testsToRun.TestCaseCount);
+
+            // ICallbacks.RunStarted receives the full loaded test tree, not the filtered
+            // selection. Do not report testsToRun.TestCaseCount as selectedTestCaseCount.
+            // The actual completed selection count is derived from terminal result totals.
+            journal.selectedTestCaseCount = 0;
             WriteJournal(journal);
         }
 
@@ -400,20 +413,36 @@ namespace UnityAiBridge.Editor.Testing
                 journal.startedUnixMs = journal.requestedUnixMs;
             }
             journal.finishedUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-            journal.selectedTestCaseCount = Math.Max(journal.selectedTestCaseCount,
-                result.PassCount + result.FailCount + result.SkipCount + result.InconclusiveCount);
-            journal.resultState = result.ResultState ?? string.Empty;
-            journal.durationSeconds = Math.Max(0, result.Duration);
             journal.passCount = Math.Max(0, result.PassCount);
             journal.failCount = Math.Max(0, result.FailCount);
             journal.skipCount = Math.Max(0, result.SkipCount);
             journal.inconclusiveCount = Math.Max(0, result.InconclusiveCount);
+            journal.selectedTestCaseCount = CountCompletedTestCases(
+                journal.passCount,
+                journal.failCount,
+                journal.skipCount,
+                journal.inconclusiveCount);
+            journal.resultState = result.ResultState ?? string.Empty;
+            journal.durationSeconds = Math.Max(0, result.Duration);
             journal.assertCount = Math.Max(0, result.AssertCount);
             journal.issues = issues.ToArray();
             journal.issuesTruncated = totalIssues > issues.Count;
             journal.errorMessage = string.Empty;
             WriteJournal(journal);
             ClearActiveIfOwned(journal.mutationId);
+        }
+
+        private static int CountCompletedTestCases(
+            int passCount,
+            int failCount,
+            int skipCount,
+            int inconclusiveCount)
+        {
+            var total = (long)Math.Max(0, passCount) +
+                        Math.Max(0, failCount) +
+                        Math.Max(0, skipCount) +
+                        Math.Max(0, inconclusiveCount);
+            return total > int.MaxValue ? int.MaxValue : (int)total;
         }
 
         private static void OnRunError(string message)
