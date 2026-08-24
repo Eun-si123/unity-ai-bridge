@@ -22,6 +22,7 @@ This file maps the current repository at subsystem level and records what is onl
 ├─ llms.txt
 ├─ docs/
 │  ├─ TESTING.md
+│  ├─ PLAYMODE_TEST_RUNNER_TESTING.md
 │  └─ OPEN_WEIGHT_MODEL_COMPATIBILITY.md
 │
 ├─ unity-package/
@@ -36,13 +37,17 @@ This file maps the current repository at subsystem level and records what is onl
 │  │  ├─ Protocol/
 │  │  └─ Testing/
 │  │     ├─ PackageTestBootstrap.cs
-│  │     └─ TestRunnerControl.cs
+│  │     ├─ TestRunnerControl.cs
+│  │     └─ PlayModeTestRunnerControl.cs
 │  └─ Tests/
 │     ├─ README.md
-│     └─ Editor/
-│        ├─ UnityAiBridge.Editor.Tests.asmdef
-│        ├─ Fixtures/
-│        └─ *Tests.cs
+│     ├─ Editor/
+│     │  ├─ UnityAiBridge.Editor.Tests.asmdef
+│     │  ├─ Fixtures/
+│     │  └─ *Tests.cs
+│     └─ PlayMode/
+│        ├─ UnityAiBridge.PlayMode.Tests.asmdef
+│        └─ PlayModeVerifierTests.cs
 │
 ├─ bridge-protocol/
 │  ├─ README.md
@@ -61,7 +66,8 @@ This file maps the current repository at subsystem level and records what is onl
    │  ├─ agent/
    │  ├─ bridge/
    │  │  ├─ script-bridge-server.ts
-   │  │  └─ prefab-property-bridge-server.ts
+   │  │  ├─ prefab-property-bridge-server.ts
+   │  │  └─ playmode-test-runner-bridge.ts
    │  ├─ protocol/
    │  ├─ dev/
    │  ├─ asset-tools.ts
@@ -85,9 +91,10 @@ This file maps the current repository at subsystem level and records what is onl
 - `REFERENCES.md` — external research references; not proof of code reuse
 - `CHANGELOG.md` — notable project changes
 - `docs/TESTING.md` and package test docs — repeatable verification procedures
+- `docs/PLAYMODE_TEST_RUNNER_TESTING.md` — dedicated real-Unity PlayMode Test Runner gate and evidence
 - `docs/OPEN_WEIGHT_MODEL_COMPATIBILITY.md` — deferred local/open-weight compatibility boundary and future Adaptive Router direction
 - `bridge-protocol/SCRIPT_READ.md` — bounded Script source observation contract and future file-content CAS boundary
-- `bridge-protocol/TEST_RUNNER_CONTROL.md` — bounded asynchronous EditMode Test Runner start/get contract, retry identity, current-session journaling, and result bounds
+- `bridge-protocol/TEST_RUNNER_CONTROL.md` — bounded asynchronous EditMode/PlayMode Test Runner start/get contract, retry identity, current-session journaling, lifecycle behavior, and result bounds
 - `llms.txt` — compact AI entrypoint
 
 ## Current source ownership
@@ -110,8 +117,8 @@ Home of the Unity Editor-side implementation:
 - Phase 3 Transform, GameObject, Component, Asset, Script, Prefab, Play Mode, and Test Runner handlers,
 - bounded Script source reading through Unity asset/package identity rather than arbitrary filesystem paths,
 - persistent Prefab asset-write handlers with operation-specific safety/retry semantics where generic Unity Undo is not honestly available,
-- asynchronous EditMode Test Runner coordination through public Unity Test Framework APIs plus current-process SessionState result journals,
-- EditMode tests and live/manual verifiers,
+- asynchronous EditMode and PlayMode Test Runner coordination through public Unity Test Framework APIs plus current-process SessionState result journals,
+- EditMode contract/regression tests plus a dedicated runtime-capable PlayMode verifier assembly,
 - development-install bootstrap for making non-embedded package tests visible in Unity Test Runner.
 
 `STATUS.md` records which slices are Verified and which later changes are only Implemented.
@@ -123,7 +130,7 @@ The Unity-facing transport-independent contract:
 - protocol-versioned command/hello/result JSON Schemas,
 - operation fixtures,
 - bridge protocol documentation,
-- operation-specific contracts such as bounded Prefab property apply, Script source read, and asynchronous EditMode Test Runner control.
+- operation-specific contracts such as bounded Prefab property apply, Script source read, and asynchronous EditMode/PlayMode Test Runner control.
 
 MCP-facing tool contracts and Unity-facing bridge commands remain separate on purpose. Unity command semantics must not depend on a particular LLM vendor, MCP host, or WebSocket-specific detail.
 
@@ -139,7 +146,7 @@ The provider-neutral MCP/tool layer:
 - tool schemas/descriptions,
 - typed bridge adapters for current Unity domains,
 - bounded Script read tool/bridge adapter with raw-file SHA-256 metadata,
-- asynchronous EditMode Test Runner start/get tools with exact selection and bounded structured result validation,
+- asynchronous EditMode/PlayMode Test Runner start tools with shared any-mode result polling, exact selection, lifecycle/reconnect reconciliation, and bounded structured result validation,
 - domain-specific bridge subclasses/modules where that keeps large surfaces maintainable,
 - structured MCP results/errors,
 - simulated bridge tests and real-Unity verification helpers.
@@ -154,7 +161,7 @@ Remote Streamable HTTP, hosted authentication/pairing, multi-user/editor routing
 - root `package.json` delegates Node build/test work to `mcp-server`.
 - `mcp-server/package-lock.json` pins the generated dependency graph.
 - GitHub Actions provides Node/protocol/bridge verification where configured.
-- Unity runtime/EditMode evidence is recorded separately because GitHub Actions does not by itself prove Unity Editor behavior unless a Unity job actually ran.
+- Unity runtime/EditMode/PlayMode evidence is recorded separately because GitHub Actions does not by itself prove Unity Editor behavior unless a Unity job actually ran.
 
 ## Planned integration/distribution areas
 
