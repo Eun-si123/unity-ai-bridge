@@ -150,7 +150,15 @@ namespace UnityAiBridge.Editor.Tests
                 Assert.That(testScene.IsValid(), Is.True);
                 Assert.That(testScene.isLoaded, Is.True);
                 Assert.That(EditorSceneManager.SaveScene(testScene, scenePath), Is.True);
-                Assert.That(SceneManager.SetActiveScene(testScene), Is.True);
+
+                var activeScene = SceneManager.GetActiveScene();
+                if (!activeScene.IsValid() || activeScene.handle != testScene.handle)
+                {
+                    Assert.That(SceneManager.SetActiveScene(testScene), Is.True,
+                        "The temporary Prefab integration scene could not be made active.");
+                }
+                Assert.That(SceneManager.GetActiveScene().handle, Is.EqualTo(testScene.handle),
+                    "The Prefab integration command requires the test-owned scene to be active.");
 
                 instance = PrefabUtility.InstantiatePrefab(prefab, testScene) as GameObject;
                 Assert.That(instance, Is.Not.Null);
