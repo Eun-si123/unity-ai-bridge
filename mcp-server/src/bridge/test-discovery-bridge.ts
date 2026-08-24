@@ -172,10 +172,8 @@ function isTestDiscoveryPayload(value: unknown): value is TestDiscoveryPayload {
   }
 
   if (candidate.returnedCount > candidate.maxResults) return false;
-  const expectedNextOffset = Math.min(
-    candidate.totalMatches,
-    candidate.offset + candidate.returnedCount,
-  );
+  const expectedNextOffset = candidate.offset + candidate.returnedCount;
+  if (!Number.isSafeInteger(expectedNextOffset)) return false;
   if (candidate.nextOffset !== expectedNextOffset) return false;
   if (candidate.truncated !== (candidate.nextOffset < candidate.totalMatches)) return false;
 
