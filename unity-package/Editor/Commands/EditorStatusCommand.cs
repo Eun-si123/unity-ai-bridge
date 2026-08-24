@@ -15,6 +15,12 @@ namespace UnityAiBridge.Editor.Commands
         public string projectName;
         public string activeScene;
         public bool isPlaying;
+        public bool isPaused;
+        public bool isPlayingOrWillChangePlaymode;
+        public string playModeState;
+        public bool enterPlayModeOptionsEnabled;
+        public bool disableDomainReload;
+        public bool disableSceneReload;
         public bool isCompiling;
         public string agentVersion;
         public string[] capabilities;
@@ -27,6 +33,7 @@ namespace UnityAiBridge.Editor.Commands
         private static readonly string[] Capabilities =
         {
             "editor.status",
+            "editor.playMode.set",
             "scene.hierarchy",
             "editor.diagnostics",
             "object.resolve",
@@ -56,13 +63,20 @@ namespace UnityAiBridge.Editor.Commands
             var projectRoot = Directory.GetParent(Application.dataPath);
             var activeScene = SceneManager.GetActiveScene();
             var state = EditorStateRevision.Capture();
+            var playMode = PlayModeCommand.CaptureSnapshot();
 
             return new EditorStatusPayload
             {
                 unityVersion = Application.unityVersion,
                 projectName = projectRoot != null ? projectRoot.Name : string.Empty,
                 activeScene = string.IsNullOrEmpty(activeScene.path) ? activeScene.name : activeScene.path,
-                isPlaying = EditorApplication.isPlaying,
+                isPlaying = playMode.isPlaying,
+                isPaused = playMode.isPaused,
+                isPlayingOrWillChangePlaymode = playMode.isPlayingOrWillChangePlaymode,
+                playModeState = playMode.mode,
+                enterPlayModeOptionsEnabled = playMode.enterPlayModeOptionsEnabled,
+                disableDomainReload = playMode.disableDomainReload,
+                disableSceneReload = playMode.disableSceneReload,
                 isCompiling = EditorApplication.isCompiling,
                 agentVersion = BridgeProtocol.PackageVersion,
                 capabilities = Capabilities,

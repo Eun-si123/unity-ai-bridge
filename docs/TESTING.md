@@ -55,7 +55,7 @@ Expected automatic sources:
 
 If automatic enabling cannot update the project manifest, use `Tools > Unity AI Bridge > Enable Package Tests` or add the package manually to the project's `testables` array.
 
-Verified history: 75/75 after Test Runner bootstrap, 80/80 after Prefab-property apply, 81/81 after PR #43 direct scene-Prefab override recording, 85/85 after PR #44 bounded Script read, and **89/89** after PR #45 reload-safe Script replace.
+Verified history: 75/75 after Test Runner bootstrap, 80/80 after Prefab-property apply, 81/81 after PR #43 direct scene-Prefab override recording, 85/85 after PR #44 bounded Script read, 89/89 after PR #45 reload-safe Script replace, and **93/93** after PR #46 reload-aware Play Mode control.
 
 ## 4. Unity EditMode suite
 
@@ -71,10 +71,11 @@ Latest real Unity evidence:
 
 ```text
 Date: 2026-08-24
-Candidate: PR #45 feat/script-replace
+Candidate: PR #46 feature/play-mode-control
+Revision: d3c4ab9260199a6fd973f0ca7d55c36b55de678a
 Environment: Windows + Unity 6000.3.21f1
 Action: EditMode Run All
-Observed: 89 Passed / 0 Failed
+Observed: 93 Passed / 0 Failed
 Result: PASS
 ```
 
@@ -238,7 +239,75 @@ For future clients, do **not** assume a short fixed wall-clock timeout is univer
 
 This gate is **Verified** on Windows + Unity 6000.3.21f1.
 
-## 9. Real local bridge + `editor.status` verification helper
+## 9. Play Mode control Unity + MCP gate
+
+PR #46 introduces reload-aware Editor lifecycle control as `editor.playMode.set` / `unity_set_play_mode`.
+
+### EditMode gate
+
+The four candidate tests cover stable-mode validation, four-state lifecycle classification, retry-intent identity, and safe Edit-mode no-op replay without entering real Play Mode from inside the ordinary test assembly.
+
+Verified candidate result:
+
+```text
+93 Passed
+0 Failed
+```
+
+### Live MCP gate
+
+With Unity open and the candidate package compiled:
+
+```text
+npm --prefix mcp-server ci
+npm --prefix mcp-server run verify:play-mode
+```
+
+No sentinel file or manual Play-button action is required. The verifier proves:
+
+1. detailed Play Mode status/capability exposure,
+2. stable Edit-mode start,
+3. `edit -> play` completion,
+4. same enter mutationId replay is readback-only,
+5. stale expected-mode rejection while preserving Play state,
+6. `play -> edit` completion,
+7. same exit mutationId replay is readback-only,
+8. exact final stable Edit-mode restoration,
+9. user Enter Play Mode settings remain unchanged,
+10. optional connection-generation changes are observed but never treated as mandatory proof of success.
+
+Observed PASS record on 2026-08-24:
+
+```text
+unityVersion: 6000.3.21f1
+initialMode: edit
+finalMode: edit
+enterChanged: true
+enterReplayReadOnly: true
+enterReconciled: true
+enterReloadObserved: true
+enterInitialConnectionGeneration: 1787569109635
+enterFinalConnectionGeneration: 1787569158803
+staleExpectedModeRejected: true
+staleAttemptLeftPlayModeUnchanged: true
+exitChanged: true
+exitReplayReadOnly: true
+exitReconciled: true
+exitReloadObserved: false
+exitInitialConnectionGeneration: 1787569158803
+exitFinalConnectionGeneration: 1787569158803
+enterPlayModeOptionsEnabled: false
+disableDomainReload: false
+disableSceneReload: false
+userEnterPlayModeSettingsPreserved: true
+exactFinalEditStateRestored: true
+```
+
+The production bridge and verifier use a long bounded 180-second lifecycle timeout so slower machines/projects have room to perform legitimate Editor lifecycle work. Ambiguous timeout/disconnect handling preserves the same mutationId and reconciles native state instead of issuing a blind second Enter/Exit request.
+
+This gate is **Verified** on Windows + Unity 6000.3.21f1.
+
+## 10. Real local bridge + `editor.status` verification helper
 
 With the Unity project open and the package loaded:
 
@@ -249,7 +318,7 @@ npm --prefix mcp-server run verify:unity
 
 The helper listens on the local bridge, waits for the real Unity Editor hello, sends `editor.status`, and prints structured Unity/project/scene/play/compile state. This verifies the real WebSocket/bridge path, not MCP stdio by itself.
 
-## 10. Real MCP `unity_get_status` end-to-end check
+## 11. Real MCP `unity_get_status` end-to-end check
 
 ```text
 npm --prefix mcp-server ci
@@ -258,7 +327,7 @@ npm --prefix mcp-server run verify:mcp-unity
 
 The official MCP client launches the normal server, completes MCP initialization, calls `unity_get_status`, and validates its structured result against the live Editor.
 
-## 11. Reconnect / domain reload / stale-generation check
+## 12. Reconnect / domain reload / stale-generation check
 
 ```text
 npm --prefix mcp-server run verify:reconnect
@@ -266,7 +335,7 @@ npm --prefix mcp-server run verify:reconnect
 
 When prompted, trigger a Unity script/domain reload. PASS requires the same editor identity to reconnect with a new connection generation, an intentionally old-generation route to fail with `routing/stale_connection`, and a current-generation status call to succeed.
 
-## 12. Hierarchy and object-resolution checks
+## 13. Hierarchy and object-resolution checks
 
 Hierarchy:
 
@@ -282,27 +351,27 @@ npm --prefix mcp-server run verify:resolver
 
 If an operation exists in checked-out source but Unity reports it unsupported, treat stale compiled package state as a candidate first; reimport/restart and re-run before concluding the operation is absent.
 
-## 13. Phase 3 domain verification
+## 14. Phase 3 domain verification
 
-Each new write family must carry the Phase 2 reliability contract appropriate to its domain before being marked Verified:
+Each new write/lifecycle family must carry the Phase 2 reliability contract appropriate to its domain before being marked Verified:
 
 - capability/version preflight,
-- stable target identity,
+- stable target or lifecycle-state identity,
 - current-state/content preconditions where required,
 - main-thread execution where required,
 - explicit risk/persistence classification,
 - Undo grouping where applicable,
 - mutation identity/replay behavior,
-- native semantic readback,
+- native semantic/lifecycle readback,
 - rollback + rollback verification where safe and applicable,
-- conservative ambiguous-outcome behavior where a persistent write cannot safely provide generic rollback,
-- deadline behavior,
-- dirty/save/compile semantics,
+- conservative ambiguous-outcome behavior where a persistent/lifecycle operation cannot safely provide generic rollback,
+- deadline/timeout behavior,
+- dirty/save/compile/reload semantics,
 - real Unity verification in addition to simulated/Node tests.
 
 Domain-specific verifier scripts and exact evidence belong in `STATUS.md` / linked docs rather than being inferred from source presence.
 
-## 14. Evidence format
+## 15. Evidence format
 
 Every real verification entry added to `STATUS.md` should record:
 

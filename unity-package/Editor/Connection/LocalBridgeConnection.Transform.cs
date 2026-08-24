@@ -19,6 +19,11 @@ namespace UnityAiBridge.Editor.Connection
             string rawJson,
             CancellationToken cancellationToken)
         {
+            if (await TryHandlePlayModeCommandAsync(current, command, rawJson, cancellationToken))
+            {
+                return true;
+            }
+
             if (string.Equals(command.operation, "transform.get", StringComparison.Ordinal))
             {
                 await HandleTransformGetAsync(current, command, rawJson, cancellationToken);

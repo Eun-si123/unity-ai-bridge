@@ -1,0 +1,16 @@
+{
+  "protocolVersion": "0",
+  "requestId": "fixture-play-mode-set",
+  "operation": "editor.playMode.set",
+  "arguments": {
+    "targetMode": "play",
+    "expectedCurrentMode": "edit",
+    "mutationId": "fixture-play-mode-set-1"
+  },
+  "risk": "write",
+  "route": {
+    "editorId": "fixture-editor",
+    "connectionGeneration": 1
+  },
+  "deadlineUnixMs": 4102444800000
+}
