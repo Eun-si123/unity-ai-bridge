@@ -26,10 +26,10 @@ On **2026-08-24**, the non-embedded development-install flow and expanded packag
 - automatic project-manifest `testables` registration: PASS
 - guarded package reimport / test-assembly discovery: PASS
 - `EunSung.UnityAiBridge.Editor.Tests` visible in EditMode Test Runner: PASS
-- historical suite milestones: 75/75, 80/80, 81/81, 85/85, 89/89
-- current verified suite after PR #46 Play Mode control tests: **93 Passed / 0 Failed**
+- historical suite milestones: 75/75, 80/80, 81/81, 85/85, 89/89, 93/93, 97/97
+- current verified suite after PR #47 Test Runner selected-count regression coverage: **98 Passed / 0 Failed**
 
-`STATUS.md` records the current verified baseline and the exact runtime evidence for each later write/lifecycle family.
+`STATUS.md` records the current verified baseline and the exact runtime evidence for each later write/lifecycle/job family.
 
 ## Prefab property apply integration test
 
@@ -60,6 +60,20 @@ npm --prefix mcp-server run verify:play-mode
 ```
 
 This keeps the package suite deterministic while still requiring a real Editor lifecycle gate before Play Mode control is considered Verified.
+
+## Test Runner control tests
+
+PR #47 adds bounded validation/intent/journal coverage for asynchronous EditMode Test Runner control. The ordinary package suite deliberately does **not** recursively schedule another Unity Test Framework run from inside its own run; instead it verifies selection validation, normalized mutation identity, unknown-run lookup behavior, and terminal selected-count arithmetic.
+
+The real asynchronous `TestRunnerApi.Execute -> callbacks -> SessionState journal -> MCP polling` path is verified separately by:
+
+```text
+npm --prefix mcp-server run verify:test-runner
+```
+
+The live gate schedules exactly one safe validation test, verifies one stable Unity `runGuid`, immediate/completed same-id replay without duplicate scheduling, exact terminal counts (`selectedTestCaseCount=1`, `passCount=1`), conflict rejection for a different same-id selection, and final stable Edit Mode.
+
+The first live candidate exposed that `RunStarted().TestCaseCount` represents the full loaded test tree rather than the filtered terminal selection. A dedicated regression test now defines terminal `selectedTestCaseCount` as `pass + fail + skip + inconclusive`, producing the current 98/98 baseline before the slice was marked Verified.
 
 ## Manual fallback
 
