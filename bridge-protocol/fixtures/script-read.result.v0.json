@@ -1,0 +1,27 @@
+{
+  "protocolVersion": "0",
+  "requestId": "fixture-script-read",
+  "ok": true,
+  "result": {
+    "guid": "0123456789abcdef0123456789abcdef",
+    "path": "Packages/com.eunsung.unity-ai-bridge/Editor/Protocol/BridgeProtocol.cs",
+    "sourceKind": "Packages",
+    "packageName": "com.eunsung.unity-ai-bridge",
+    "dependencyHash": "89abcdef0123456789abcdef01234567",
+    "contentSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "encoding": "utf-8",
+    "hasUtf8Bom": false,
+    "byteLength": 321,
+    "utf16CharCount": 300,
+    "lineCount": 14,
+    "offset": 0,
+    "maxChars": 64,
+    "returnedCharCount": 13,
+    "nextOffset": 13,
+    "truncated": true,
+    "content": "using System;"
+  },
+  "warnings": [],
+  "dirtyState": "unchanged",
+  "compileState": "idle"
+}
