@@ -90,14 +90,14 @@ Verified slices:
 - ✅ Asset search/inspect — `unity_search_assets` + `unity_inspect_asset`, **50/50** EditMode
 - ✅ Prefab inspect + linked scene instantiate — `unity_inspect_prefab` + `unity_instantiate_prefab`, **56/56** EditMode
 - ✅ Prefab Asset creation — `unity_create_prefab_asset`, create-only disk write with native GUID/hash/root verification and stale replay after manual removal, **62/62** EditMode
-- 🟨 Bounded Prefab Apply Overrides workflow — next Prefab slice
+- ✅ Bounded Prefab property override apply — `unity_apply_prefab_property_override`, exact one-property persistent apply with native GUID/hash/property verification, immediate replay, fresh-instance inheritance, and later-override stale replay protection, **68/68** EditMode
 - ⬜ Script read/write workflows
 - ⬜ Diagnostics extensions where they unlock concrete workflows
 - ⬜ Play Mode control
 - ⬜ Unity Test Runner control
 - ⬜ Explicit Undo/recovery tools where useful to clients
 
-Prefab verification now covers bounded Prefab Asset inspection, linked scene instantiation, dual scene/asset preconditions, create-only Prefab Asset authoring from a plain scene GameObject, native GUID/dependencyHash/root readback, mutation replay, Undo where the scene operation supports it, and stale-replay rejection after Undo or external asset removal.
+Prefab verification now covers bounded Prefab Asset inspection, linked scene instantiation, dual scene/asset preconditions, create-only Prefab Asset authoring from a plain scene GameObject, native GUID/dependencyHash/root readback, exact single-property override apply through `PrefabUtility.ApplyPropertyOverride`, mutation replay, Undo where the scene operation supports it, fresh-instance inheritance after persistent apply, and stale-replay rejection after Undo, later overrides, or external asset removal.
 
 Reliability requirements inherited from Phase 2:
 
@@ -120,6 +120,7 @@ Supporting work:
 - ✅ bounded AssetDatabase search/inspection
 - ✅ Prefab asset-side precondition using Unity dependencyHash
 - ✅ create-only Prefab disk-write contract that never overwrites an existing destination
+- ✅ destructive exact-property Prefab apply contract with no broad Apply All fallback
 - 🟨 consistent risk classification as new operations are added
 - ⬜ broader tool-schema compatibility tests as the surface grows
 - ⬜ better structured error explanations for AI clients
