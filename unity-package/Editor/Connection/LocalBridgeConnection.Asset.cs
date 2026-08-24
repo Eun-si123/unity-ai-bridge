@@ -29,6 +29,15 @@ namespace UnityAiBridge.Editor.Connection
                 return true;
             }
 
+            if (await TryHandleScriptCommandAsync(
+                    current,
+                    command,
+                    rawJson,
+                    cancellationToken))
+            {
+                return true;
+            }
+
             if (await TryHandlePrefabPropertyCommandAsync(
                     current,
                     command,

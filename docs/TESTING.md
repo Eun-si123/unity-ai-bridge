@@ -53,13 +53,9 @@ Expected automatic sources:
 - `PackageSource.Embedded` — no manifest edit required
 - `PackageSource.Registry` — no automatic manifest edit
 
-If automatic enabling cannot update the project manifest, use:
+If automatic enabling cannot update the project manifest, use `Tools > Unity AI Bridge > Enable Package Tests` or add the package manually to the project's `testables` array.
 
-`Tools > Unity AI Bridge > Enable Package Tests`
-
-or add the package manually to the project's `testables` array.
-
-**Verified evidence:** this flow was first reproduced on Unity 6000.3.21f1 on 2026-08-24 with **75 passed / 0 failed**. The later expanded package suite on revision `7787c4b5317e628924f22cedd576964cce20103d` completed **80 passed / 0 failed** with the same installed-package discovery path.
+Verified history: 75/75 after Test Runner bootstrap, 80/80 after Prefab-property apply, and **81/81** after PR #43 direct scene-Prefab override recording.
 
 ## 4. Unity EditMode suite
 
@@ -69,136 +65,137 @@ After package tests are visible in Test Runner:
 2. run `EunSung.UnityAiBridge.Editor.Tests`,
 3. record passed/failed counts,
 4. clean any temporary Assets/objects created by the test or verifier path,
-5. do not overwrite the last verified count in `STATUS.md` with a new count unless the exact revision/environment actually ran.
+5. do not overwrite the last verified count in `STATUS.md` with a new count unless the exact candidate/environment actually ran.
 
-Latest real Unity evidence:
+Latest verified baseline before PR #44:
 
 ```text
 Date: 2026-08-24
-Revision: 7787c4b5317e628924f22cedd576964cce20103d
+Candidate: PR #43 head dfa183ce46056f45613c152516df6cdcebd29a02
 Environment: Windows + Unity 6000.3.21f1
 Action: EditMode Run All
-Observed: 80 Passed / 0 Failed
+Observed: 81 Passed / 0 Failed
 Result: PASS
+Merged as: f9e5c9b1561175629b3ba15ae27502c253dec889
 ```
+
+PR #44 adds four Script-read EditMode tests, so its expected source suite is **85 tests**.
 
 ## 5. Bounded Prefab property apply Unity verification gate
 
-PR #36 adds the first persistent existing-Prefab modification: `prefab.property.apply` / `unity_apply_prefab_property_override`. Test-harness compatibility for real Unity 6000.3.21f1 was hardened through PRs #37–#40.
+PR #36 adds the first persistent existing-Prefab modification: `prefab.property.apply` / `unity_apply_prefab_property_override`. Test-harness compatibility was hardened through PRs #37–#40.
 
-The EditMode integration test creates a temporary Prefab Asset and a durable saved test Scene as required by Unity's scene-object `GlobalObjectId` semantics, then cleans its temporary data. It is now **Verified** as part of the 80/80 real Unity run above.
+The EditMode integration test creates a temporary Prefab Asset and durable saved test Scene, applies one `m_LocalScale` override, verifies source/instance readback, same-id replay, stale replay after asset deletion, and cleanup. It is Verified as part of the 80/80 real Unity run.
 
-PASS proves:
-
-1. a writable temporary Prefab is copied/imported,
-2. a linked scene instance is created,
-3. a real `m_LocalScale` serialized Prefab override is produced on the instance Transform,
-4. the command accepts the explicit Component `GlobalObjectId`, property path, Prefab path, current dependencyHash, and scene state token,
-5. `PrefabUtility.ApplyPropertyOverride` results in the source Prefab storing the overridden value,
-6. fresh instance readback reports `prefabOverride == false`,
-7. instance/source data match after apply,
-8. the completed same-`mutationId` call replays without performing a second asset write,
-9. after the test deletes the Prefab asset, the same mutationId fails with stale replay instead of recreating or reapplying anything,
-10. the temporary instance/asset/Scene are cleaned even when the test fails.
-
-The first slice intentionally excludes `m_Script`, arrays/elements, Model Prefabs, Apply All, component/object-wide apply, and automatic nested-Prefab target selection.
-
-Because this operation persistently modifies an existing asset and cannot safely promise generic Unity Undo/rollback, ambiguous execution or failed semantic verification must **not** trigger blind automatic retry. Refresh native Unity state before choosing a new mutationId.
+The first slice intentionally excludes `m_Script`, arrays/elements, Model Prefabs, Apply All, component/object-wide apply, and automatic nested-Prefab target selection. Because this operation persistently modifies an existing asset and cannot safely promise generic Unity Undo/rollback, ambiguous execution or failed semantic verification must not trigger blind automatic retry.
 
 ## 6. Live MCP Prefab property apply end-to-end gate
 
-PR #42 adds a second, separate gate for the same write family. This checks the path a real MCP host uses rather than calling the C# command directly from EditMode tests.
-
-Prerequisites:
-
-- Unity is open with the current package compiled,
-- the active Scene is **saved under `Assets/`** so scene-object `GlobalObjectId` values are durable,
-- the Editor is connected to the local bridge,
-- no compilation is in progress.
-
-Run from the repository root:
+Run with Unity open on a saved active Scene:
 
 ```text
 npm --prefix mcp-server ci
 npm --prefix mcp-server run verify:prefab-property-apply
 ```
 
-The verifier uses the official MCP TypeScript client over stdio, launches the normal Unity AI Bridge MCP server, and performs the following workflow entirely through public MCP tools until the explicit asset-removal step:
+This uses the official MCP TypeScript client over stdio and checks the real public path: create source object -> add BoxCollider -> create Prefab -> instantiate -> create `m_IsTrigger` instance override -> apply one property -> verify changed dependencyHash -> same-id replay -> fresh independent instance readback -> manual verifier-Prefab deletion -> stale replay rejection -> cleanup.
 
-1. verify the required tools and Agent capabilities,
-2. create a temporary scene GameObject,
-3. add a `UnityEngine.BoxCollider`,
-4. create a unique temporary Prefab Asset under `Assets/`,
-5. instantiate that Prefab,
-6. use `unity_set_component_property` to change `BoxCollider.m_IsTrigger` from `false` to `true`,
-7. verify the Prefab Asset dependencyHash did **not** change from the instance-only override,
-8. call `unity_apply_prefab_property_override` with the exact Component ID, property path, Prefab path, dependencyHash, state token, and mutationId,
-9. verify the Prefab GUID stays stable while the dependencyHash changes,
-10. replay the exact same mutationId/preconditions and require readback-only `replayed=true`,
-11. instantiate a fresh second instance from the modified Prefab and verify `m_IsTrigger == true`, proving the persistent Asset change independently of the original instance,
-12. clean temporary scene objects through MCP,
-13. when prompted, delete the verifier's uniquely named temporary `.prefab` **once** in Unity's Project window,
-14. require a same-id retry after asset deletion to fail with `stale_target/mutation_replay_stale`,
-15. finish cleanup and print a structured PASS record.
+**Verified evidence:** this live MCP gate passed on 2026-08-24 against Unity 6000.3.21f1. The direct `Undo.RecordObject` Prefab-instance audit discovered while designing it was subsequently fixed by #41 / PR #43 and verified by the 81/81 EditMode run.
 
-The Component-property path is intentional: it uses Unity `SerializedObject` / `SerializedProperty` semantics, the preferred bounded path for recording Prefab instance property overrides. Direct `Undo.RecordObject` Prefab-instance write behavior is tracked separately in issue **#41** and is not silently assumed by this verifier.
+## 7. Bounded Script read Unity + MCP gate
 
-If the verifier fails after creating the temporary Prefab, it prints the exact unique `Assets/UnityAiBridge_Prefab_Property_Apply_Verify_*.prefab` path that must be removed manually. Scene objects are cleaned on a best-effort basis.
+PR #44 introduces the first Script workflow as read-only `script.read` / `unity_read_script`. This slice must be verified before Script mutation work begins.
 
-Do **not** mark this live MCP gate PASS from GitHub Actions, TypeScript compilation, or the 80/80 EditMode result. Record it only after the command above succeeds against a real Unity Editor.
+### EditMode gate
 
-## 7. Real local bridge + `editor.status` verification helper
+Run the full EditMode suite on the PR #44 candidate. Expected count:
 
-With the Unity project open and the package loaded, run from the repository root:
+```text
+85 Passed
+0 Failed
+```
+
+The four new tests verify:
+
+1. Assets and Packages `.cs` paths are accepted,
+2. traversal, backslashes, non-script extensions, and paths outside Assets/Packages are rejected,
+3. the installed package's `BridgeProtocol.cs` can be read through small chunks while GUID, path, dependencyHash, raw SHA-256, byte count, and character count remain stable,
+4. an offset beyond the decoded source length is rejected.
+
+### Live MCP gate
+
+With Unity open and the PR #44 package compiled:
+
+```text
+npm --prefix mcp-server ci
+npm --prefix mcp-server run verify:script-read
+```
+
+No saved Scene or manual Project-window action is required. The verifier:
+
+1. starts the normal MCP server over stdio,
+2. confirms `unity_read_script` is advertised,
+3. waits for the live Agent to advertise `script.read`,
+4. reads `Packages/com.eunsung.unity-ai-bridge/Editor/Protocol/BridgeProtocol.cs` in 64-code-unit chunks,
+5. requires canonical path/package identity and a 64-hex raw-file SHA-256,
+6. requires GUID, dependencyHash, SHA-256, byte/character/line metadata, encoding and BOM metadata to remain identical across all chunks,
+7. reconstructs the exact full source without overlap/gaps,
+8. requires expected `BridgeProtocol` / `PackageVersion` declarations,
+9. immediately repeats the first chunk and requires identity/hash/content stability,
+10. reports `projectMutated: false`.
+
+The read surface is intentionally bounded: exact `.cs` Unity assets only, Assets/Packages only, strict UTF-8 with optional BOM, at most 4 MiB per source file, at most 100,000 UTF-16 code units returned per call, and paging offsets limited to the C# `int` range.
+
+Do not mark `script.read` Verified from GitHub Actions alone. Both the 85/85 EditMode result and this live MCP gate should pass on a real Unity Editor.
+
+## 8. Future Script replace/write gate
+
+Script mutation is a separate reliability family. A `.cs` change can lead to AssetDatabase import, script compilation, assembly reload, and domain reload, so a future write verifier must cover more than file readback.
+
+The first bounded write is expected to require:
+
+- exact writable `Assets/*.cs` target,
+- current raw `contentSha256` from `script.read` as a compare-and-swap precondition,
+- explicit mutationId/replay identity,
+- defined UTF-8/BOM/newline behavior,
+- bounded replacement content,
+- AssetDatabase import/compile observation,
+- reconnect/domain-reload reconciliation,
+- post-reload native script re-read and new SHA verification,
+- diagnostics/compiler outcome,
+- fail-closed handling for ambiguous started-but-not-terminal writes.
+
+Package scripts should remain read-only in the initial write slice.
+
+## 9. Real local bridge + `editor.status` verification helper
+
+With the Unity project open and the package loaded:
 
 ```text
 npm --prefix mcp-server ci
 npm --prefix mcp-server run verify:unity
 ```
 
-The helper builds the TypeScript server, listens on the local bridge, waits for the real Unity Editor hello, sends `editor.status`, and prints the structured result.
+The helper listens on the local bridge, waits for the real Unity Editor hello, sends `editor.status`, and prints structured Unity/project/scene/play/compile state. This verifies the real WebSocket/bridge path, not MCP stdio by itself.
 
-Compare the printed status against the open Editor:
-
-- Unity version,
-- project name,
-- active scene,
-- Play Mode state,
-- compilation state.
-
-This verifies the real Unity WebSocket/bridge path. It does not by itself prove the MCP stdio transport.
-
-## 8. Real MCP `unity_get_status` end-to-end check
-
-With Unity still open:
+## 10. Real MCP `unity_get_status` end-to-end check
 
 ```text
 npm --prefix mcp-server ci
 npm --prefix mcp-server run verify:mcp-unity
 ```
 
-The verifier uses the official MCP TypeScript client over stdio, launches the normal Unity AI Bridge MCP server, completes MCP initialization, confirms `unity_get_status` is advertised, waits for the live Unity connection, calls the tool, and validates its structured result.
+The official MCP client launches the normal server, completes MCP initialization, calls `unity_get_status`, and validates its structured result against the live Editor.
 
-PASS requires the returned Unity version/project/scene/play/compile state to match the actual Editor. A direct bridge call alone is insufficient for this gate.
-
-## 9. Reconnect / domain reload / stale-generation check
-
-With Unity open:
+## 11. Reconnect / domain reload / stale-generation check
 
 ```text
 npm --prefix mcp-server run verify:reconnect
 ```
 
-When prompted, trigger a Unity script/domain reload. PASS requires:
+When prompted, trigger a Unity script/domain reload. PASS requires the same editor identity to reconnect with a new connection generation, an intentionally old-generation route to fail with `routing/stale_connection`, and a current-generation status call to succeed.
 
-1. the same editor identity reconnects,
-2. the new connection generation differs,
-3. a command deliberately routed to the old generation is rejected with `routing/stale_connection`,
-4. a normal current-generation status call succeeds.
-
-## 10. Hierarchy and object-resolution checks
-
-Use the current `main`/candidate branch package source rather than old phase branch names.
+## 12. Hierarchy and object-resolution checks
 
 Hierarchy:
 
@@ -206,26 +203,22 @@ Hierarchy:
 npm --prefix mcp-server run verify:hierarchy
 ```
 
-Compare scene path, root objects, ordering, parent/child structure, active states, and returned `GlobalObjectId` values against the live Editor.
-
 Stable resolver / stale replay:
 
 ```text
 npm --prefix mcp-server run verify:resolver
 ```
 
-PASS requires native resolution of the created object, `found=false` after Undo/removal, stale-replay rejection for the same mutation ID, and no replacement object creation.
-
 If an operation exists in checked-out source but Unity reports it unsupported, treat stale compiled package state as a candidate first; reimport/restart and re-run before concluding the operation is absent.
 
-## 11. Phase 3 domain verification
+## 13. Phase 3 domain verification
 
 Each new write family must carry the Phase 2 reliability contract appropriate to its domain before being marked Verified:
 
 - capability/version preflight,
 - stable target identity,
-- current-state preconditions where required,
-- main-thread execution,
+- current-state/content preconditions where required,
+- main-thread execution where required,
 - explicit risk/persistence classification,
 - Undo grouping where applicable,
 - mutation identity/replay behavior,
@@ -233,18 +226,18 @@ Each new write family must carry the Phase 2 reliability contract appropriate to
 - rollback + rollback verification where safe and applicable,
 - conservative ambiguous-outcome behavior where a persistent write cannot safely provide generic rollback,
 - deadline behavior,
-- dirty/save semantics,
+- dirty/save/compile semantics,
 - real Unity verification in addition to simulated/Node tests.
 
 Domain-specific verifier scripts and exact evidence belong in `STATUS.md` / linked docs rather than being inferred from source presence.
 
-## 12. Evidence format
+## 14. Evidence format
 
 Every real verification entry added to `STATUS.md` should record:
 
 ```text
 Date:
-Revision:
+Revision/candidate:
 Environment:
 Action/command:
 Expected:

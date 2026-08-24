@@ -37,24 +37,20 @@ Broader Unity/OS compatibility is not implied.
 
 ## Latest real Unity verification
 
-On **2026-08-24**, the installed-package EditMode suite was executed on main revision:
-
-```text
-7787c4b5317e628924f22cedd576964cce20103d
-```
-
-Environment/result:
+On **2026-08-24**, the expanded installed-package EditMode suite for **PR #43** completed:
 
 ```text
 Windows
 Unity 6000.3.21f1
-80 Passed
+81 Passed
 0 Failed
 ```
 
-This supersedes the previous 75/75 package-Test-Runner baseline for the full currently implemented Unity EditMode surface. It verifies the bounded Prefab single-property override apply integration path in real Unity in addition to preserving the previously verified slices.
+The tested PR head was `dfa183ce46056f45613c152516df6cdcebd29a02`; PR #43 was then squash-merged to main as `f9e5c9b1561175629b3ba15ae27502c253dec889`.
 
-The dedicated live MCP stdio -> bridge -> Unity verifier added by **PR #42** was also executed on **2026-08-24** against Unity **6000.3.21f1** and passed. The observed result verified a changed Prefab dependency hash, independent fresh-instance readback, read-only same-`mutationId` replay, manual asset-removal observation, `stale_target/mutation_replay_stale` after the Prefab disappeared, and temporary scene-object cleanup. The verifier output did not print the local Git HEAD, so this evidence is tied to the post-PR #42 main checkout used for the run rather than claiming a revision string that was not emitted.
+This supersedes the earlier 80/80 regression baseline and verifies the direct scene-Prefab override-recording fix for Transform and GameObject direct `Undo.RecordObject` writes in addition to all previously covered slices. Issue #41 is closed as completed.
+
+Separately, the dedicated PR #42 live MCP `verify:prefab-property-apply` gate was executed on 2026-08-24 against Unity 6000.3.21f1 and passed. It verified changed Prefab dependency hash, independent fresh-instance readback, read-only same-`mutationId` replay, manual asset-removal observation, `stale_target/mutation_replay_stale` after the Prefab disappeared, and temporary scene-object cleanup.
 
 ## Current verified / implemented surface
 
@@ -70,17 +66,18 @@ The dedicated live MCP stdio -> bridge -> Unity verifier added by **PR #42** was
 | Dirty-state reporting | Verified | Rollback dirty residue is reported explicitly. |
 | Dirty-state restoration | Not implemented | Undo-based rollback can leave a previously clean scene dirty. |
 | Explicit active-scene save | Verified | Existing saved path only; exact path/state preconditions; native post-save verification; no interactive Save As. |
-| Transform read/write | Verified | PR #22; 23/23 milestone and still covered by the later 80/80 EditMode run; native readback, Undo, replay and stale-replay protection. PR #43 adds the missing scene-Prefab override-recording hook for direct writes and is pending expanded real-Unity regression execution. |
-| GameObject update/delete | Verified | PR #23; 29/29 milestone and later regression coverage; native verification, Undo, replay and stale-replay protection. PR #43 adds the missing scene-Prefab override-recording hook for direct name/active writes and is pending expanded real-Unity regression execution. |
-| Component inspect | Verified | PR #24; 33/33 milestone and later regression coverage; native-order Components, Missing Script reporting, bounded visible serialized properties, Component identity/ownership. |
-| Component add/remove | Verified | PR #25; 39/39 milestone and later regression coverage; exact Component types/identities, Undo, native verification and replay protection. |
-| Component property edit | Verified | PR #26; 45/45 milestone and later regression coverage; visible Boolean/Integer/Float/String/Vector3 serialized-property writes with semantic readback and Undo/replay protection. |
-| Asset search/inspect | Verified | PR #27; 50/50 milestone and later regression coverage; bounded `AssetDatabase` search and exact GUID/type/importer/dependency inspection. |
-| Prefab inspect/instantiate | Verified | PR #28; 56/56 milestone and later regression coverage; bounded Prefab Asset hierarchy inspect, dependency-hash precondition, linked `PrefabUtility.InstantiatePrefab`, native linkage readback, same-id replay, Undo, stale-replay rejection. |
-| Prefab Asset creation | Verified | PR #29; 62/62 milestone and still covered by the 80/80 suite; create-only `SaveAsPrefabAsset`, source unchanged, GUID/dependencyHash/root readback, same-id replay, manual asset removal followed by stale-replay rejection. |
-| Package Test Runner discovery bootstrap | **Verified** | 2026-08-24 real installed-package runs on Unity 6000.3.21f1. Development Local/LocalTarball/Git installs self-add `com.eunsung.unity-ai-bridge` to project `testables`; guarded package reimport handles Test Framework refresh. Initial discovery run completed 75/75; latest expanded suite completed **80/80**. |
-| Prefab single-property override apply | **Verified** | PR #36 plus test-harness hardening through PR #40; real Unity 6000.3.21f1 expanded suite completed **80/80** on revision `7787c4b...`. Dedicated PR #42 live MCP E2E also **PASS** on 2026-08-24: changed dependency hash, fresh-instance readback, same-id replay, manual asset deletion, stale replay rejection, and scene cleanup all verified. |
-| Direct `Undo.RecordObject` Prefab-instance writes | **Implemented** | PR #43 fixes #41 by calling `PrefabUtility.RecordPrefabInstancePropertyModifications` only for non-asset scene Prefab instances after direct Transform/GameObject writes. New real EditMode integration coverage checks `m_LocalScale` and `m_IsActive` override flags through scene save. GitHub Node/local-bridge CI passes; expanded Unity suite is still required before this fix is marked Verified. |
+| Transform read/write | Verified | PR #22 baseline plus later regression coverage. PR #43 verifies direct scene-Prefab Transform writes record real Prefab overrides; latest real suite 81/81. |
+| GameObject update/delete | Verified | PR #23 baseline plus later regression coverage. PR #43 verifies direct scene-Prefab name/active writes record real Prefab overrides; latest real suite 81/81. |
+| Component inspect | Verified | PR #24; native-order Components, Missing Script reporting, bounded visible serialized properties, Component identity/ownership. |
+| Component add/remove | Verified | PR #25; exact Component types/identities, Undo, native verification and replay protection. |
+| Component property edit | Verified | PR #26; visible Boolean/Integer/Float/String/Vector3 serialized-property writes with semantic readback and Undo/replay protection. |
+| Asset search/inspect | Verified | PR #27; bounded `AssetDatabase` search and exact GUID/type/importer/dependency inspection. |
+| Script read | **Implemented** | PR #44 candidate: `script.read` / `unity_read_script`; exact `.cs` Unity assets under Assets/Packages, canonical GUID/path + MonoScript validation, package resolution through Package Manager, strict UTF-8/BOM handling, raw SHA-256, dependencyHash, bounded paging and 4 MiB source-size cap. Node/local-bridge CI is passing; expanded real Unity + live MCP verification still required. |
+| Prefab inspect/instantiate | Verified | PR #28; bounded Prefab Asset hierarchy inspect, dependency-hash precondition, linked `PrefabUtility.InstantiatePrefab`, native linkage readback, same-id replay, Undo, stale-replay rejection. |
+| Prefab Asset creation | Verified | PR #29; create-only `SaveAsPrefabAsset`, source unchanged, GUID/dependencyHash/root readback, same-id replay, manual asset removal followed by stale-replay rejection. |
+| Package Test Runner discovery bootstrap | **Verified** | Development Local/LocalTarball/Git installs self-add `com.eunsung.unity-ai-bridge` to project `testables`; guarded package reimport handles Test Framework refresh. Latest expanded suite completed **81/81**. |
+| Prefab single-property override apply | **Verified** | PR #36 + harness hardening #37–#40; 80/80 real Unity integration and dedicated PR #42 live MCP E2E PASS. |
+| Direct `Undo.RecordObject` Prefab-instance writes | **Verified** | #41 / PR #43. `PrefabUtility.RecordPrefabInstancePropertyModifications` is guarded to non-asset scene Prefab instances. Real integration verifies `m_LocalScale` and `m_IsActive` overrides persist after scene save; **81/81**. |
 | Remote gateway / Easy Connect | Planned | Not implemented. |
 | Pairing/authentication | Planned | Not implemented. |
 | Multi-user/editor routing | Planned | Current local bridge supports one active editor. |
@@ -147,47 +144,57 @@ Current objective: provide a small but genuinely useful Unity editing/inspection
 6. **Asset search/inspect — PR #27** — **50/50 EditMode** milestone
 7. **Prefab inspect/instantiate — PR #28** — **56/56 EditMode** milestone
 8. **Prefab Asset creation — PR #29** — **62/62 EditMode** milestone
-9. **Installed-package Test Runner discovery / regression baseline — PRs #31–#35** — **75/75 EditMode**, verified 2026-08-24
-10. **Bounded Prefab property override apply — PR #36 + harness fixes #37–#40** — **80/80 EditMode**, verified 2026-08-24 on revision `7787c4b5317e628924f22cedd576964cce20103d`; dedicated PR #42 live MCP E2E also passed 2026-08-24
+9. **Installed-package Test Runner discovery — PRs #31–#35** — **75/75**, verified 2026-08-24
+10. **Bounded Prefab property override apply — PR #36 + #37–#40** — **80/80**, plus PR #42 live MCP E2E PASS
+11. **Direct scene-Prefab override recording — #41 / PR #43** — **81/81**, verified 2026-08-24
 
-### Bounded Prefab property override apply contract
+### Implemented after latest verified Unity run
 
-- `prefab.property.apply` / `unity_apply_prefab_property_override`
-- single existing visible serialized property only
-- no arrays/elements or `m_Script`
-- explicit writable `Assets/*.prefab` target for nested-Prefab correctness
-- exact Prefab dependencyHash + scene state preconditions
-- Model Prefabs rejected in the first slice
-- persistent asset write, no generic Unity Undo claim
-- semantic verification through fresh source/instance serialized readback and `SerializedProperty.DataEquals`
-- completed same-id replay is readback-only; stale asset/target state fails closed
-- ambiguous execution/verification is not automatically re-executed
-- real Unity EditMode integration test passes in the 80/80 suite
-- dedicated PR #42 live MCP verifier passes through the actual stdio MCP -> bridge -> Unity path
+- **Bounded Script read — PR #44 candidate**
+  - `script.read` / `unity_read_script`
+  - exact project-relative `.cs` Unity asset path only
+  - reads Assets and resolved Packages; no writes
+  - verifies the path through GUID + `MonoScript`
+  - strict UTF-8 decode with optional BOM reporting
+  - raw source-file SHA-256 for the future write CAS precondition
+  - Unity dependencyHash returned as imported-state metadata
+  - offset paging in UTF-16 code units with surrogate-pair boundary protection
+  - maximum 100,000 returned UTF-16 code units per call
+  - maximum 4 MiB source file to keep memory bounded
+  - Node bridge tests + real Unity EditMode tests + live MCP verifier added
+  - latest GitHub Node Verification and Phase 1 Local Bridge Verification pass after the payload-narrowing fix
+  - real Unity execution on this PR revision is still required before Verified
 
-### Package Test Runner discovery verification
+### Script write direction
+
+The next Script write family is deliberately not implemented yet. `.cs` mutation can trigger Unity AssetDatabase import, script compilation, assembly reload, and domain reload, so the first write contract must be reload-aware rather than reusing a scene-mutation pattern blindly.
+
+Proposed first write contract:
 
 ```text
-Environment: Windows + Unity 6000.3.21f1
-Install style: non-embedded development package
-Automatic manifest testables registration: PASS
-Automatic package reimport/Test Framework discovery: PASS
-EunSung.UnityAiBridge.Editor.Tests visible in EditMode Test Runner: PASS
-Latest EditMode result: 80 Passed / 0 Failed
-Revision: 7787c4b5317e628924f22cedd576964cce20103d
-Result: PASS
-Date: 2026-08-24
+script.read observation
+ -> exact Assets/*.cs path
+ -> expected contentSha256 CAS precondition
+ -> mutationId / durable lifecycle intent
+ -> bounded UTF-8 replacement write
+ -> AssetDatabase import / compilation observation
+ -> reconnect/domain-reload reconciliation
+ -> native re-read + new SHA verification
+ -> diagnostics/compile outcome
 ```
+
+Package scripts remain read-only in the planned first write slice. Blind overwrite without a current content hash is not planned.
 
 ### Current next candidates
 
-1. run the expanded Unity EditMode suite for **PR #43** and verify the new direct-Prefab-write regression test (expected source suite: **81 tests**),
-2. close **#41** after that real Unity pass,
-3. script read/write workflows,
-4. Play Mode and Test Runner controls,
-5. diagnostics extensions where they unlock real workflows,
-6. explicit Undo/recovery tools where useful to clients,
-7. only then consider broader Prefab apply/revert slices such as object/component-wide apply, Apply All, Revert, variants, or unpacking when bounded contracts are clear.
+1. run PR #44 expanded Unity EditMode suite: previous 81 + 4 Script-read tests = expected **85 tests**,
+2. run `npm --prefix mcp-server run verify:script-read` against the same candidate package,
+3. after both pass, mark Script read Verified and merge PR #44,
+4. design/implement the reload-safe `script.replace` CAS workflow,
+5. Play Mode and Test Runner controls,
+6. diagnostics extensions where they unlock real workflows,
+7. explicit Undo/recovery tools where useful to clients,
+8. only then consider broader Prefab apply/revert slices when bounded contracts are clear.
 
 No arbitrary C# execution fallback is planned.
 
@@ -199,12 +206,13 @@ No arbitrary C# execution fallback is planned.
 - An already-started Unity API call is not force-cancelled when its deadline later expires.
 - Component property edit supports only the explicitly bounded first-slice value kinds; complex serialized forms remain future work.
 - Component add deliberately rejects Transform/RectTransform in the current contract.
-- Asset search/inspection remains read-only; generic importer mutation and generic asset move/rename/delete are not implemented.
+- Generic importer mutation and generic asset move/rename/delete are not implemented.
+- Script read currently supports strict UTF-8 source only, exact `.cs` Unity assets, at most 4 MiB per source file, and character paging rather than line/symbol parsing.
+- Script write/replace is not implemented yet; compilation/domain-reload-safe mutation semantics remain the next Script reliability problem.
 - Prefab Asset creation is create-only under `Assets`, never overwrites an existing asset, and is a persistent disk write without Unity Undo.
-- Prefab property apply currently covers exactly one existing visible non-array override, requires an explicit writable Prefab Asset target, rejects Model Prefabs, and does not claim generic automatic rollback after an ambiguous persistent asset mutation.
-- Direct Prefab-instance `Undo.RecordObject` recording semantics are fixed in PR #43 but remain **Implemented, not Verified** until the expanded real Unity EditMode suite passes.
+- Prefab property apply covers exactly one existing visible non-array override, requires an explicit writable Prefab Asset target, rejects Model Prefabs, and does not claim generic automatic rollback after an ambiguous persistent asset mutation.
 - Prefab Apply All, object/component-wide Apply, Revert Overrides, unpacking, variant authoring, and generic asset deletion remain unimplemented.
-- Asset `dependencyHash` is an imported-state observation used as the current Prefab asset precondition; it is not a replacement for GUID identity or a general asset transaction token.
+- Asset `dependencyHash` is imported-state metadata/precondition evidence for the current bounded asset contracts; it is not a general transaction token. Script write plans use raw content SHA-256 as the file-content CAS token instead.
 - Recent Console text covers only the current domain-load capture window.
 - Unity support beyond 6000.3.21f1 is unverified.
 - Multi-editor routing, remote authentication/pairing, remote gateway hosting, and production AI-host integrations remain later-phase work.

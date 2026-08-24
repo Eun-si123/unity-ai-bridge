@@ -2,13 +2,14 @@ import { McpServer, fromJsonSchema } from "@modelcontextprotocol/server";
 
 import { requireAgentCapability } from "./agent/capabilities.js";
 import {
-  AssetBridgeServer,
   type AssetInspectOptions,
   type AssetSearchOptions,
   type PrefabAssetCreateOptions,
   type PrefabInspectOptions,
   type PrefabInstantiateOptions,
 } from "./bridge/asset-bridge-server.js";
+import { ScriptBridgeServer } from "./bridge/script-bridge-server.js";
+import { registerScriptTools } from "./script-tools.js";
 
 const searchInputSchema = fromJsonSchema({
   type: "object",
@@ -183,7 +184,9 @@ const prefabAssetCreateInputSchema = fromJsonSchema({
   additionalProperties: false,
 });
 
-export function registerAssetTools(server: McpServer, bridge: AssetBridgeServer): void {
+export function registerAssetTools(server: McpServer, bridge: ScriptBridgeServer): void {
+  registerScriptTools(server, bridge);
+
   server.registerTool(
     "unity_search_assets",
     {
@@ -310,7 +313,7 @@ export function registerAssetTools(server: McpServer, bridge: AssetBridgeServer)
   );
 }
 
-async function preflight(bridge: AssetBridgeServer, ...capabilities: string[]): Promise<void> {
+async function preflight(bridge: ScriptBridgeServer, ...capabilities: string[]): Promise<void> {
   const status = await bridge.requestEditorStatus();
   for (const capability of capabilities) {
     requireAgentCapability(status, capability);

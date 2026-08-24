@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { AssetBridgeServer } from "./asset-bridge-server.js";
+import { ScriptBridgeServer } from "./script-bridge-server.js";
 
 export interface PrefabPropertyApplyOptions {
   componentGlobalObjectId: string;
@@ -38,7 +38,7 @@ const MAX_MUTATION_ID_LENGTH = 128;
 const MAX_STATE_EPOCH_LENGTH = 128;
 const MUTATION_ID_PATTERN = /^[A-Za-z0-9._:-]+$/;
 
-export class PrefabPropertyBridgeServer extends AssetBridgeServer {
+export class PrefabPropertyBridgeServer extends ScriptBridgeServer {
   public async requestApplyPrefabPropertyOverride(
     options: PrefabPropertyApplyOptions,
     timeoutMs = 5000,
