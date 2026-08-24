@@ -26,10 +26,10 @@ On **2026-08-24**, the non-embedded development-install flow and expanded packag
 - automatic project-manifest `testables` registration: PASS
 - guarded package reimport / test-assembly discovery: PASS
 - `EunSung.UnityAiBridge.Editor.Tests` visible in EditMode Test Runner: PASS
-- historical suite milestones: 75/75, 80/80, 81/81, 85/85
-- current verified suite after PR #45 Script replace tests: **89 Passed / 0 Failed**
+- historical suite milestones: 75/75, 80/80, 81/81, 85/85, 89/89
+- current verified suite after PR #46 Play Mode control tests: **93 Passed / 0 Failed**
 
-`STATUS.md` records the current verified baseline and the exact runtime evidence for each later write family.
+`STATUS.md` records the current verified baseline and the exact runtime evidence for each later write/lifecycle family.
 
 ## Prefab property apply integration test
 
@@ -48,6 +48,18 @@ npm --prefix mcp-server run verify:script-replace
 ```
 
 This separation keeps the normal EditMode suite deterministic while still requiring a real Unity end-to-end gate before `script.replace` is considered Verified.
+
+## Play Mode control tests
+
+PR #46 adds four non-transition EditMode tests for stable-mode validation, four-state Play Mode classification, intent fingerprint stability, and safe Edit-mode no-op replay.
+
+The ordinary EditMode suite intentionally does **not** enter real Play Mode from inside its own test assembly. The actual asynchronous lifecycle, optional domain reload/reconnect, same-id replay, stale expected-mode rejection, settings preservation, and exact final Edit-mode restoration are verified separately by:
+
+```text
+npm --prefix mcp-server run verify:play-mode
+```
+
+This keeps the package suite deterministic while still requiring a real Editor lifecycle gate before Play Mode control is considered Verified.
 
 ## Manual fallback
 
