@@ -1,0 +1,18 @@
+{
+  "protocolVersion": "0",
+  "requestId": "fixture-test-list-assemblies",
+  "operation": "test.list",
+  "arguments": {
+    "testMode": "edit",
+    "assemblyName": "",
+    "nameContains": "UnityAiBridge",
+    "offset": 0,
+    "maxResults": 50
+  },
+  "risk": "read",
+  "route": {
+    "editorId": "fixture-editor",
+    "connectionGeneration": 1
+  },
+  "deadlineUnixMs": 4102444800000
+}
