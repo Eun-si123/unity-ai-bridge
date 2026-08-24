@@ -1,0 +1,18 @@
+{
+  "protocolVersion": "0",
+  "requestId": "fixture-test-run-playmode-start",
+  "operation": "test.run.playMode.start",
+  "arguments": {
+    "assemblyName": "EunSung.UnityAiBridge.PlayMode.Tests",
+    "testNames": [
+      "UnityAiBridge.PlayMode.Tests.PlayModeVerifierTests.RunsOneFrameInsidePlayMode"
+    ],
+    "mutationId": "fixture-test-run-playmode-1"
+  },
+  "risk": "write",
+  "route": {
+    "editorId": "fixture-editor",
+    "connectionGeneration": 1
+  },
+  "deadlineUnixMs": 4102444800000
+}
