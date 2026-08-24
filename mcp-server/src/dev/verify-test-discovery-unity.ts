@@ -46,9 +46,9 @@ try {
   if (discoveredEditorAssembly === undefined) {
     throw new Error(`EditMode discovery did not include ${editorAssembly}: ${JSON.stringify(editAssemblies)}`);
   }
-  if (discoveredEditorAssembly.testCaseCount < 104) {
+  if (discoveredEditorAssembly.testCaseCount < 105) {
     throw new Error(
-      `Expected ${editorAssembly} discovery to expose at least the 104-test candidate suite: ${JSON.stringify(discoveredEditorAssembly)}`,
+      `Expected ${editorAssembly} discovery to expose at least the 105-test candidate suite: ${JSON.stringify(discoveredEditorAssembly)}`,
     );
   }
 
@@ -61,8 +61,8 @@ try {
     maxResults: 20,
   });
   requireScope(discoveryTests, "tests");
-  if (discoveryTests.totalMatches !== 4 || discoveryTests.tests.length !== 4) {
-    throw new Error(`Expected exactly four TestDiscoveryControlTests leaves: ${JSON.stringify(discoveryTests)}`);
+  if (discoveryTests.totalMatches !== 5 || discoveryTests.tests.length !== 5) {
+    throw new Error(`Expected exactly five TestDiscoveryControlTests leaves: ${JSON.stringify(discoveryTests)}`);
   }
   if (!discoveryTests.tests.every((item) => item.selectableByBridge)) {
     throw new Error(`A verifier discovery test was not selectable by the exact-run contract: ${JSON.stringify(discoveryTests)}`);
@@ -96,6 +96,24 @@ try {
   const secondName = secondPage.tests[0]?.fullName ?? "";
   if (firstName.length === 0 || secondName.length === 0 || firstName === secondName || firstName.localeCompare(secondName) >= 0) {
     throw new Error(`Discovery paging overlapped or was not sorted. first=${firstName} second=${secondName}`);
+  }
+
+  console.log("[Unity AI Bridge] Verifying a page beyond the end never rewinds its cursor...");
+  const pastEndOffset = 1_000_000;
+  const pastEndPage = await listTests({
+    testMode: "edit",
+    assemblyName: editorAssembly,
+    offset: pastEndOffset,
+    maxResults: 1,
+  });
+  requireScope(pastEndPage, "tests");
+  if (
+    pastEndPage.returnedCount !== 0 ||
+    pastEndPage.nextOffset !== pastEndOffset ||
+    pastEndPage.truncated !== false ||
+    pastEndPage.tests.length !== 0
+  ) {
+    throw new Error(`Past-end discovery cursor was not monotonic: ${JSON.stringify(pastEndPage)}`);
   }
 
   console.log("[Unity AI Bridge] Discovering PlayMode assembly and exact runnable verifier selector...");
@@ -166,6 +184,7 @@ try {
     discoveryContractTestCount: discoveryTests.totalMatches,
     deterministicDiscoveryOrder: true,
     pagingVerified: true,
+    pastEndCursorMonotonic: true,
     firstPageFullName: firstName,
     secondPageFullName: secondName,
     playAssembly,
