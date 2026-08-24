@@ -2,7 +2,7 @@
 
 This document defines the bounded read-only Unity Test Framework discovery surface for bridge protocol v0.
 
-Implemented operation:
+Verified operation:
 
 - `test.list` — retrieve the assemblies or exact leaf tests Unity Test Framework actually discovers for EditMode or PlayMode.
 
@@ -76,7 +76,7 @@ nextOffset = offset + returnedCount
 truncated = nextOffset < totalMatches
 ```
 
-Matches are sorted with ordinal name ordering before paging.
+Matches are sorted with ordinal name ordering before paging. If `offset` is already beyond `totalMatches`, the result page is empty, `nextOffset` remains equal to the requested offset, and `truncated=false`; the cursor never rewinds.
 
 ### Assembly scope
 
@@ -117,10 +117,28 @@ This operation intentionally does not expose:
 
 Those remain separate future contracts.
 
-## Verification gate
+## Verification evidence
 
-Do not mark Test discovery Verified until:
+Verified on **2026-08-24** on Windows + Unity **6000.3.21f1** using PR #49 product head `736103567e863eb27f1035c431f6dc6aec023bb7`.
 
-- automated Node/local bridge checks pass,
-- the expanded installed-package EditMode suite passes on real Unity 6000.3.21f1,
-- the dedicated `verify:test-discovery` MCP gate proves EditMode and PlayMode assembly discovery, exact leaf names, deterministic paging, and selector compatibility with the already-verified Test Runner controls.
+Required gates passed:
+
+```text
+Installed-package EditMode regression: 105/105
+npm --prefix mcp-server run verify:test-discovery: PASS
+```
+
+The live gate proved:
+
+- native EditMode assembly discovery exposed `EunSung.UnityAiBridge.Editor.Tests` with `testCaseCount=105`,
+- five `TestDiscoveryControlTests` exact leaf names were discovered in deterministic order,
+- exact selectors were directly consumable by the current Test Runner start contract,
+- one-result paging and past-end cursor semantics matched the documented invariant,
+- native PlayMode assembly discovery exposed `EunSung.UnityAiBridge.PlayMode.Tests` with one test,
+- exact PlayMode selector matched `UnityAiBridge.PlayMode.Tests.PlayModeVerifierTests.RunsOneFrameInsidePlayMode`,
+- an unknown exact assembly failed closed,
+- final Editor state remained stable Edit Mode,
+- scene state epoch/revision remained unchanged,
+- `projectMutated=false`.
+
+See [`../docs/TEST_DISCOVERY_TESTING.md`](../docs/TEST_DISCOVERY_TESTING.md) and [`../STATUS.md`](../STATUS.md) for the recorded runtime evidence.
