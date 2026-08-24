@@ -3,7 +3,9 @@ using NUnit.Framework;
 using UnityAiBridge.Editor.Commands;
 using UnityAiBridge.Editor.Execution;
 using UnityEditor;
+using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace UnityAiBridge.Editor.Tests
 {
@@ -98,7 +100,10 @@ namespace UnityAiBridge.Editor.Tests
         {
             var unique = Guid.NewGuid().ToString("N");
             var prefabPath = $"Assets/UnityAiBridge_PrefabPropertyApply_{unique}.prefab";
+            var scenePath = $"Assets/UnityAiBridge_PrefabPropertyApply_{unique}.unity";
             var mutationId = "prefab-property-apply-" + unique;
+            var previousActiveScene = SceneManager.GetActiveScene();
+            Scene testScene = default;
             GameObject instance = null;
 
             try
@@ -110,8 +115,24 @@ namespace UnityAiBridge.Editor.Tests
 
                 var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
                 Assert.That(prefab, Is.Not.Null);
-                instance = PrefabUtility.InstantiatePrefab(prefab) as GameObject;
+
+                // GlobalObjectId for a scene object requires a scene asset GUID. Test Runner can
+                // execute in an unsaved transient scene, so create and save an additive test scene
+                // before asking Unity for the durable Component GlobalObjectId used by the command.
+                testScene = EditorSceneManager.NewScene(
+                    NewSceneSetup.EmptyScene,
+                    NewSceneMode.Additive);
+                Assert.That(EditorSceneManager.SaveScene(testScene, scenePath), Is.True);
+                Assert.That(SceneManager.SetActiveScene(testScene), Is.True);
+
+                instance = PrefabUtility.InstantiatePrefab(prefab, testScene) as GameObject;
                 Assert.That(instance, Is.Not.Null);
+                Assert.That(EditorSceneManager.SaveScene(testScene), Is.True);
+
+                var componentGlobalObjectId =
+                    GlobalObjectId.GetGlobalObjectIdSlow(instance.transform).ToString();
+                Assert.That(GlobalObjectId.TryParse(componentGlobalObjectId, out _), Is.True,
+                    "The integration test requires a durable scene-backed GlobalObjectId.");
 
                 var serialized = new SerializedObject(instance.transform);
                 serialized.UpdateIfRequiredOrScript();
@@ -127,8 +148,6 @@ namespace UnityAiBridge.Editor.Tests
                 Assert.That(scaleProperty.prefabOverride, Is.True,
                     "The test must create a real Prefab instance override before invoking the command.");
 
-                var componentGlobalObjectId =
-                    GlobalObjectId.GetGlobalObjectIdSlow(instance.transform).ToString();
                 var hashBefore = AssetDatabase.GetAssetDependencyHash(prefabPath).ToString();
                 var state = EditorStateRevision.Capture();
 
@@ -187,12 +206,28 @@ namespace UnityAiBridge.Editor.Tests
                 {
                     UnityEngine.Object.DestroyImmediate(instance);
                 }
-                if (!string.IsNullOrEmpty(AssetDatabase.AssetPathToGUID(prefabPath)) ||
-                    AssetDatabase.LoadMainAssetAtPath(prefabPath) != null)
+
+                if (previousActiveScene.IsValid() && previousActiveScene.isLoaded)
                 {
-                    AssetDatabase.DeleteAsset(prefabPath);
-                    AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
+                    SceneManager.SetActiveScene(previousActiveScene);
                 }
+                if (testScene.IsValid() && testScene.isLoaded)
+                {
+                    EditorSceneManager.CloseScene(testScene, true);
+                }
+
+                DeleteTemporaryAsset(prefabPath);
+                DeleteTemporaryAsset(scenePath);
+            }
+        }
+
+        private static void DeleteTemporaryAsset(string path)
+        {
+            if (!string.IsNullOrEmpty(AssetDatabase.AssetPathToGUID(path)) ||
+                AssetDatabase.LoadMainAssetAtPath(path) != null)
+            {
+                AssetDatabase.DeleteAsset(path);
+                AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
             }
         }
 
