@@ -97,15 +97,15 @@ Verified slices:
 - ✅ bounded single-property Prefab override apply — `unity_apply_prefab_property_override`; real Unity **80/80** plus dedicated live MCP E2E PASS
 - ✅ direct `Undo.RecordObject` scene-Prefab override recording — Transform/GameObject direct writes; real Unity **81/81** through PR #43
 - ✅ bounded Script read — `unity_read_script` / `script.read`; real Unity **85/85** plus live MCP reconstruction/identity/non-mutation PASS through PR #44
-- ⬜ Script replace/write workflow
+- ✅ reload-safe Script replace/write — `unity_replace_script` / `script.replace`; real Unity **89/89** plus live MCP CAS/write/compile/reload/replay/stale/restore PASS through PR #45
 - ⬜ Play Mode control
 - ⬜ Unity Test Runner control
 - ⬜ diagnostics extensions where they unlock concrete workflows
 - ⬜ explicit Undo/recovery tools where useful to clients
 
-### Current Script strategy
+### Verified Script strategy
 
-Script authoring crosses a different reliability boundary from scene mutations: changing a `.cs` file can cause AssetDatabase import, script compilation, assembly reload, and domain reload. The project therefore separates observation from mutation.
+Script authoring crosses a different reliability boundary from scene mutations: changing a `.cs` file can cause AssetDatabase import, script compilation, assembly reload, and domain reload. The project therefore separates observation from mutation and uses raw-file identity/content preconditions for writes.
 
 Verified observation slice:
 
@@ -121,37 +121,36 @@ exact Assets/*.cs or Packages/*.cs Unity asset
 
 `script.read` is read-only and limits a source file to 4 MiB and each returned chunk to 100,000 UTF-16 code units. It reports BOM/encoding, byte/character/line counts, `nextOffset`, truncation metadata, and raw `contentSha256`. Package source resolution uses Unity Package Manager metadata rather than guessing package-cache paths.
 
-### Next Script slice: reload-safe replace
-
-The first write slice must not be a blind whole-file overwrite. Its intended contract is:
+Verified first write slice:
 
 ```text
 script.read observation
  -> exact writable Assets/*.cs path
- -> expected raw contentSha256
- -> validate replacement content/encoding/bounds
- -> mutationId + reload-safe lifecycle record
- -> compare current bytes to expected SHA
- -> persist new bytes
- -> import / compilation observation
- -> survive reconnect/domain reload
- -> reconcile from native file + Unity state
- -> verify new SHA / GUID / path
- -> report compile outcome + diagnostics
+ -> expected GUID + raw contentSha256 CAS
+ -> validate replacement content/encoding/bounds/editability
+ -> record mutationId journal before persistence
+ -> compare current bytes to expected state
+ -> atomic replacement + exact new SHA verification
+ -> AssetDatabase import / compilation observation
+ -> survive domain reload/reconnect
+ -> same-id reconciliation without a blind second write
+ -> post-reload script.read verification
+ -> report persistence and compiler outcome separately
 ```
 
-Required first-slice properties:
+Verified first-slice properties:
 
-- exact `Assets/*.cs` target only; Packages remain read-only,
-- current raw `contentSha256` is mandatory CAS state,
+- exact existing `Assets/*.cs` target only; Packages remain read-only,
+- current GUID + raw `contentSha256` are mandatory CAS state,
 - stale content fails before write,
-- replacement content is bounded and encoding behavior is explicit,
+- replacement content is bounded and encoding/BOM behavior is explicit,
 - mutationId replay never blindly rewrites an already-started mutation,
 - file persistence and compile success are separate outcomes,
-- compilation errors are reported rather than misclassified as file-write failure,
+- compilation errors are reportable rather than misclassified as persistence failure,
 - no claim of Unity Undo for source-file writes,
-- recovery/rollback behavior is explicit and verified rather than assumed,
-- reconnect/domain reload is part of the normal success path.
+- recovery is guarded by recognized exact SHA states and refuses unknown concurrent third-state content,
+- reconnect/domain reload is part of the normal success path,
+- verifier/client timeouts must leave enough headroom for slower machines and larger projects; short fixed external timeouts can false-fail legitimate compile/reload work.
 
 ### Prefab strategy
 
@@ -177,8 +176,8 @@ Supporting work:
 - ✅ bounded existing-Prefab property-write contract + live MCP verifier
 - ✅ direct scene-Prefab write override recording audit/fix (#41 / PR #43)
 - ✅ bounded Script read + raw SHA-256 observation token (PR #44, **85/85 + live MCP PASS**)
+- ✅ reload-safe Script replace/CAS contract (PR #45, **89/89 + live MCP PASS**)
 - 🟨 consistent risk classification as new operations are added
-- ⬜ reload-safe Script replace/CAS contract
 - ⬜ broader tool-schema compatibility tests as the surface grows
 - ⬜ better structured error explanations for AI clients
 
@@ -199,15 +198,7 @@ Reliability requirements inherited from Phase 2:
 
 ### Immediate next gate
 
-Design and implement the first reload-safe Script replace/CAS slice, then prove at minimum:
-
-1. exact current SHA allows one intended write,
-2. stale SHA prevents any write,
-3. successful persistence produces the exact new raw SHA,
-4. the same mutationId does not perform a second write after transport ambiguity or domain reload,
-5. Unity import/compilation and any domain reload are reconciled rather than treated as lost execution,
-6. compile errors are surfaced distinctly from persistence errors,
-7. the verifier restores or cleans its temporary script deterministically without hiding ambiguous outcomes.
+Choose the next bounded workflow based on usefulness and testability. Current candidates are Play Mode control and Unity Test Runner control. Whichever is selected must preserve capability preflight, bounded inputs/results, explicit lifecycle/timeout behavior, and real Unity verification before it is marked Verified.
 
 ### Exit gate
 
