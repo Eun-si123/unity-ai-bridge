@@ -367,6 +367,10 @@ namespace UnityAiBridge.Editor.Commands
                 context.MarkUndoRecorded();
                 gameObject.name = name;
                 gameObject.SetActive(activeSelf);
+                if (PrefabUtility.IsPartOfNonAssetPrefabInstance(gameObject))
+                {
+                    PrefabUtility.RecordPrefabInstancePropertyModifications(gameObject);
+                }
                 EditorSceneManager.MarkSceneDirty(context.activeScene);
             }
 
