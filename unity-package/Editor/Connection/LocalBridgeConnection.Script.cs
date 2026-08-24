@@ -90,6 +90,16 @@ namespace UnityAiBridge.Editor.Connection
                     exception.Message,
                     cancellationToken);
             }
+            catch (ScriptReadLimitException exception)
+            {
+                await SendErrorAsync(
+                    current,
+                    command.requestId,
+                    "unsupported",
+                    "script_too_large",
+                    exception.Message,
+                    cancellationToken);
+            }
             catch (Exception exception)
             {
                 await SendErrorAsync(
