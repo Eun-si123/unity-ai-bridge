@@ -17,7 +17,7 @@ Install Unity package
 
 The user should not need to understand MCP, ports, WebSockets, JSON-RPC, or Unity Editor scripting for the default hosted path.
 
-A public/self-hostable core is the design target, but the project license has not yet been selected. Do not describe the current repository as a licensed open-source release until a `LICENSE` file exists.
+The reusable public core is licensed under **Apache License 2.0**. The long-term product target remains a public/self-hostable core plus an optional managed convenience service.
 
 ## 2. Priorities
 
@@ -34,34 +34,35 @@ In order:
 ## 3. High-level architecture
 
 ```text
-AI / MCP client
-      |
-      | MCP (Streamable HTTP for remote)
-      v
-Public MCP/server core
-  - tool registry
-  - validation
-  - risk/policy metadata
-  - request/result correlation
-  - reusable routing abstractions
-      |
-      | versioned Unity bridge protocol
-      | WebSocket first
-      v
-Unity Editor Agent (C# UPM package)
-  - connection manager
-  - command queue
-  - main-thread dispatcher
-  - object resolver
-  - Undo/dirty handling
-  - compile/reload watcher
-  - Unity tool handlers
-      |
-      v
-Unity Editor APIs
+ChatGPT / Claude / Codex / Gemini / Cursor / other MCP host
+                              |
+                              | MCP
+                              v
+                   Public MCP/server core
+                     - tool registry
+                     - validation
+                     - risk/policy metadata
+                     - request/result correlation
+                     - reusable routing
+                              |
+                              | versioned Unity bridge protocol
+                              | WebSocket first
+                              v
+                   Unity Editor Agent (C# UPM)
+                     - connection lifecycle
+                     - command queue
+                     - main-thread dispatcher
+                     - target resolver
+                     - mutation transaction/replay safety
+                     - Undo/dirty handling
+                     - compile/reload handling
+                     - Unity tool handlers
+                              |
+                              v
+                       Unity Editor APIs
 ```
 
-Managed production identity, storage, rate limiting, monitoring, deployment, and private operational adapters belong in `unity-ai-mcp-infra`. That repository should compose/deploy the public core, not implement a second private Unity/MCP core.
+Managed production identity, storage, rate limiting, monitoring, deployment, and private operational adapters belong in `unity-ai-mcp-infra`. That repository composes/deploys the public core rather than implementing a second private Unity/MCP core.
 
 ## 4. Technology direction
 
@@ -71,7 +72,7 @@ Managed production identity, storage, rate limiting, monitoring, deployment, and
 - Primarily Editor-side automation code.
 - Unity API mutations execute through a controlled main-thread boundary.
 - Network callbacks do not directly mutate Unity objects.
-- Initial development target: Unity **6000.3.21f1** (`unity: 6000.3`, `unityRelease: 21f1` in the package manifest).
+- Initial verified development target: Unity **6000.3.21f1** (`unity: 6000.3`, `unityRelease: 21f1` in the package manifest).
 - The broader/long-term Unity support matrix is unresolved and must be verified rather than inferred from the initial target.
 
 ### MCP/server side
@@ -84,25 +85,26 @@ Initial implementation baseline:
 - `@modelcontextprotocol/server` **2.0.0**,
 - TypeScript **7.0.2**,
 - `@types/node` **24.13.3**,
-- Streamable HTTP for remote MCP,
+- stdio for the current local MCP path,
+- Streamable HTTP as the remote MCP target,
 - web-standard-compatible server code where practical.
 
-The current direct versions are pinned in source. A generated dependency lockfile is still required before the dependency graph can be treated as fully frozen.
+Direct dependency versions and the generated lockfile are committed. Compatibility claims still require runtime evidence rather than version pins alone.
 
 ### Unity bridge transport
 
 The bridge protocol is transport-independent. WebSocket is the first transport implementation.
 
-Local mode may use localhost WebSocket. Hosted mode should use an outbound secure Unity connection so normal users do not need inbound firewall/router configuration.
+Local mode uses loopback WebSocket in the current implementation. Hosted mode should use an outbound secure Unity connection so normal users do not need inbound firewall/router configuration.
 
 ## 5. Operating modes
 
 ### A. Local development/self-host test
 
 ```text
-local MCP client
- -> public MCP/server core
- -> localhost bridge
+local MCP host
+ -> public MCP/server core over stdio
+ -> localhost Unity bridge
  -> Unity Editor Agent
 ```
 
@@ -111,10 +113,10 @@ No hosted account should be required.
 ### B. Easy Connect / managed service
 
 ```text
-cloud AI client
- -> managed deployment of public MCP/gateway core
+cloud AI host
+ -> remote Streamable HTTP MCP/gateway
  -> private production auth/storage/policy adapters
- -> authenticated route
+ -> authorized editor route
  -> outbound Unity connection
 ```
 
@@ -122,9 +124,24 @@ The intended UX hides manual ports and MCP JSON configuration.
 
 ### C. Self-hosted remote
 
-Advanced users/teams should eventually be able to deploy the public core themselves, subject to the project license and packaging implemented at that time.
+Advanced users/teams should eventually be able to deploy the public Apache-2.0 core themselves using documented adapters/configuration without depending on private service logic.
 
-### D. BYO MCP / adapter mode
+### D. Portable agent/plugin packaging
+
+A future distribution package may use Agent Plugins 1.0 or a successor standard to bundle shared MCP server declarations, skills, and metadata.
+
+This layer is optional and external to core Unity semantics:
+
+```text
+portable plugin package
+ -> declares/launches or connects to shared MCP core
+ -> optional reusable skills
+ -> thin host-specific metadata only when required
+```
+
+MCP remains the canonical tool boundary. Portable packaging does not replace the MCP server and must not fork Unity command logic.
+
+### E. BYO MCP / adapter mode
 
 Possible future mode only. It must not become a generic unrestricted URL/server proxy. Security review, SSRF protection, capability restriction, and explicit policy are prerequisites.
 
@@ -132,7 +149,7 @@ Possible future mode only. It must not become a generic unrestricted URL/server 
 
 ### Public `unity-ai-bridge`
 
-Intended reusable behavior:
+Reusable behavior belongs here:
 
 - Unity Agent/package,
 - bridge protocol,
@@ -140,8 +157,10 @@ Intended reusable behavior:
 - validation/risk metadata,
 - local/self-host path,
 - reusable routing abstractions,
+- reliability/verification contracts,
 - tests and public docs,
-- thin publishable provider adapters/metadata.
+- portable integration packaging when appropriate,
+- thin publishable provider adapters/metadata only where genuinely required.
 
 ### Private `unity-ai-mcp-infra`
 
@@ -160,7 +179,7 @@ If self-hosters need a behavior for basic Unity/MCP operation, it strongly belon
 
 MCP-facing tools and Unity-facing commands are separate contracts.
 
-Protocol v0 now defines source schemas for concepts equivalent to:
+Protocol v0 defines source schemas for concepts equivalent to:
 
 ```text
 protocolVersion
@@ -187,7 +206,7 @@ compile state when applicable
 error { category, code, message, details }
 ```
 
-The v0 field names are now source-defined in `bridge-protocol/schemas/`. Version `0` is pre-stable and may change during early implementation, but schema/type/fixture changes must move together.
+Version `0` is pre-stable and may change during early implementation, but schema/type/fixture changes must move together.
 
 ## 8. Request identity and retry safety
 
@@ -216,9 +235,11 @@ network receive
  -> enqueue
  -> Unity main-thread dispatcher
  -> re-resolve/revalidate target
+ -> check state preconditions
  -> register Undo when applicable
  -> execute Unity API
- -> observe result
+ -> native semantic readback
+ -> rollback + rollback verification when required
  -> return structured response
 ```
 
@@ -241,7 +262,7 @@ accepted -> queued -> running -> waiting_for_unity -> completed
                                       +------------- -> cancelled/timeout
 ```
 
-Exact task APIs are unresolved.
+Exact task APIs remain unresolved.
 
 ## 11. Object/target identity
 
@@ -252,10 +273,10 @@ Prefer the strongest identity appropriate to the target:
 - asset GUID for assets,
 - `GlobalObjectId` where suitable,
 - scene identity + hierarchy identity/path + validation metadata for scene objects,
-- component type + owning-object identity for components,
+- component identity plus owning-object/type information,
 - transient InstanceID only as an optional hint/optimization.
 
-Before mutation, revalidate that the resolved target still matches expected identity metadata.
+Before mutation, revalidate that the resolved target still matches expected identity/state metadata.
 
 ## 12. Compilation and domain reload
 
@@ -285,7 +306,7 @@ Reconnects are expected because of:
 - stale sockets,
 - duplicate connection attempts.
 
-Connections should carry an explicit epoch/generation so delayed messages from an old socket cannot mutate a newly reconnected editor session.
+Connections carry explicit generation/epoch concepts so delayed messages from an old socket cannot mutate a newly reconnected editor session.
 
 ## 14. Undo, dirty state, and saving
 
@@ -302,22 +323,21 @@ A future grouping/transaction feature may make several AI operations undoable as
 
 Do not begin with hundreds of independent tool schemas.
 
-Initial target: roughly 10–20 stable domain tools/tool families, likely including:
+Domain families include:
 
 1. editor/status,
-2. scene,
-3. hierarchy,
-4. GameObject/transform,
-5. component,
-6. console/compiler,
-7. asset,
-8. prefab,
-9. script,
-10. Play Mode,
-11. tests,
-12. Undo/recovery.
+2. scene/hierarchy,
+3. GameObject/transform,
+4. component,
+5. console/compiler diagnostics,
+6. asset,
+7. prefab,
+8. script,
+9. Play Mode,
+10. tests,
+11. Undo/recovery.
 
-Names/actions are not accepted API until implemented/versioned.
+Names/actions are accepted API only when implemented/versioned in source.
 
 Principles:
 
@@ -325,7 +345,8 @@ Principles:
 - no giant `do_anything` tool,
 - no arbitrary C# execution as an early default fallback,
 - frequently used/testable workflows graduate into dedicated actions,
-- advanced tool families may be discovered/lazily exposed later.
+- advanced tool families may be discovered/lazily exposed later,
+- tool descriptions/results should remain usable by multiple MCP hosts rather than encode one vendor's private prompting assumptions.
 
 ## 16. Risk classes
 
@@ -357,7 +378,9 @@ Distinguish at least:
 - authentication/authorization/policy rejection,
 - no matching editor connection,
 - stale/ambiguous target,
+- mutation replay/stale replay,
 - queued/running timeout/cancellation,
+- semantic verification or rollback failure,
 - Unity API exception,
 - compile/import/reload state,
 - disconnected editor,
@@ -396,7 +419,7 @@ Conceptual Easy Connect flow:
 4. Gateway replaces pairing authority with scoped connection credentials.
 5. Pairing authority expires and is not a permanent credential.
 
-Exact cryptography, expiry values, identity provider, and credential storage are unresolved.
+Exact cryptography, expiry values, identity provider, and credential storage remain unresolved until Phase 4 implementation evidence exists.
 
 ## 20. Testing architecture
 
@@ -420,14 +443,19 @@ Exact cryptography, expiry values, identity provider, and credential storage are
 
 - dispatcher,
 - object resolver,
-- Undo registration,
+- state revision/preconditions,
+- mutation lifecycle,
+- Undo/rollback behavior,
 - dirty-state reporting,
-- GameObject/component operations,
+- GameObject/Transform/Component operations,
+- Asset/Prefab operations,
 - compile/reload helpers where practical.
+
+The package's test assembly is `EunSung.UnityAiBridge.Editor.Tests` and uses Unity's `TestAssemblies` reference. Unity requires non-embedded package dependencies to appear in the consuming project's project-manifest `testables` array before package tests load. For Local, LocalTarball, and Git development installs, the package may add its own package name automatically using the guarded behavior defined in D-019. Registry installs are not automatically modified.
 
 ### End-to-end
 
-First required path:
+Required evidence path:
 
 ```text
 MCP call
@@ -435,7 +463,7 @@ MCP call
  -> bridge
  -> Unity main thread
  -> Unity API
- -> structured result
+ -> semantic/native result
  -> state re-read proves requested effect
 ```
 
@@ -445,15 +473,38 @@ A mocked Unity unit test alone cannot make a runtime feature `Verified`.
 
 Treat these as independent compatibility surfaces:
 
-1. MCP protocol/client compatibility,
-2. Unity bridge protocol compatibility,
-3. Unity version/API compatibility.
+1. MCP protocol/host compatibility,
+2. optional portable-plugin packaging compatibility,
+3. Unity bridge protocol compatibility,
+4. Unity version/API compatibility.
 
 Do not collapse them into one implicit version.
 
 The bridge protocol is explicitly versioned from its first source implementation as v0. Breaking public schema changes need migration notes once external consumers depend on a versioned contract.
 
-## 22. Expansion after the core
+## 22. Integration strategy
+
+The preferred dependency direction is:
+
+```text
+shared Unity/MCP core
+      |
+      +-> ChatGPT metadata/adapter if needed
+      +-> Claude metadata/adapter if needed
+      +-> Gemini metadata/adapter if needed
+      +-> Codex/Cursor/Copilot direct MCP compatibility
+      +-> portable Agent Plugins package when useful
+```
+
+Rules:
+
+- do not implement duplicate Unity command logic per provider,
+- verify each host against the same representative workflow matrix,
+- treat host approval UX/auth/distribution differences as integration-layer concerns,
+- re-check fast-moving external plugin standards at implementation time,
+- a host-specific limitation must be documented rather than hidden by silently weakening core safety semantics.
+
+## 23. Expansion after the core
 
 Candidates include:
 
@@ -472,7 +523,7 @@ Candidates include:
 
 Add domains because they are useful and testable, not to hit a marketing number.
 
-## 23. Early non-goals
+## 24. Early non-goals
 
 - reproducing every feature of another Unity MCP project,
 - 300+ tools for appearance/marketing,
@@ -484,7 +535,7 @@ Add domains because they are useful and testable, not to hit a marketing number.
 - TeamForge integration,
 - multi-agent orchestration.
 
-## 24. How to resume the project
+## 25. How to resume the project
 
 After losing conversation context:
 
