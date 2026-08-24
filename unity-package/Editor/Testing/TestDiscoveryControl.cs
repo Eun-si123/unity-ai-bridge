@@ -14,7 +14,6 @@ namespace UnityAiBridge.Editor.Testing
     {
         public string name;
         public int testCaseCount;
-        public string assemblyType;
     }
 
     [Serializable]
@@ -25,8 +24,8 @@ namespace UnityAiBridge.Editor.Testing
         public string uniqueName;
         public string parentFullName;
         public string runState;
-        public string requiresPlayMode;
         public string[] categories;
+        public bool selectableByBridge;
     }
 
     [Serializable]
@@ -66,6 +65,9 @@ namespace UnityAiBridge.Editor.Testing
         public const int MaximumAssemblyNameLength = 256;
         public const int MaximumNameContainsLength = 256;
         public const int MaximumResults = 200;
+        public const int MaximumInformationalTextLength = 1_024;
+        public const int MaximumCategoriesPerTest = 32;
+        public const int MaximumCategoryLength = 256;
 
         public static Task<TestDiscoveryPayload> RetrieveAsync(
             string testMode,
@@ -76,8 +78,16 @@ namespace UnityAiBridge.Editor.Testing
             long deadlineUnixMs)
         {
             var mode = ParseMode(testMode);
-            var normalizedAssembly = NormalizeOptional(assemblyName, MaximumAssemblyNameLength, nameof(assemblyName));
-            var normalizedContains = NormalizeOptional(nameContains, MaximumNameContainsLength, nameof(nameContains));
+            var normalizedAssembly = NormalizeOptional(
+                assemblyName,
+                MaximumAssemblyNameLength,
+                nameof(assemblyName),
+                rejectDllSuffix: true);
+            var normalizedContains = NormalizeOptional(
+                nameContains,
+                MaximumNameContainsLength,
+                nameof(nameContains),
+                rejectDllSuffix: false);
             var pageOffset = ValidateOffset(offset);
             var pageSize = ValidateMaxResults(maxResults);
 
@@ -101,7 +111,11 @@ namespace UnityAiBridge.Editor.Testing
 
             try
             {
+#pragma warning disable 0618
+                // RetrieveTestList is intentionally used for compatibility with the public
+                // Test Framework 1.4 surface supported by the current integration contract.
                 api.RetrieveTestList(mode, root =>
+#pragma warning restore 0618
                 {
                     if (finished)
                     {
@@ -146,17 +160,6 @@ namespace UnityAiBridge.Editor.Testing
             return completion.Task;
         }
 
-        internal static TestDiscoveryPayload BuildPayloadForVerification(
-            ITestAdaptor root,
-            string testMode,
-            string assemblyName,
-            string nameContains,
-            int offset,
-            int maxResults)
-        {
-            return BuildPayload(root, testMode, assemblyName, nameContains, offset, maxResults);
-        }
-
         internal static int ValidateOffsetForVerification(long value)
         {
             return ValidateOffset(value);
@@ -165,6 +168,24 @@ namespace UnityAiBridge.Editor.Testing
         internal static int ValidateMaxResultsForVerification(long value)
         {
             return ValidateMaxResults(value);
+        }
+
+        internal static string NormalizeAssemblyForVerification(string value)
+        {
+            return NormalizeOptional(
+                value,
+                MaximumAssemblyNameLength,
+                "assemblyName",
+                rejectDllSuffix: true);
+        }
+
+        internal static string NormalizeContainsForVerification(string value)
+        {
+            return NormalizeOptional(
+                value,
+                MaximumNameContainsLength,
+                "nameContains",
+                rejectDllSuffix: false);
         }
 
         private static TestDiscoveryPayload BuildPayload(
@@ -198,7 +219,6 @@ namespace UnityAiBridge.Editor.Testing
                     {
                         name = item.Name,
                         testCaseCount = Math.Max(0, item.Node.TestCaseCount),
-                        assemblyType = item.Node.AssemblyType.ToString(),
                     })
                     .ToArray();
 
@@ -236,17 +256,16 @@ namespace UnityAiBridge.Editor.Testing
                 .OrderBy(test => test.FullName, StringComparer.Ordinal)
                 .Select(test => new TestCaseDiscoveryPayload
                 {
-                    name = test.Name ?? string.Empty,
+                    name = Truncate(test.Name, MaximumInformationalTextLength),
+                    // FullName is deliberately not truncated because it is the exact selector
+                    // that clients feed into unity_start_*_tests.
                     fullName = test.FullName ?? string.Empty,
-                    uniqueName = test.UniqueName ?? string.Empty,
-                    parentFullName = test.ParentFullName ?? string.Empty,
+                    uniqueName = Truncate(test.UniqueName, MaximumInformationalTextLength),
+                    parentFullName = Truncate(test.ParentFullName, MaximumInformationalTextLength),
                     runState = test.RunState.ToString(),
-                    requiresPlayMode = FormatRequiresPlayMode(test.RequiresPlayMode),
-                    categories = (test.Categories ?? Array.Empty<string>())
-                        .Where(value => !string.IsNullOrEmpty(value))
-                        .Distinct(StringComparer.Ordinal)
-                        .OrderBy(value => value, StringComparer.Ordinal)
-                        .ToArray(),
+                    categories = NormalizeCategories(test.Categories),
+                    selectableByBridge = (test.FullName ?? string.Empty).Length <=
+                                         TestRunnerControl.MaximumTestNameLength,
                 })
                 .ToArray();
 
@@ -266,6 +285,21 @@ namespace UnityAiBridge.Editor.Testing
                 assemblies = Array.Empty<TestAssemblyDiscoveryPayload>(),
                 tests = testPage,
             };
+        }
+
+        private static string[] NormalizeCategories(string[] categories)
+        {
+            if (categories == null || categories.Length == 0)
+            {
+                return Array.Empty<string>();
+            }
+            return categories
+                .Where(value => !string.IsNullOrEmpty(value))
+                .Select(value => Truncate(value, MaximumCategoryLength))
+                .Distinct(StringComparer.Ordinal)
+                .OrderBy(value => value, StringComparer.Ordinal)
+                .Take(MaximumCategoriesPerTest)
+                .ToArray();
         }
 
         private static void CollectAssemblyNodes(ITestAdaptor node, List<ITestAdaptor> output)
@@ -336,11 +370,19 @@ namespace UnityAiBridge.Editor.Testing
             throw new ArgumentException("testMode must be exactly 'edit' or 'play'.", nameof(value));
         }
 
-        private static string NormalizeOptional(string value, int maximumLength, string name)
+        private static string NormalizeOptional(
+            string value,
+            int maximumLength,
+            string name,
+            bool rejectDllSuffix)
         {
-            if (string.IsNullOrWhiteSpace(value))
+            if (value == null || value.Length == 0)
             {
                 return string.Empty;
+            }
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                throw new ArgumentException($"{name} may not be whitespace-only.", name);
             }
             if (value.Length > maximumLength)
             {
@@ -348,12 +390,7 @@ namespace UnityAiBridge.Editor.Testing
                     name,
                     $"{name} must be at most {maximumLength} characters.");
             }
-            if (string.Equals(name, nameof(value), StringComparison.Ordinal))
-            {
-                return value;
-            }
-            if (string.Equals(name, "assemblyName", StringComparison.Ordinal) &&
-                value.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+            if (rejectDllSuffix && value.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
             {
                 throw new ArgumentException("assemblyName must not include the .dll extension.", name);
             }
@@ -391,13 +428,13 @@ namespace UnityAiBridge.Editor.Testing
                 : value;
         }
 
-        private static string FormatRequiresPlayMode(bool? value)
+        private static string Truncate(string value, int maximumLength)
         {
-            if (!value.HasValue)
+            if (string.IsNullOrEmpty(value))
             {
-                return "unspecified";
+                return string.Empty;
             }
-            return value.Value ? "required" : "not_required";
+            return value.Length <= maximumLength ? value : value.Substring(0, maximumLength);
         }
     }
 }
