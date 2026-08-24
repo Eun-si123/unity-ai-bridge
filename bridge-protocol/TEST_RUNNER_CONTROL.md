@@ -161,15 +161,19 @@ Windows + Unity **6000.3.21f1**:
 
 The previous 97/97 candidate plus first live gate exposed the full-tree `RunStarted().TestCaseCount` mismatch described above; the count definition was corrected and regression-tested before EditMode control was marked Verified.
 
-### PlayMode — candidate gate
+### PlayMode — Verified 2026-08-24
 
-Do not mark the PlayMode extension Verified until all of the following pass on Unity 6000.3.21f1:
+Windows + Unity **6000.3.21f1**, PR #48 product head `00fc44fb0b9e4fac855c5853d2aeb3fe1d7d125c`:
 
-- expanded ordinary EditMode regression suite: expected **100/100**,
-- dedicated PlayMode test assembly is discoverable,
-- its one-frame `[UnityTest]` passes when run as PlayMode,
-- official-MCP-client `verify:playmode-tests` passes through PlayMode/domain-reload/reconnect and returns exactly one clean terminal pass,
-- same-id immediate/completed replay preserves one `runGuid`,
-- conflicting same-id PlayMode selection is rejected,
-- final native Editor state returns to stable Edit Mode,
-- user Enter Play Mode settings remain unchanged.
+- expanded ordinary EditMode regression suite: **100 Passed / 0 Failed**,
+- dedicated PlayMode assembly `EunSung.UnityAiBridge.PlayMode.Tests`: **1 Passed / 0 Failed**,
+- official-MCP-client `verify:playmode-tests`: PASS,
+- the exact one-frame `[UnityTest]` returned `selectedTestCaseCount=1`, `passCount=1`, `failCount=0`,
+- the verifier proved `Application.isPlaying == true` across a yielded frame,
+- immediate and completed same-id replays preserved one stable Unity `runGuid` (`463bc221-4385-4b94-87a4-78313e9dc60d`),
+- conflicting same-id PlayMode selection was rejected,
+- final native Editor state returned to stable Edit Mode,
+- Enter Play Mode settings were preserved (`enterPlayModeOptionsEnabled=false`, Domain Reload enabled, Scene Reload enabled in the verified environment),
+- `initialDeliveryReconciled=false` was the observed successful fast-path outcome; ambiguous disconnect/reconnect reconciliation remains separately covered by Node bridge tests.
+
+The PlayMode extension is therefore **Verified** for this named environment. This does not imply standalone Player test execution, broader Unity versions/OSes, concurrent owned runs, cancellation, or full Editor-restart recovery.
