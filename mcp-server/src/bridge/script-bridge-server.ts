@@ -59,6 +59,8 @@ export interface ScriptReplacePersistencePayload {
   writeCompletedUnixMs: number;
   importRequested: boolean;
   importRequestedUnixMs: number;
+  importCallReturned: boolean;
+  importError: string;
 }
 
 export interface ScriptReplacePayload extends ScriptReplacePersistencePayload {
@@ -87,6 +89,7 @@ const GUID_PATTERN = /^[0-9a-f]{32}$/i;
 const MUTATION_ID_PATTERN = /^[A-Za-z0-9._:-]+$/;
 const DELIVERY_TIMEOUT_MS = 5_000;
 const POLL_INTERVAL_MS = 200;
+const RELOAD_GRACE_MS = 5_000;
 
 export class ScriptBridgeServer extends AssetBridgeServer {
   public async requestReadScript(
@@ -189,6 +192,37 @@ export class ScriptBridgeServer extends AssetBridgeServer {
       initialEditor.editorId,
       totalDeadline,
     );
+
+    if (compilation === undefined) {
+      const finalRead = await this.readBackAfterReplace(
+        persistence,
+        initialEditor.editorId,
+        totalDeadline,
+      );
+      return combineReplaceOutcome(
+        persistence,
+        "not_observed",
+        emptyCompilation(),
+        finalRead,
+        initialEditor.connectionGeneration,
+        this.connectedEditor?.connectionGeneration ?? initialEditor.connectionGeneration,
+      );
+    }
+
+    const errors = compilation.latestCompilation.messages.filter((message) => message.severity === "error");
+    const compileStatus: ScriptCompileStatus = errors.length > 0 ? "failed" : "succeeded";
+
+    // CompilationPipeline.compilationFinished can be observed just before Unity reloads
+    // the newly compiled assemblies. Give a successful compile a small bounded window to
+    // expose that expected connection-generation change instead of racing the reload.
+    if (compileStatus === "succeeded") {
+      await this.waitForExpectedReload(
+        initialEditor.editorId,
+        initialEditor.connectionGeneration,
+        Math.min(totalDeadline, Date.now() + RELOAD_GRACE_MS),
+      );
+    }
+
     const finalRead = await this.readBackAfterReplace(
       persistence,
       initialEditor.editorId,
@@ -196,19 +230,6 @@ export class ScriptBridgeServer extends AssetBridgeServer {
     );
     const finalGeneration = this.connectedEditor?.connectionGeneration ?? initialEditor.connectionGeneration;
 
-    if (compilation === undefined) {
-      return combineReplaceOutcome(
-        persistence,
-        "not_observed",
-        emptyCompilation(),
-        finalRead,
-        initialEditor.connectionGeneration,
-        finalGeneration,
-      );
-    }
-
-    const errors = compilation.latestCompilation.messages.filter((message) => message.severity === "error");
-    const compileStatus: ScriptCompileStatus = errors.length > 0 ? "failed" : "succeeded";
     return combineReplaceOutcome(
       persistence,
       compileStatus,
@@ -275,6 +296,29 @@ export class ScriptBridgeServer extends AssetBridgeServer {
       await delay(Math.min(POLL_INTERVAL_MS, Math.max(1, remainingMs(deadlineUnixMs))));
     }
     return undefined;
+  }
+
+  private async waitForExpectedReload(
+    editorId: string,
+    initialConnectionGeneration: number,
+    deadlineUnixMs: number,
+  ): Promise<void> {
+    while (remainingMs(deadlineUnixMs) > 0) {
+      const current = this.connectedEditor;
+      if (current === undefined) {
+        await this.waitForSameEditor(editorId, deadlineUnixMs);
+        continue;
+      }
+      if (current.editorId !== editorId) {
+        throw new Error(
+          `A different Unity Editor connected during script.replace reload observation. expectedEditorId=${editorId} observedEditorId=${current.editorId}`,
+        );
+      }
+      if (current.connectionGeneration !== initialConnectionGeneration) {
+        return;
+      }
+      await delay(Math.min(POLL_INTERVAL_MS, Math.max(1, remainingMs(deadlineUnixMs))));
+    }
   }
 
   private async readBackAfterReplace(
@@ -465,10 +509,13 @@ function isScriptReplacePersistencePayload(value: unknown): value is ScriptRepla
     if (nonNegativeInteger(value[key]) === undefined) return false;
   }
   if (typeof value.importRequested !== "boolean") return false;
+  if (typeof value.importCallReturned !== "boolean") return false;
+  if (typeof value.importError !== "string") return false;
   if (String(value.guid).toLowerCase() !== String(value.expectedGuid).toLowerCase()) return false;
   if (String(value.contentSha256Before).toLowerCase() !== String(value.expectedContentSha256).toLowerCase()) return false;
   if (value.changed && String(value.contentSha256After).toLowerCase() === String(value.contentSha256Before).toLowerCase()) return false;
   if (!value.changed && String(value.contentSha256After).toLowerCase() !== String(value.contentSha256Before).toLowerCase()) return false;
+  if (!value.importRequested && value.importRequestedUnixMs !== 0) return false;
   return true;
 }
 
