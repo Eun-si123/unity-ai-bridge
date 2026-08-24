@@ -39,11 +39,17 @@ namespace UnityAiBridge.Editor.Commands
         public ScriptEncodingUnsupportedException(string message) : base(message) { }
     }
 
+    internal sealed class ScriptReadLimitException : InvalidOperationException
+    {
+        public ScriptReadLimitException(string message) : base(message) { }
+    }
+
     internal static class ScriptReadCommand
     {
         public const int DefaultMaxChars = 20000;
         public const int MaximumMaxChars = 100000;
         public const int MaximumPathLength = 512;
+        public const long MaximumSourceBytes = 4L * 1024L * 1024L;
 
         private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
 
@@ -88,6 +94,14 @@ namespace UnityAiBridge.Editor.Commands
             {
                 throw new ScriptUnavailableException(
                     "Unity knows the script asset, but its source file is unavailable on disk.");
+            }
+
+            var fileInfo = new FileInfo(absolutePath);
+            if (fileInfo.Length > MaximumSourceBytes)
+            {
+                throw new ScriptReadLimitException(
+                    $"script.read refuses source files larger than {MaximumSourceBytes} bytes. " +
+                    $"Observed {fileInfo.Length} bytes for '{canonicalPath}'.");
             }
 
             var bytes = File.ReadAllBytes(absolutePath);
