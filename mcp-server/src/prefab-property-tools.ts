@@ -5,6 +5,7 @@ import {
   PrefabPropertyBridgeServer,
   type PrefabPropertyApplyOptions,
 } from "./bridge/prefab-property-bridge-server.js";
+import { registerPlayModeTools } from "./play-mode-tools.js";
 
 const applyPrefabPropertyInputSchema = fromJsonSchema({
   type: "object",
@@ -73,6 +74,8 @@ export function registerPrefabPropertyTools(
   server: McpServer,
   bridge: PrefabPropertyBridgeServer,
 ): void {
+  registerPlayModeTools(server, bridge);
+
   server.registerTool(
     "unity_apply_prefab_property_override",
     {
