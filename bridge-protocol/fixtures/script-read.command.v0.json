@@ -1,0 +1,16 @@
+{
+  "protocolVersion": "0",
+  "requestId": "fixture-script-read",
+  "operation": "script.read",
+  "arguments": {
+    "path": "Packages/com.eunsung.unity-ai-bridge/Editor/Protocol/BridgeProtocol.cs",
+    "offset": 0,
+    "maxChars": 64
+  },
+  "risk": "read",
+  "route": {
+    "editorId": "fixture-editor",
+    "connectionGeneration": 1
+  },
+  "deadlineUnixMs": 4102444800000
+}
