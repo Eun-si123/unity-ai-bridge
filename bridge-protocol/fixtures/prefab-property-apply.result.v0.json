@@ -1,0 +1,32 @@
+{
+  "protocolVersion": "0",
+  "requestId": "req-prefab-property-apply-1",
+  "ok": true,
+  "result": {
+    "mutationId": "prefab-property-apply-1",
+    "replayed": false,
+    "applied": true,
+    "componentGlobalObjectId": "GlobalObjectId_V1-2-1234567890abcdef1234567890abcdef-101-0",
+    "componentTypeName": "UnityEngine.Transform",
+    "propertyPath": "m_LocalScale",
+    "prefabPath": "Assets/Prefabs/Test.prefab",
+    "prefabGuid": "1234567890abcdef1234567890abcdef",
+    "expectedPrefabDependencyHash": "abcdef0123456789abcdef0123456789",
+    "dependencyHashBefore": "abcdef0123456789abcdef0123456789",
+    "dependencyHashAfter": "fedcba9876543210fedcba9876543210",
+    "expectedStateEpoch": "epoch-example",
+    "expectedStateRevision": 42,
+    "stateEpoch": "epoch-example",
+    "stateRevision": 43
+  },
+  "warnings": [
+    "Prefab property apply is a persistent asset write and is not covered by Unity Undo. The first bounded slice applies one existing non-array serialized property override to an explicitly selected Prefab Asset."
+  ],
+  "changedTargets": [],
+  "dirtyState": "unknown",
+  "undo": {
+    "available": false,
+    "groupName": ""
+  },
+  "compileState": "idle"
+}
