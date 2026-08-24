@@ -101,6 +101,7 @@ namespace UnityAiBridge.Editor.Tests
             var unique = Guid.NewGuid().ToString("N");
             var prefabPath = $"Assets/UnityAiBridge_PrefabPropertyApply_{unique}.prefab";
             var scenePath = $"Assets/UnityAiBridge_PrefabPropertyApply_{unique}.unity";
+            var sceneName = "UnityAiBridge_PrefabPropertyApply_" + unique;
             var mutationId = "prefab-property-apply-" + unique;
             var previousActiveScene = SceneManager.GetActiveScene();
             Scene testScene = default;
@@ -116,12 +117,13 @@ namespace UnityAiBridge.Editor.Tests
                 var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
                 Assert.That(prefab, Is.Not.Null);
 
-                // GlobalObjectId for a scene object requires a scene asset GUID. Test Runner can
-                // execute in an unsaved transient scene, so create and save an additive test scene
-                // before asking Unity for the durable Component GlobalObjectId used by the command.
-                testScene = EditorSceneManager.NewScene(
-                    NewSceneSetup.EmptyScene,
-                    NewSceneMode.Additive);
+                // EditorSceneManager.NewScene(Additive) refuses to run while Test Runner owns an
+                // untitled unsaved scene. SceneManager.CreateScene creates an isolated additive
+                // empty scene without requiring the existing transient scene to be saved first.
+                // Save only this test-owned scene before obtaining the durable GlobalObjectId.
+                testScene = SceneManager.CreateScene(sceneName);
+                Assert.That(testScene.IsValid(), Is.True);
+                Assert.That(testScene.isLoaded, Is.True);
                 Assert.That(EditorSceneManager.SaveScene(testScene, scenePath), Is.True);
                 Assert.That(SceneManager.SetActiveScene(testScene), Is.True);
 
