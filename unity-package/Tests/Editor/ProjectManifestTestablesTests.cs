@@ -53,6 +53,36 @@ namespace UnityAiBridge.Editor.Tests
         }
 
         [Test]
+        public void EnsurePackageTestable_AllowsWhitespaceAfterArrayBeforeNextProperty()
+        {
+            const string input = "{\n  \"testables\": [\"com.example.one\"]   ,\n  \"dependencies\": {}\n}\n";
+
+            var output = ProjectManifestTestables.EnsurePackageTestable(
+                input,
+                PackageTestBootstrap.PackageName,
+                out var changed);
+
+            Assert.That(changed, Is.True);
+            StringAssert.Contains("\"com.example.one\"", output);
+            StringAssert.Contains("\"com.eunsung.unity-ai-bridge\"", output);
+            StringAssert.Contains("   ,\n  \"dependencies\": {}", output);
+        }
+
+        [Test]
+        public void EnsurePackageTestable_AllowsEmptyArrayWithTrailingNewline()
+        {
+            const string input = "{\n  \"dependencies\": {},\n  \"testables\": [\n  ]\n}\n";
+
+            var output = ProjectManifestTestables.EnsurePackageTestable(
+                input,
+                PackageTestBootstrap.PackageName,
+                out var changed);
+
+            Assert.That(changed, Is.True);
+            StringAssert.Contains("\"com.eunsung.unity-ai-bridge\"", output);
+        }
+
+        [Test]
         public void EnsurePackageTestable_RejectsNonArrayTestablesInsteadOfRewritingBlindly()
         {
             const string input = "{\n  \"dependencies\": {},\n  \"testables\": \"com.example.invalid\"\n}";

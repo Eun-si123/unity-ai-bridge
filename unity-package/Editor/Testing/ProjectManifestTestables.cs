@@ -158,7 +158,7 @@ namespace UnityAiBridge.Editor.Testing
         private static List<string> ParseStringArray(string json, int start, int end)
         {
             var index = start;
-            SkipWhitespace(json, ref index);
+            SkipWhitespace(json, ref index, end);
             if (index >= end || json[index] != '[')
             {
                 throw new FormatException("Project-manifest 'testables' must be a JSON string array.");
@@ -168,7 +168,7 @@ namespace UnityAiBridge.Editor.Testing
             var values = new List<string>();
             while (true)
             {
-                SkipWhitespace(json, ref index);
+                SkipWhitespace(json, ref index, end);
                 if (index >= end)
                 {
                     throw new FormatException("Unterminated project-manifest 'testables' array.");
@@ -180,7 +180,7 @@ namespace UnityAiBridge.Editor.Testing
                 }
 
                 values.Add(ReadJsonString(json, ref index));
-                SkipWhitespace(json, ref index);
+                SkipWhitespace(json, ref index, end);
                 if (index < end && json[index] == ',')
                 {
                     index++;
@@ -195,7 +195,7 @@ namespace UnityAiBridge.Editor.Testing
                 throw new FormatException("Project-manifest 'testables' must contain only strings.");
             }
 
-            SkipWhitespace(json, ref index);
+            SkipWhitespace(json, ref index, end);
             if (index != end)
             {
                 throw new FormatException("Unexpected content after project-manifest 'testables'.");
@@ -394,6 +394,14 @@ namespace UnityAiBridge.Editor.Testing
         private static void SkipWhitespace(string json, ref int index)
         {
             while (index < json.Length && char.IsWhiteSpace(json[index]))
+            {
+                index++;
+            }
+        }
+
+        private static void SkipWhitespace(string json, ref int index, int endExclusive)
+        {
+            while (index < endExclusive && char.IsWhiteSpace(json[index]))
             {
                 index++;
             }
