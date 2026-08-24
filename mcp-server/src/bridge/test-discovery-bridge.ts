@@ -172,8 +172,11 @@ function isTestDiscoveryPayload(value: unknown): value is TestDiscoveryPayload {
   }
 
   if (candidate.returnedCount > candidate.maxResults) return false;
-  if (candidate.nextOffset !== candidate.offset + candidate.returnedCount) return false;
-  if (candidate.nextOffset > candidate.totalMatches) return false;
+  const expectedNextOffset = Math.min(
+    candidate.totalMatches,
+    candidate.offset + candidate.returnedCount,
+  );
+  if (candidate.nextOffset !== expectedNextOffset) return false;
   if (candidate.truncated !== (candidate.nextOffset < candidate.totalMatches)) return false;
 
   if (candidate.scope === "assemblies") {
