@@ -35,6 +35,19 @@ Phase 2 exit evidence and non-goals are recorded in [`docs/PHASE2_EXIT_GATE.md`]
 
 Broader Unity/OS compatibility is not implied.
 
+## Latest real Unity verification
+
+On **2026-08-24**, after the installed-package Test Runner bootstrap/reimport/parser fixes, the package EditMode suite was executed in Unity **6000.3.21f1** and completed:
+
+```text
+75 Passed
+0 Failed
+```
+
+This supersedes the previous 62/62 Prefab Asset creation baseline for the already-verified surface and verifies the installed-package Test Runner discovery flow itself.
+
+The new bounded Prefab property-override apply implementation in **PR #36** was added after that 75/75 run and is therefore **Implemented, not yet Verified**, until the expanded Unity suite is run on the PR/merged revision.
+
 ## Current verified / implemented surface
 
 | Area | Status | Evidence / notes |
@@ -56,13 +69,15 @@ Broader Unity/OS compatibility is not implied.
 | Component property edit | Verified | PR #26; 45/45 EditMode; visible Boolean/Integer/Float/String/Vector3 serialized-property writes with semantic readback and Undo/replay protection. |
 | Asset search/inspect | Verified | PR #27; 50/50 EditMode; bounded `AssetDatabase` search and exact GUID/type/importer/dependency inspection. |
 | Prefab inspect/instantiate | Verified | PR #28; 56/56 EditMode; bounded Prefab Asset hierarchy inspect, dependency-hash precondition, linked `PrefabUtility.InstantiatePrefab`, native linkage readback, same-id replay, Undo, stale-replay rejection. |
-| Prefab Asset creation | Verified | PR #29; 62/62 EditMode; create-only `SaveAsPrefabAsset`, source unchanged, GUID/dependencyHash/root readback, same-id replay, manual asset removal followed by stale-replay rejection. |
-| Package Test Runner discovery bootstrap | Implemented | Test assembly already exists. New Editor bootstrap adds `com.eunsung.unity-ai-bridge` to project `testables` for Local/LocalTarball/Git installs, leaves Embedded/Registry untouched, and has manifest-transform EditMode tests. Fresh non-embedded Unity install verification is still required before marking Verified. |
+| Prefab Asset creation | Verified | PR #29; 62/62 milestone; create-only `SaveAsPrefabAsset`, source unchanged, GUID/dependencyHash/root readback, same-id replay, manual asset removal followed by stale-replay rejection. Still covered by the later 75/75 suite. |
+| Package Test Runner discovery bootstrap | **Verified** | 2026-08-24 real installed-package run on Unity 6000.3.21f1. Development Local/LocalTarball/Git installs self-add `com.eunsung.unity-ai-bridge` to project `testables`; package reimport handles Test Framework refresh; expanded suite appeared automatically and completed **75/75**. |
+| Prefab single-property override apply | **Implemented** | PR #36. New `prefab.property.apply` / `unity_apply_prefab_property_override`: one existing non-array visible serialized-property override, explicit writable Prefab target, scene + dependencyHash preconditions, nested-target correspondence check, persistent-destructive classification, native `DataEquals`/override readback, conservative replay semantics. Expanded real Unity run still required before Verified. |
 | Remote gateway / Easy Connect | Planned | Not implemented. |
 | Pairing/authentication | Planned | Not implemented. |
 | Multi-user/editor routing | Planned | Current local bridge supports one active editor. |
 | ChatGPT integration | Planned | Not implemented or submitted. |
 | Portable Agent Plugins packaging | Planned | Architecture/roadmap decision recorded; no plugin manifest/skills package implemented yet. |
+| Open-weight/local-model compatibility | Deferred target | Architecture note in [`docs/OPEN_WEIGHT_MODEL_COMPATIBILITY.md`](docs/OPEN_WEIGHT_MODEL_COMPATIBILITY.md). MCP remains the boundary; no model runtime/inference server is being added to the Unity core. |
 
 ## Phase 0 — Foundation
 
@@ -122,40 +137,45 @@ Current objective: provide a small but genuinely useful Unity editing/inspection
 5. **Component property edit — PR #26** — **45/45 EditMode**
 6. **Asset search/inspect — PR #27** — **50/50 EditMode**
 7. **Prefab inspect/instantiate — PR #28** — **56/56 EditMode**
-8. **Prefab Asset creation — PR #29** — **62/62 EditMode**
+8. **Prefab Asset creation — PR #29** — **62/62 milestone**
+9. **Installed-package Test Runner discovery / regression baseline — PRs #31–#35** — **75/75 EditMode**, verified 2026-08-24
 
 ### Implemented after latest verified Unity run
 
-- **Package Test Runner discovery bootstrap** — development-style non-embedded installs can self-add the package to the project manifest `testables` array; automatic behavior is intentionally not claimed Verified until reproduced in a fresh Unity project.
-- Manifest transformation tests cover adding a missing `testables`, appending without deleting existing package names, idempotent no-op, malformed-value rejection, and package-source gating.
+- **Bounded Prefab property override apply — PR #36**
+  - `prefab.property.apply` / `unity_apply_prefab_property_override`
+  - single existing visible serialized property only
+  - no arrays/elements or `m_Script`
+  - explicit writable `Assets/*.prefab` target for nested-Prefab correctness
+  - exact Prefab dependencyHash + scene state preconditions
+  - Model Prefabs rejected in the first slice
+  - persistent asset write, no Unity Undo claim
+  - semantic verification through fresh source/instance serialized readback and `SerializedProperty.DataEquals`
+  - completed same-id replay is readback-only; stale asset/target state fails closed
+  - ambiguous execution/verification is not automatically re-executed
+  - Unity EditMode integration test and Node bridge tests added, but real Unity execution on this revision is still required
 
-### Prefab Asset creation verification — PR #29
+### Package Test Runner discovery verification
 
 ```text
 Environment: Windows + Unity 6000.3.21f1
-EditMode: 62 Passed / 0 Failed
-Destination: Assets/UnityAiBridge_Prefab_Create_Verify_1787477543534_2a6032058e974734b6d7eda5b7cb5512.prefab
-Created GUID: 9620866f03a86444897f7edef5652f8a
-Observed dependencyHash: 54acfe634f8153a9f4f5b8c06cb4d17b
-Source scene GameObject unchanged: PASS
-Native Prefab Asset inspect/readback: PASS
-Immediate same-id replay: PASS
-Manual Project-window asset removal observed: PASS
-Retry after removal -> stale_target/mutation_replay_stale: PASS
-Temporary source GameObject removed: PASS
+Install style: non-embedded development package
+Automatic manifest testables registration: PASS
+Automatic package reimport/Test Framework discovery: PASS
+EunSung.UnityAiBridge.Editor.Tests visible in EditMode Test Runner: PASS
+EditMode result: 75 Passed / 0 Failed
 Result: PASS
+Date: 2026-08-24
 ```
-
-Real verification also caught two useful contract/verifier issues: fixed destinations could collide with a prior local test artifact, so the verifier now uses a unique path; and Prefab root verification no longer assumes the saved root name must equal the source scene GameObject name when Unity derives the asset root from a different destination filename.
 
 ### Current next candidates
 
-1. verify package Test Runner auto-discovery in a fresh Local or Git package install,
-2. bounded Prefab Apply Overrides workflow,
-3. script read/write workflows,
-4. Play Mode and Test Runner controls,
-5. diagnostics extensions where they unlock real workflows,
-6. explicit Undo/recovery tools where useful to clients.
+1. run the expanded Unity EditMode suite for PR #36 and verify the bounded Prefab property apply integration test,
+2. script read/write workflows,
+3. Play Mode and Test Runner controls,
+4. diagnostics extensions where they unlock real workflows,
+5. explicit Undo/recovery tools where useful to clients,
+6. only then consider broader Prefab apply/revert slices such as object/component-wide apply, Apply All, Revert, variants, or unpacking when bounded contracts are clear.
 
 No arbitrary C# execution fallback is planned.
 
@@ -169,9 +189,10 @@ No arbitrary C# execution fallback is planned.
 - Component add deliberately rejects Transform/RectTransform in the current contract.
 - Asset search/inspection remains read-only; generic importer mutation and generic asset move/rename/delete are not implemented.
 - Prefab Asset creation is create-only under `Assets`, never overwrites an existing asset, and is a persistent disk write without Unity Undo.
-- Prefab Apply/Revert Overrides, unpacking, variant authoring, and generic asset deletion are not yet implemented.
+- Prefab property apply currently covers exactly one existing visible non-array override, requires an explicit writable Prefab Asset target, rejects Model Prefabs, and does not claim generic automatic rollback after an ambiguous persistent asset mutation.
+- Prefab Apply All, object/component-wide Apply, Revert Overrides, unpacking, variant authoring, and generic asset deletion remain unimplemented.
 - Asset `dependencyHash` is an imported-state observation used as the current Prefab asset precondition; it is not a replacement for GUID identity or a general asset transaction token.
 - Recent Console text covers only the current domain-load capture window.
 - Unity support beyond 6000.3.21f1 is unverified.
-- Package Test Runner auto-discovery has source-level/unit-test coverage but still needs fresh installed-package runtime verification.
 - Multi-editor routing, remote authentication/pairing, remote gateway hosting, and production AI-host integrations remain later-phase work.
+- Open-weight/local models remain a later compatibility target through MCP-capable agent runtimes; the Unity core does not own model serving.
