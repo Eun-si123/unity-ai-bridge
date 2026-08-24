@@ -1,8 +1,8 @@
 # Unity AI Bridge
 
-> **Status: pre-alpha / Phase 0 foundation scaffold**
+> **Status: pre-alpha / Phase 3 — Useful Unity Editing Core in progress**
 >
-> The repository now contains an initial Unity package scaffold, bridge protocol v0 schemas/types, and a minimal TypeScript MCP server bootstrap. These pieces are **implemented but not yet runtime-verified**. No working MCP-to-Unity connection, Unity tool surface, remote gateway, or ChatGPT integration should be assumed unless [`STATUS.md`](STATUS.md) says so.
+> Phases 0, 1, and 2 are verified milestones. The current verified Unity surface includes status/hierarchy/diagnostics/object resolution, Transform editing, GameObject update/delete, Component inspection and bounded mutation, Asset search/inspection, Prefab inspection/instantiation, and create-only Prefab Asset authoring. See [`STATUS.md`](STATUS.md) for exact evidence and limitations.
 
 Unity AI Bridge is intended to make AI-assisted Unity Editor control easy enough that users do not need to understand MCP, ports, networking, or Unity editor scripting just to get started.
 
@@ -15,7 +15,7 @@ Install Unity package
  -> use natural language to inspect and edit Unity
 ```
 
-The control layer is intended to remain provider-neutral so the same Unity-side implementation can work with multiple MCP-capable AI clients.
+The control layer is deliberately **provider-neutral**. The same Unity-side implementation and MCP tool surface should be reusable by ChatGPT, Claude, Codex, Gemini, Cursor, Copilot, and other standards-compatible MCP hosts without reimplementing Unity control for each vendor.
 
 ## License
 
@@ -30,7 +30,7 @@ The long-term product direction remains a public/self-hostable core plus an opti
 ## Where to start
 
 - [`STATUS.md`](STATUS.md) — what actually exists and what has been verified
-- [`CODEMAP.md`](CODEMAP.md) — current and planned repository structure
+- [`CODEMAP.md`](CODEMAP.md) — current repository structure and ownership
 - [`DESIGN.md`](DESIGN.md) — detailed intended system behavior
 - [`DECISIONS.md`](DECISIONS.md) — why major architecture choices were made
 - [`ROADMAP.md`](ROADMAP.md) — public milestone/phase plan
@@ -40,31 +40,32 @@ The long-term product direction remains a public/self-hostable core plus an opti
 - [`LICENSE`](LICENSE) — Apache License 2.0 terms for this public repository
 - [`llms.txt`](llms.txt) — compact AI-agent entrypoint
 
-[`ARCHITECTURE.md`](ARCHITECTURE.md) is a shorter high-level architecture summary. `DESIGN.md` is the detailed design authority.
+[`ARCHITECTURE.md`](ARCHITECTURE.md) is the concise high-level architecture summary. `DESIGN.md` is the detailed design authority.
 
-## Current source scaffold
+## Current source layout
 
 ```text
-unity-package/      Unity Editor UPM package scaffold
+unity-package/      Unity Editor UPM package, reliability layer, commands, EditMode tests
 bridge-protocol/    versioned Unity-facing command/result schemas + fixtures
-mcp-server/         TypeScript MCP v2 stdio bootstrap + bridge types/tests
+mcp-server/         TypeScript MCP v2 server, tool schemas, bridge routing, tests/verifiers
 ```
 
 Current initial pins:
 
-- Unity: **6000.3.21f1** initial development target
+- Unity: **6000.3.21f1** initial verified development target
 - Node.js: **24.19.0 LTS**
 - `@modelcontextprotocol/server`: **2.0.0**
 - TypeScript: **7.0.2**
 - `@types/node`: **24.13.3**
 - Unity bridge protocol: **v0**
 
-The direct dependency versions and generated lockfile are committed. Node dependency install, TypeScript build, and protocol smoke tests have passed in GitHub Actions; see `STATUS.md` for exact evidence and remaining Unity verification gaps.
+The exact implementation/verification state moves faster than this overview; `STATUS.md` is authoritative.
 
 ## Design goals
 
 - **Beginner-friendly:** eventually package install -> Connect AI -> pairing, with no manual MCP configuration for the default hosted path.
-- **Provider-neutral:** Unity command logic should not depend on one LLM vendor.
+- **Provider-neutral:** Unity command logic must not depend on one LLM vendor.
+- **MCP-native:** MCP is the canonical AI-client/tool boundary; vendor integrations stay thin.
 - **Reliable before broad:** prefer a small set of dependable, composable tool families over hundreds of fragile tools.
 - **Safe by default:** remote editor control, destructive actions, credentials, and arbitrary execution need explicit boundaries.
 - **Recoverable:** use Unity Undo where practical and report dirty/unsaved state.
@@ -76,21 +77,21 @@ The direct dependency versions and generated lockfile are committed. Node depend
 ## Accepted technical direction
 
 ```text
-ChatGPT / Claude / Codex / Gemini / other MCP client
-                         |
-                         | MCP
-                         v
-              Public MCP/server core
-                         |
-                 bridge protocol
-                         |
-               WebSocket first
-                         v
-                Unity C# Agent
-                         |
-               main-thread queue
-                         v
-                Unity Editor APIs
+ChatGPT / Claude / Codex / Gemini / Cursor / other MCP host
+                              |
+                              | MCP
+                              v
+                   Public MCP/server core
+                              |
+                      bridge protocol
+                              |
+                    WebSocket first
+                              v
+                     Unity C# Agent
+                              |
+                    main-thread queue
+                              v
+                     Unity Editor APIs
 ```
 
 Current direction:
@@ -98,20 +99,45 @@ Current direction:
 - Unity side: C# Unity Editor package
 - MCP/server side: TypeScript
 - MCP SDK: official MCP TypeScript SDK v2 line
-- remote MCP transport: Streamable HTTP
+- local MCP transport: stdio
+- remote MCP transport target: Streamable HTTP
 - Unity bridge: transport-independent protocol, WebSocket first
 - conflicting writes: serialized by default
 - target identity: not dependent on Unity `InstanceID` alone
-- mutations: request identity/retry protection, Undo where practical, dirty-state reporting
+- mutations: request identity/retry protection, optimistic state preconditions, Undo where practical, semantic readback, rollback/rollback verification where applicable, dirty-state reporting
+- client integrations: reuse the common MCP core; vendor-specific adapters/metadata should remain thin
+- portable packaging: Agent Plugins 1.0 is a candidate distribution layer to evaluate, not a replacement for MCP and not a core runtime dependency
 
-Only the initial package/protocol/server scaffold exists on `main` today. WebSocket bridging, command dispatch, Unity API handlers, and public tools are later-phase work unless `STATUS.md` records otherwise.
+## Current verified engineering surface
+
+The latest verified Phase 3 slices include:
+
+- Transform read/update
+- GameObject update/delete
+- Component inspection
+- Component add/remove
+- bounded Component serialized-property editing
+- Asset search/inspection
+- Prefab inspection and linked instantiation
+- create-only Prefab Asset creation
+
+The latest recorded Unity EditMode verification in `STATUS.md` is **62 passed / 0 failed** before later unverified changes. New write families must independently adopt and verify the Phase 2 reliability contract before being marked Verified.
+
+## Package tests and Test Runner
+
+The package contains EditMode tests under `unity-package/Tests/Editor`.
+
+Unity normally requires non-embedded packages to be listed in the consuming project's `Packages/manifest.json` `testables` array before their package tests appear in Test Runner. Unity AI Bridge includes a development-install bootstrap that attempts to add itself automatically for Local, LocalTarball, and Git package sources. Embedded packages need no such entry. Registry installs are not automatically modified.
+
+See [`unity-package/Tests/README.md`](unity-package/Tests/README.md) for the exact behavior and manual fallback.
 
 ## Repository split
 
 ```text
 unity-ai-bridge        (PUBLIC, Apache-2.0)
   reusable Unity package, MCP/server core, bridge protocol,
-  local/self-host path, reusable routing abstractions, tests/docs
+  local/self-host path, reusable routing abstractions, tests/docs,
+  publishable provider integration metadata/adapters
 
 unity-ai-mcp-infra     (PRIVATE)
   managed-service deployment, production auth/database wiring,
@@ -120,26 +146,17 @@ unity-ai-mcp-infra     (PRIVATE)
 
 The private repository should compose/deploy the public core instead of becoming a second private implementation of the same Unity/MCP logic.
 
-## First engineering milestone
+## Near-term engineering direction
 
-The first runtime milestone is intentionally narrow:
+Phase 3 continues expanding a small, useful Unity editing surface while carrying forward the verified reliability contract. After that, Phase 4 focuses on the difficult product boundary that local MCP clients do not solve by themselves: securely connecting cloud AI hosts to a user's local Unity Editor through remote MCP, outbound Unity connectivity, pairing/authentication, and editor routing.
 
-1. Connect one Unity Editor locally.
-2. Expose a minimal MCP endpoint.
-3. Read editor/status information.
-4. Read active scene/hierarchy.
-5. Create a simple GameObject.
-6. Read Console/compiler errors.
-7. Return structured results/errors.
-8. Re-read Unity state to verify the requested effect.
-
-Only after this path is reliable should the project expand into components, scripts, assets, prefabs, Play Mode, remote pairing, multi-user routing, or public AI-client integrations.
+Portable/plugin packaging and multi-provider compatibility come after the core and remote path are trustworthy.
 
 ## Why not start with 300 tools?
 
-The hard parts are not the tool count. They are safe Unity main-thread execution, object identity, retries, Undo, compilation/domain reload, reconnection, permission boundaries, and multi-editor routing.
+The hard parts are not the tool count. They are safe Unity main-thread execution, object identity, retries, Undo, compilation/domain reload, reconnection, permission boundaries, semantic verification, rollback behavior, and multi-editor routing.
 
-The initial goal is roughly 10–20 stable domain tools/tool families. Advanced Unity areas can be added after the execution core is proven trustworthy.
+The project prefers stable domain tools/tool families over a giant surface whose behavior cannot be trusted.
 
 Arbitrary C# execution is intentionally not an early default escape hatch.
 

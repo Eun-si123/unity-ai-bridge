@@ -41,6 +41,45 @@ If third-party code is ever actually incorporated, review the exact source revis
 - Use here: confirmed `unity` uses the major/minor form and `unityRelease` can identify a specific Unity patch/release in a package manifest.
 - Source copied into this project: **No.**
 
+### Unity — Adding tests to a package
+
+- Documentation: `https://docs.unity3d.com/Manual/cus-tests.html`
+- Checked: 2026-08-24.
+- Use here: confirmed that package test assemblies use `optionalUnityReferences: ["TestAssemblies"]`, Editor tests include the `Editor` platform, embedded packages are treated as development packages automatically, and non-embedded package dependencies must be listed in the consuming project's top-level `Packages/manifest.json` `testables` array before Unity Test Framework loads their tests.
+- Source copied into this project: **No.** The project implements its own guarded project-manifest updater for development-style installs.
+
+### Unity — Project manifest
+
+- Documentation: `https://docs.unity3d.com/Manual/upm-manifestPrj.html`
+- Checked: 2026-08-24.
+- Use here: confirmed the project-level `testables` property is a string array naming packages whose tests Unity Test Framework should load.
+- Source copied into this project: **No.**
+
+### Unity — `PackageSource`
+
+- Documentation: `https://docs.unity3d.com/ScriptReference/PackageManager.PackageSource.html`
+- Checked: 2026-08-24.
+- Use here: confirmed the package-source categories used to limit automatic Test Runner enablement to Local, LocalTarball, and Git development-style installs while leaving Registry installs untouched.
+- Source copied into this project: **No.**
+
+## Interoperability / packaging references
+
+### Agent Plugins 1.0
+
+- Specification/site: `https://agent-plugins.org/`
+- Checked: 2026-08-24.
+- Use here: informed D-018 and the portable-integration roadmap. The format can package MCP server declarations, skills, and shared metadata so provider integrations may be thinner when host support exists.
+- Architectural interpretation here: **optional outer distribution format only**. MCP remains Unity AI Bridge's canonical tool boundary.
+- Source copied into this project: **No.** No Agent Plugins manifest or schema has been copied into this repository yet.
+- Revisit requirement: re-check the current specification, governance, and actual host support when Phase 5 implementation begins rather than assuming 1.0 remains the correct target.
+
+### OpenAI — Codex as a platform / open agent harness
+
+- Product/developer documentation: `https://developers.openai.com/blog/codex-as-a-platform`
+- Checked: 2026-08-24.
+- Use here: interoperability research only. The open Codex harness is treated as one possible MCP-consuming agent runtime, not as a required dependency or replacement for the provider-neutral MCP core.
+- Source copied into this project: **No.**
+
 ## Research references
 
 ### CoplayDev — MCP for Unity

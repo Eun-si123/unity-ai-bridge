@@ -73,7 +73,7 @@ Use Streamable HTTP for remote MCP.
 
 ### Evidence at decision time
 
-On 2026-08-22, official MCP TypeScript SDK v2 documentation identified v2 as the stable line for the 2026-07-28 protocol generation and documented Streamable HTTP support. Exact package/runtime versions are still to be pinned in source/lockfiles.
+On 2026-08-22, official MCP TypeScript SDK v2 documentation identified v2 as the stable line for the 2026-07-28 protocol generation and documented Streamable HTTP support. Exact package/runtime versions are pinned in source and lockfiles.
 
 ### Revisit trigger
 
@@ -250,6 +250,66 @@ The project can still operate a separate managed hosted service using private in
 ### Revisit trigger
 
 A future licensing change would require an explicit new decision plus review of contributor/copyright implications; do not silently replace the license text.
+
+---
+
+## D-018 — MCP remains canonical; portable agent packaging stays optional
+
+**Status:** Accepted  
+**Date:** 2026-08-24
+
+### Decision
+
+MCP remains the canonical AI-client/tool boundary for Unity AI Bridge.
+
+Portable agent-plugin packaging such as **Agent Plugins 1.0** may be adopted to package MCP server declarations, reusable skills, and shared integration metadata, but it must remain an outer distribution layer rather than a replacement for MCP or a dependency of Unity execution semantics.
+
+Vendor-specific integration code should be thin and should not fork or duplicate Unity command logic.
+
+### Why
+
+The reusable asset is the provider-neutral Unity control/reliability core. AI hosts and plugin marketplaces can change independently. A portable package can reduce duplicated metadata and skills while preserving the ability for any standards-compatible MCP host to consume the same tools directly.
+
+### Consequences
+
+- ChatGPT can be the first production integration target without becoming the architectural owner of the project,
+- Claude, Codex, Gemini, Cursor, Copilot, and other MCP hosts should reuse the same public core,
+- `integrations/<vendor>` directories are created only for real host-specific requirements,
+- Agent Plugins support must be re-verified against the current specification and host adoption state when Phase 5 implementation begins.
+
+### Revisit trigger
+
+A future portable standard supersedes MCP as the actual tool protocol, or major hosts require incompatible semantics that cannot be represented by thin adapters.
+
+---
+
+## D-019 — Auto-enable package tests only for development-style installs
+
+**Status:** Accepted  
+**Date:** 2026-08-24
+
+### Decision
+
+The Unity package may automatically add `com.eunsung.unity-ai-bridge` to the consuming project's top-level `Packages/manifest.json` `testables` array when the package source is Local, LocalTarball, or Git.
+
+Embedded packages need no manifest change. Registry, BuiltIn, and Unknown sources are not automatically modified. A manual `Tools > Unity AI Bridge > Enable Package Tests` fallback remains available.
+
+The updater must:
+
+- make no write when the package is already testable,
+- preserve existing dependencies and existing `testables` entries,
+- fail without rewriting when the existing `testables` value is malformed or not a string array,
+- surface a warning and manual fallback if the project manifest cannot be updated.
+
+### Why
+
+Unity requires non-embedded package dependencies to be listed in the project manifest's `testables` array before package tests appear in Test Runner. Requiring every developer to remember this hidden project-level step made the installed package appear to have no tests even though the test assembly was present.
+
+Automatic mutation is deliberately limited to development-style package sources so a future registry consumer is not forced to compile the package's development tests merely by installing the product.
+
+### Verification rule
+
+Implementation alone does not make this behavior Verified. It must be tested in a fresh Unity project using at least one non-embedded development-style install and confirmed to cause `EunSung.UnityAiBridge.Editor.Tests` to appear in Test Runner after Package Manager resolution/recompile.
 
 ---
 

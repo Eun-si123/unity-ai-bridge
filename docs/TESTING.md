@@ -1,6 +1,6 @@
 # Testing Guide
 
-This document defines the minimum repeatable verification path for Unity AI Bridge. It separates automated Node/protocol checks from real Unity Editor verification so implementation is never mistaken for runtime proof.
+This document defines the repeatable verification path for Unity AI Bridge. It separates automated Node/protocol checks, Unity EditMode tests, and real Editor/end-to-end verification so implementation is never mistaken for runtime proof.
 
 ## 1. Automated Node / protocol verification
 
@@ -12,35 +12,67 @@ npm run build
 npm test
 ```
 
-Current automated coverage should verify at minimum:
+Coverage grows with the tool surface and should include protocol/version guards, local bridge startup, hello/route handling, request/result correlation, input/schema bounds, tool routing, no-editor failures, stale-generation handling, and domain-specific bridge contracts.
 
-- bridge protocol version guard,
-- local WebSocket server startup on loopback,
-- simulated Unity `hello` registration,
-- request ID and route propagation for `editor.status`,
-- simulated structured result correlation,
-- bounded `scene.hierarchy` request/result propagation,
-- hierarchy input-limit validation,
-- explicit failure when no Unity Editor is connected,
-- explicit stale-generation error propagation.
+GitHub Actions is the canonical CI environment for this Node/protocol layer unless a workflow explicitly runs Unity as well.
 
-GitHub Actions is the canonical CI environment for this layer.
-
-## 2. Real Unity 6000.3.21f1 compile check
+## 2. Real Unity 6000.3.21f1 package compile check
 
 Target editor: Unity 6000.3.21f1.
 
 1. Open a clean Unity project with Unity 6000.3.21f1.
-2. Add `unity-package/package.json` using Package Manager -> Add package from disk.
-3. Allow script compilation/domain reload to finish.
+2. Add `unity-package/package.json` using Package Manager -> Add package from disk, or install the package through the Git dependency path being tested.
+3. Allow Package Manager resolution, script compilation, and any domain reload to finish.
 4. Confirm the Unity Console contains zero compile errors caused by Unity AI Bridge.
-5. Record any warnings separately; warnings are not silently promoted to PASS.
+5. Record warnings separately; warnings are not silently promoted to PASS.
 
-PASS requires the package to load and the Editor assembly to compile successfully.
+PASS requires the installed package to load and the Editor assembly to compile successfully.
 
-When switching Git branches while Unity remains open, Unity can temporarily keep the previously compiled Editor assembly even though the package source on disk changed. If a newly added bridge operation returns `unsupported/operation_not_supported` but the checked-out source contains that dispatcher route, force a package reimport/domain reload or restart Unity before classifying the source implementation as missing.
+When switching Git branches while Unity remains open, Unity can temporarily keep the previously compiled Editor assembly even though the package source changed. If a newly added operation reports `unsupported/operation_not_supported` but current source contains the route, force package reimport/domain reload or restart Unity before classifying the implementation as missing.
 
-## 3. Real local bridge + `editor.status` verification helper
+## 3. Installed-package Test Runner discovery check
+
+Unity's package-test behavior differs between embedded and non-embedded packages. For a non-embedded Local, LocalTarball, or Git install, Unity AI Bridge now attempts to add `com.eunsung.unity-ai-bridge` to the consuming project's top-level `Packages/manifest.json` `testables` array automatically.
+
+Fresh verification procedure:
+
+1. Start with a Unity project whose `Packages/manifest.json` does **not** already contain `com.eunsung.unity-ai-bridge` in `testables`.
+2. Install Unity AI Bridge as a Local/Add-package-from-disk or Git package dependency.
+3. Wait for the initial package compile, the automatic manifest update, Package Manager resolution, and the following recompile/domain reload to finish.
+4. Open **Window -> General -> Test Runner** and select **EditMode**.
+5. Confirm assembly `EunSung.UnityAiBridge.Editor.Tests` appears without manually editing the manifest.
+6. Confirm the project manifest now contains the package exactly once in `testables` and preserves all pre-existing dependencies/testable package entries.
+7. Run the EditMode suite.
+
+Expected automatic sources:
+
+- `PackageSource.Local` — yes
+- `PackageSource.LocalTarball` — yes
+- `PackageSource.Git` — yes
+- `PackageSource.Embedded` — no manifest edit required
+- `PackageSource.Registry` — no automatic manifest edit
+
+If automatic enabling cannot update the project manifest, use:
+
+`Tools > Unity AI Bridge > Enable Package Tests`
+
+or add the package manually to the project's `testables` array.
+
+**Verification rule:** source-level tests for the manifest transformer do not by themselves prove Test Runner discovery. Mark this feature Verified only after the fresh installed-package procedure above succeeds in a real Unity Editor.
+
+## 4. Unity EditMode suite
+
+After package tests are visible in Test Runner:
+
+1. select **EditMode**,
+2. run `EunSung.UnityAiBridge.Editor.Tests`,
+3. record passed/failed counts,
+4. clean any temporary Assets/objects created by the test or verifier path,
+5. do not overwrite the last verified count in `STATUS.md` with a new count unless the exact revision/environment actually ran.
+
+The last recorded verified suite before later unverified changes is **62 passed / 0 failed**. Additional tests introduced afterward increase the source test count but remain unverified until a new Unity run is recorded.
+
+## 5. Real local bridge + `editor.status` verification helper
 
 With the Unity project open and the package loaded, run from the repository root:
 
@@ -49,17 +81,7 @@ npm --prefix mcp-server ci
 npm --prefix mcp-server run verify:unity
 ```
 
-The helper builds the TypeScript server, listens on `ws://127.0.0.1:5081`, waits up to 30 seconds for the real Unity Editor's protocol v0 `hello`, prints the received editor identity/version/project data, sends a real `editor.status` command, and prints the structured result.
-
-Expected success output includes:
-
-```text
-[Unity AI Bridge] Verification bridge listening on ws://127.0.0.1:5081
-[Unity AI Bridge] Real Unity hello received:
-...
-[Unity AI Bridge] editor.status PASS:
-...
-```
+The helper builds the TypeScript server, listens on the local bridge, waits for the real Unity Editor hello, sends `editor.status`, and prints the structured result.
 
 Compare the printed status against the open Editor:
 
@@ -69,114 +91,77 @@ Compare the printed status against the open Editor:
 - Play Mode state,
 - compilation state.
 
-This helper verifies the real Unity WebSocket/bridge path. It does not by itself prove the MCP stdio tool transport.
+This verifies the real Unity WebSocket/bridge path. It does not by itself prove the MCP stdio transport.
 
-## 4. Real MCP `unity_get_status` end-to-end check
+## 6. Real MCP `unity_get_status` end-to-end check
 
-With the Unity project still open, refresh dependencies and run the MCP verifier from the repository root:
+With Unity still open:
 
 ```text
 npm --prefix mcp-server ci
 npm --prefix mcp-server run verify:mcp-unity
 ```
 
-The verifier uses the official MCP TypeScript client over stdio. It launches the normal Unity AI Bridge MCP server as a child process, completes the MCP initialize handshake, confirms `unity_get_status` is advertised, waits for the real Unity Editor to connect to the server's local WebSocket bridge, then calls `unity_get_status` through MCP and validates its structured result.
+The verifier uses the official MCP TypeScript client over stdio, launches the normal Unity AI Bridge MCP server, completes MCP initialization, confirms `unity_get_status` is advertised, waits for the live Unity connection, calls the tool, and validates its structured result.
 
-Expected success output includes:
+PASS requires the returned Unity version/project/scene/play/compile state to match the actual Editor. A direct bridge call alone is insufficient for this gate.
 
-```text
-[Unity AI Bridge] MCP handshake PASS; unity_get_status is advertised.
-[Unity AI Bridge] MCP unity_get_status PASS:
-...
-```
+## 7. Reconnect / domain reload / stale-generation check
 
-Compare the returned Unity version, project name, active scene, Play Mode state, and compilation state with the actual Editor state. PASS requires the real MCP tool result to match live Unity state; a direct `LocalBridgeServer` call alone is insufficient for this gate.
-
-## 5. Reconnect / domain reload / stale-generation check
-
-With Unity still open, run:
+With Unity open:
 
 ```text
 npm --prefix mcp-server run verify:reconnect
 ```
 
-The verifier first records the live `editorId` and `connectionGeneration` and confirms `editor.status`. When it prints that it is waiting for a new connection generation, trigger a Unity script/domain reload. There is no dedicated "Domain Reload" button required for this test; creating or editing a C# script so Unity recompiles scripts is sufficient.
+When prompted, trigger a Unity script/domain reload. PASS requires:
 
-PASS requires all of the following:
+1. the same editor identity reconnects,
+2. the new connection generation differs,
+3. a command deliberately routed to the old generation is rejected with `routing/stale_connection`,
+4. a normal current-generation status call succeeds.
 
-1. the same `editorId` reconnects,
-2. the new hello has a different `connectionGeneration`,
-3. an `editor.status` command deliberately routed to the old generation is rejected with `routing/stale_connection`,
-4. a normal `editor.status` succeeds on the new generation.
+## 8. Hierarchy and object-resolution checks
 
-Expected success output includes:
+Use the current `main`/candidate branch package source rather than old phase branch names.
 
-```text
-[Unity AI Bridge] Reconnect detected:
-...
-[Unity AI Bridge] Stale generation rejection PASS: routing/stale_connection: ...
-[Unity AI Bridge] Post-reconnect editor.status PASS:
-...
-[Unity AI Bridge] Reconnect + stale-generation verification PASS.
-```
-
-## 6. Real MCP `unity_get_hierarchy` end-to-end check
-
-Use the current hierarchy branch/package source and keep the Unity Editor open on a scene whose Hierarchy window you can compare against. First confirm Unity has finished compiling the branch with no Unity AI Bridge compile errors, then run from the repository root:
+Hierarchy:
 
 ```text
-npm --prefix mcp-server ci
 npm --prefix mcp-server run verify:hierarchy
 ```
 
-The verifier launches the normal MCP server over stdio, confirms `unity_get_hierarchy` is advertised, waits for the real Unity Editor connection, calls the tool with `maxDepth=8` and `maxNodes=200`, and validates the structured hierarchy result.
+Compare scene path, root objects, ordering, parent/child structure, active states, and returned `GlobalObjectId` values against the live Editor.
 
-Expected success output includes:
-
-```text
-[Unity AI Bridge] MCP handshake PASS; unity_get_hierarchy is advertised.
-[Unity AI Bridge] MCP unity_get_hierarchy PASS:
-{
-  "sceneName": "...",
-  "scenePath": "...",
-  "rootCount": 0,
-  "returnedNodeCount": 0,
-  "maxDepth": 8,
-  "maxNodes": 200,
-  "truncatedByDepth": false,
-  "truncatedByNodes": false,
-  "nodes": []
-}
-```
-
-The exact counts and node list depend on the live scene. For PASS, compare the returned scene name/path, root GameObject names, parent/child ordering, and active states with the actual Unity Hierarchy. Every returned node should contain a `globalObjectId` string and a transient `instanceId`. `hierarchyPath` and `instanceId` are informational/session-scoped aids and must not be treated as sole durable identity.
-
-If the scene exceeds the requested bounds, `truncatedByDepth` or `truncatedByNodes` may legitimately be true. That is not a failure by itself.
-
-## 7. Phase 2 stable resolver / stale replay check
-
-On branch `phase2/stable-object-resolver`, first make sure Unity has actually recompiled the current package source. Then run:
+Stable resolver / stale replay:
 
 ```text
 npm --prefix mcp-server run verify:resolver
 ```
 
-The verifier creates one temporary GameObject, resolves its returned `GlobalObjectId` back through Unity native APIs, then prompts you to press Ctrl+Z exactly once. PASS requires:
+PASS requires native resolution of the created object, `found=false` after Undo/removal, stale-replay rejection for the same mutation ID, and no replacement object creation.
 
-1. initial native resolve matches the created GameObject,
-2. after Undo the resolver reports `found=false`,
-3. retrying the exact same mutation ID fails with `stale_target/mutation_replay_stale`,
-4. hierarchy readback finds zero replacement objects.
+If an operation exists in checked-out source but Unity reports it unsupported, treat stale compiled package state as a candidate first; reimport/restart and re-run before concluding the operation is absent.
 
-If the verifier reports:
+## 9. Phase 3 domain verification
 
-```text
-unsupported/operation_not_supported: Operation 'object.resolve' is not implemented
-```
+Each new write family must carry the Phase 2 reliability contract appropriate to its domain before being marked Verified:
 
-but the checked-out `LocalBridgeConnection.cs` contains the `object.resolve` dispatch branch, Unity is running a stale previously compiled package assembly. In Unity, reimport the Unity AI Bridge Editor scripts/package or restart the Editor, wait for compilation/domain reload to finish, and rerun the verifier.
+- capability/version preflight,
+- stable target identity,
+- current-state preconditions where required,
+- main-thread execution,
+- Undo grouping where applicable,
+- mutation identity/replay behavior,
+- native semantic readback,
+- rollback + rollback verification where applicable,
+- deadline behavior,
+- dirty/save semantics,
+- real Unity verification in addition to simulated/Node tests.
 
-## 8. Evidence format
+Domain-specific verifier scripts and exact evidence belong in `STATUS.md` / linked docs rather than being inferred from source presence.
+
+## 10. Evidence format
 
 Every real verification entry added to `STATUS.md` should record:
 
@@ -191,4 +176,4 @@ Result: PASS / FAIL / PARTIAL
 Notes:
 ```
 
-Do not mark real Unity behavior Verified from Node simulation alone.
+Do not mark real Unity behavior Verified from Node simulation, source inspection, or a roadmap checkbox alone.
