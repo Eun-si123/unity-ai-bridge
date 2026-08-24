@@ -1,0 +1,14 @@
+{
+  "protocolVersion": "0",
+  "requestId": "fixture-test-run-get",
+  "operation": "test.run.get",
+  "arguments": {
+    "mutationId": "fixture-test-run-editmode-1"
+  },
+  "risk": "read",
+  "route": {
+    "editorId": "fixture-editor",
+    "connectionGeneration": 1
+  },
+  "deadlineUnixMs": 4102444800000
+}
