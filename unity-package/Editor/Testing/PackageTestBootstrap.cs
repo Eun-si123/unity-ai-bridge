@@ -56,7 +56,7 @@ namespace UnityAiBridge.Editor.Testing
             ScheduleAttempt();
         }
 
-        private static bool ContainsPackage(IEnumerable<PackageInfo> packages)
+        private static bool ContainsPackage(IEnumerable<UnityEditor.PackageManager.PackageInfo> packages)
         {
             if (packages == null)
             {
@@ -91,7 +91,7 @@ namespace UnityAiBridge.Editor.Testing
 
             try
             {
-                var packageInfo = PackageInfo.FindForPackageName(PackageName);
+                var packageInfo = UnityEditor.PackageManager.PackageInfo.FindForPackageName(PackageName);
                 if (packageInfo == null)
                 {
                     if (_remainingStartupRetries-- > 0)
