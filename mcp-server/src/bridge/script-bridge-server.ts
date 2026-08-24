@@ -28,6 +28,7 @@ export interface ScriptReadPayload {
 
 const DEFAULT_MAX_CHARS = 20_000;
 const MAX_CHARS = 100_000;
+const MAX_OFFSET = 2_147_483_647;
 const MAX_PATH_LENGTH = 512;
 
 export class ScriptBridgeServer extends AssetBridgeServer {
@@ -43,7 +44,7 @@ export class ScriptBridgeServer extends AssetBridgeServer {
     validateScriptPath(options.path);
     const offset = options.offset ?? 0;
     const maxChars = options.maxChars ?? DEFAULT_MAX_CHARS;
-    validateSafeInteger(offset, "offset", 0, Number.MAX_SAFE_INTEGER);
+    validateSafeInteger(offset, "offset", 0, MAX_OFFSET);
     validateSafeInteger(maxChars, "maxChars", 1, MAX_CHARS);
 
     const result = await this.requestOperation(
@@ -105,6 +106,7 @@ function isScriptReadPayload(value: unknown): value is ScriptReadPayload {
   ] as const) {
     if (!Number.isSafeInteger(value[key]) || (value[key] as number) < 0) return false;
   }
+  if (value.offset > MAX_OFFSET || value.nextOffset > MAX_OFFSET) return false;
   if (value.maxChars < 1 || value.maxChars > MAX_CHARS) return false;
   if (value.offset > value.utf16CharCount || value.nextOffset > value.utf16CharCount) return false;
   if (value.nextOffset !== value.offset + value.returnedCharCount) return false;
