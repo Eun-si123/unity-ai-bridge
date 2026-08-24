@@ -155,8 +155,6 @@ test("script replace reconciles the same mutation after a reload disconnect with
       replaceDeliveries++;
       assert.equal(command.arguments.mutationId, "script-replace-reload");
 
-      // Simulate the normal C# script-write lifecycle where the file write has happened,
-      // import begins, and the Editor domain reload disconnects before the bridge result arrives.
       firstClient?.terminate();
       void reconnectAfterReload();
     });
@@ -282,6 +280,8 @@ function persistencePayload(overrides: Partial<Record<string, unknown>> = {}): R
     writeCompletedUnixMs: 1_787_550_000_000,
     importRequested: true,
     importRequestedUnixMs: 1_787_550_000_001,
+    importCallReturned: true,
+    importError: "",
     ...overrides,
   };
 }
