@@ -123,7 +123,7 @@ The project is pre-alpha. Internal package version `0.0.1` does not represent a 
 #### Verification
 
 - Revision `2969bcfa379f10498d4b5bac69fb085f209d499d`: Node Verification run `32606458264` **PASS** and Phase 1 Local Bridge Verification run `32606458269` **PASS**.
-- Real Unity 6000.3.21f1 / Windows `npm.cmd --prefix mcp-server run verify:create`: **PASS (manual verification, 2026-08-23)**.
+- Real Unity 6000.3.21f1 / Windows `npm.cmd --prefix mcp-server run verify:create`: **PASS (manual Windows verification, 2026-08-23)**.
 - First create returned `replayed=false` and `GlobalObjectId_V1-2-99c9720ab356a0642a771bea13969a05-1399885475-0`.
 - Identical retry returned `replayed=true` with the same mutation ID and same `GlobalObjectId`.
 - Live `unity_get_hierarchy` readback reported `hierarchyMatches=1`; the Unity Hierarchy visibly contained one generated `MCP_Create_Verify_1787442917163` object.
