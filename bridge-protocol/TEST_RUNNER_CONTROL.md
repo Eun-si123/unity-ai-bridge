@@ -96,7 +96,13 @@ Both operations return the same bounded result shape:
 - `issuesTruncated`
 - `errorMessage` for run-level framework/prebuild errors
 
-For a terminal `completed` result, `selectedTestCaseCount` is the actual number of terminal test outcomes represented by `passCount + failCount + skipCount + inconclusiveCount`. It is **not** copied from `ICallbacks.RunStarted(ITestAdaptor).TestCaseCount`, because Unity's public callback receives the full loaded test tree even when the execution filter selects only one test. While a run is only `scheduled` or `running`, the first slice leaves this count at `0` rather than reporting a misleading loaded-tree size.
+For a terminal completed result, `selectedTestCaseCount` is defined as the actual terminal outcome total:
+
+```text
+passCount + failCount + skipCount + inconclusiveCount
+```
+
+It is deliberately **not** copied from `RunStarted().TestCaseCount`, because Unity's public callback supplies the full loaded test tree there even when the execution filter selects a smaller subset.
 
 Each issue contains:
 
@@ -123,10 +129,17 @@ The public 1.4 callback interface does not include the Unity run GUID in `RunSta
 
 Unity AI Bridge refuses to start two owned runs concurrently. However, if an external/manual actor starts an indistinguishable run for the **same exact selection** while a bridge-owned run is active, public callback metadata may be insufficient to distinguish the two. This remains an explicit first-slice limitation; the bridge does not use private Test Framework internals to guess.
 
-## Verification requirement
+## Verification
 
-Source presence is not enough to mark this slice Verified. Required evidence is:
+Verified on **2026-08-24** with Windows + Unity **6000.3.21f1**.
 
-1. Node/protocol CI PASS,
-2. expanded real Unity 6000.3.21f1 EditMode suite PASS,
-3. dedicated live MCP start/poll/completion/replay gate PASS.
+Evidence:
+
+- expanded installed-package EditMode suite: **98 Passed / 0 Failed**,
+- dedicated official-MCP-client `verify:test-runner` live gate: PASS,
+- exact one-test run returned `selectedTestCaseCount=1`, `passCount=1`, `failCount=0`,
+- immediate and completed same-id replays preserved one stable Unity `runGuid`,
+- conflicting same-id selection was rejected,
+- final Editor lifecycle state remained stable `edit`.
+
+The previous 97/97 candidate plus first live gate exposed the full-tree `RunStarted().TestCaseCount` mismatch described above; the count definition was corrected and regression-tested before this slice was marked Verified.
