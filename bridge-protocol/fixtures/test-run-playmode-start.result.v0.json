@@ -1,0 +1,35 @@
+{
+  "protocolVersion": "0",
+  "requestId": "fixture-test-run-playmode-start",
+  "ok": true,
+  "result": {
+    "mutationId": "fixture-test-run-playmode-1",
+    "replayed": false,
+    "runGuid": "fixture-playmode-test-run-guid",
+    "status": "scheduled",
+    "testMode": "play",
+    "assemblyName": "EunSung.UnityAiBridge.PlayMode.Tests",
+    "testNames": [
+      "UnityAiBridge.PlayMode.Tests.PlayModeVerifierTests.RunsOneFrameInsidePlayMode"
+    ],
+    "requestedUnixMs": 1787572000000,
+    "startedUnixMs": 0,
+    "finishedUnixMs": 0,
+    "selectedTestCaseCount": 0,
+    "resultState": "",
+    "durationSeconds": 0,
+    "passCount": 0,
+    "failCount": 0,
+    "skipCount": 0,
+    "inconclusiveCount": 0,
+    "assertCount": 0,
+    "issues": [],
+    "issuesTruncated": false,
+    "errorMessage": ""
+  },
+  "warnings": [
+    "Test execution is an operational action: selected tests may mutate scenes/assets or other Editor/project state. Unity AI Bridge does not claim Undo or automatic cleanup for arbitrary test code."
+  ],
+  "dirtyState": "unknown",
+  "compileState": "idle"
+}

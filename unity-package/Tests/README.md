@@ -1,6 +1,6 @@
 # Unity AI Bridge package tests
 
-The package includes Unity EditMode tests under `Tests/Editor` in the `EunSung.UnityAiBridge.Editor.Tests` test assembly.
+The package includes Unity EditMode tests under `Tests/Editor` in the `EunSung.UnityAiBridge.Editor.Tests` test assembly and a dedicated runtime-capable PlayMode verifier assembly under `Tests/PlayMode` as `EunSung.UnityAiBridge.PlayMode.Tests`.
 
 Unity's supported package-test model has two requirements:
 
@@ -26,8 +26,10 @@ On **2026-08-24**, the non-embedded development-install flow and expanded packag
 - automatic project-manifest `testables` registration: PASS
 - guarded package reimport / test-assembly discovery: PASS
 - `EunSung.UnityAiBridge.Editor.Tests` visible in EditMode Test Runner: PASS
-- historical suite milestones: 75/75, 80/80, 81/81, 85/85, 89/89, 93/93, 97/97
-- current verified suite after PR #47 Test Runner selected-count regression coverage: **98 Passed / 0 Failed**
+- `EunSung.UnityAiBridge.PlayMode.Tests` visible in PlayMode Test Runner: PASS
+- historical EditMode suite milestones: 75/75, 80/80, 81/81, 85/85, 89/89, 93/93, 97/97, 98/98
+- current verified EditMode suite after PR #48 PlayMode Test Runner contract coverage: **100 Passed / 0 Failed**
+- dedicated PlayMode verifier assembly: **1 Passed / 0 Failed**
 
 `STATUS.md` records the current verified baseline and the exact runtime evidence for each later write/lifecycle/job family.
 
@@ -61,7 +63,7 @@ npm --prefix mcp-server run verify:play-mode
 
 This keeps the package suite deterministic while still requiring a real Editor lifecycle gate before Play Mode control is considered Verified.
 
-## Test Runner control tests
+## EditMode Test Runner control tests
 
 PR #47 adds bounded validation/intent/journal coverage for asynchronous EditMode Test Runner control. The ordinary package suite deliberately does **not** recursively schedule another Unity Test Framework run from inside its own run; instead it verifies selection validation, normalized mutation identity, unknown-run lookup behavior, and terminal selected-count arithmetic.
 
@@ -73,7 +75,29 @@ npm --prefix mcp-server run verify:test-runner
 
 The live gate schedules exactly one safe validation test, verifies one stable Unity `runGuid`, immediate/completed same-id replay without duplicate scheduling, exact terminal counts (`selectedTestCaseCount=1`, `passCount=1`), conflict rejection for a different same-id selection, and final stable Edit Mode.
 
-The first live candidate exposed that `RunStarted().TestCaseCount` represents the full loaded test tree rather than the filtered terminal selection. A dedicated regression test now defines terminal `selectedTestCaseCount` as `pass + fail + skip + inconclusive`, producing the current 98/98 baseline before the slice was marked Verified.
+The first live candidate exposed that `RunStarted().TestCaseCount` represents the full loaded test tree rather than the filtered terminal selection. A dedicated regression test now defines terminal `selectedTestCaseCount` as `pass + fail + skip + inconclusive`, producing the 98/98 EditMode baseline before the slice was marked Verified.
+
+## PlayMode Test Runner control tests
+
+PR #48 adds two non-lifecycle EditMode tests for PlayMode run intent identity/bounds plus a separate runtime-capable PlayMode test assembly.
+
+The ordinary EditMode suite still does not recursively schedule a real PlayMode Test Framework run. Real PlayMode execution is isolated in:
+
+```text
+EunSung.UnityAiBridge.PlayMode.Tests
+```
+
+whose verifier `[UnityTest]` asserts `Application.isPlaying`, yields one frame, and asserts it again. The direct Unity Test Runner gate completed **1/1**.
+
+The complete MCP lifecycle is verified separately by:
+
+```text
+npm --prefix mcp-server run verify:playmode-tests
+```
+
+The live gate verifies exact PlayMode selection, Test Framework-owned Edit -> Play -> Edit lifecycle, one stable Unity `runGuid`, immediate/completed same-id replay without duplicate scheduling, conflicting same-id selection rejection, exactly one clean passing terminal result, final stable Edit Mode, preserved Enter Play Mode settings, and proof that the verifier test actually ran inside Play Mode across a frame.
+
+The expanded ordinary EditMode suite completed **100/100** before the PlayMode Test Runner extension was marked Verified.
 
 ## Manual fallback
 

@@ -1,22 +1,23 @@
 # Test Runner control contract
 
-This document defines the first bounded Unity Test Framework control slice for bridge protocol v0.
+This document defines the bounded Unity Test Framework control surface for bridge protocol v0.
 
 Implemented operations:
 
 - `test.run.editMode.start` — schedule one explicit EditMode test selection,
-- `test.run.get` — read the current/terminal result journal for that run.
+- `test.run.playMode.start` — schedule one explicit PlayMode test selection from stable Edit Mode,
+- `test.run.get` — read the current/terminal result journal for either mode.
 
-The MCP adapters are `unity_start_editmode_tests` and `unity_get_test_run`.
+The MCP adapters are `unity_start_editmode_tests`, `unity_start_playmode_tests`, and `unity_get_test_run`.
 
 ## Why start/get are separate
 
-Unity test runs are asynchronous and can be long-running. Holding one transport/MCP request open until every test finishes would turn normal slow tests into timeout ambiguity.
+Unity test runs are asynchronous and can be long-running. PlayMode runs can additionally cross Edit/Play lifecycle and domain-reload/reconnect boundaries. Holding one transport/MCP request open until every test finishes would turn normal slow tests into timeout ambiguity.
 
-The first slice therefore uses a handle-style workflow:
+The surface therefore uses a handle-style workflow:
 
 ```text
-test.run.editMode.start
+test.run.<mode>.start
  -> mutationId + Unity runGuid + scheduled/running state
  -> Unity Test Framework callbacks
  -> SessionState result journal
@@ -26,11 +27,11 @@ test.run.editMode.start
 
 `mutationId` is the bridge retry identity. `runGuid` is Unity Test Framework's run identity returned by `TestRunnerApi.Execute`.
 
-## `test.run.editMode.start`
+## Common start contract
 
 Risk: `write`.
 
-The bridge itself does not edit a scene or asset, but executing arbitrary selected test code can mutate Editor/project state. Results therefore conservatively report `dirtyState=unknown`, and the bridge makes no Undo or automatic cleanup claim for arbitrary tests.
+The bridge itself does not promise to edit a scene or asset, but executing arbitrary selected test code can mutate Editor/project state. Results conservatively report `dirtyState=unknown`, and the bridge makes no Undo or automatic cleanup claim for arbitrary tests.
 
 Arguments:
 
@@ -38,26 +39,40 @@ Arguments:
 - `testNames` — optional exact full test names, at most 64 entries, each 1..512 characters,
 - `mutationId` — required at the Unity bridge layer, 1..128 characters using letters, digits, `-`, `_`, `.`, or `:`. MCP may generate it when omitted by a caller.
 
-First-slice bounds intentionally exclude:
+Bounds intentionally exclude:
 
 - implicit project-wide runs,
-- PlayMode tests,
 - regex/group filters,
 - category filters,
 - arbitrary target-platform/player test execution.
 
-Preconditions:
+Common preconditions:
 
 - Unity must not be compiling,
-- Editor Play Mode lifecycle must be stable `edit`,
 - Unity AI Bridge must not already own another unfinished test run in this Editor session.
 
 Retry behavior:
 
-- the run intent is normalized to exact assembly + sorted/distinct exact test names,
+- the run intent is normalized to exact mode + assembly + sorted/distinct exact test names,
 - same `mutationId` + same normalized intent returns the existing journal with `replayed=true`,
-- same `mutationId` + different intent fails with `validation/mutation_id_conflict`,
+- same `mutationId` + different mode/assembly/selection fails with `validation/mutation_id_conflict`,
 - a same-id retry never schedules a second Unity test run.
+
+## `test.run.editMode.start`
+
+The Editor Play Mode lifecycle must be stable `edit` when a new EditMode run is scheduled.
+
+The EditMode slice is **Verified** on Windows + Unity 6000.3.21f1 with the evidence recorded below.
+
+## `test.run.playMode.start`
+
+A new PlayMode run must also be scheduled from stable `edit`. Unity Test Framework then owns the Edit -> Play -> Edit lifecycle for the selected run; Unity AI Bridge does not manually call its own Play Mode control tool around the test run.
+
+The PlayMode start uses the same SessionState journal/callback infrastructure as EditMode. A start response can become transport-ambiguous if PlayMode entry causes a domain reload quickly enough to drop the current bridge connection. The MCP bridge therefore preserves the same `mutationId`, waits for the same Editor identity to reconnect, and re-delivers only as an idempotent reconciliation attempt. Unity sees the existing journal first and does not schedule a second run.
+
+The first PlayMode slice is intentionally Editor-hosted PlayMode only. It does not build or execute a standalone Player.
+
+A dedicated PlayMode test assembly is used for live verification. The verifier test is a `[UnityTest]` that checks `Application.isPlaying == true`, yields one frame, and checks it again, proving the selected test actually ran inside Play Mode rather than merely being labeled as PlayMode metadata.
 
 ## `test.run.get`
 
@@ -65,7 +80,7 @@ Risk: `read`.
 
 Arguments:
 
-- `mutationId` — exact bridge run identity from the start request.
+- `mutationId` — exact bridge run identity from either start request.
 
 The journal is stored in Unity Editor `SessionState`. It survives script-domain reload inside the current Editor process but does not survive a full Editor restart.
 
@@ -76,15 +91,17 @@ Possible status values:
 - `completed`
 - `error`
 
+During PlayMode lifecycle/domain reload, a caller may temporarily be unable to reach the Editor. Clients should retry the read after the same Editor reconnects; they must not invent a fresh run mutationId as a transport retry.
+
 ## Result payload
 
-Both operations return the same bounded result shape:
+All three operations use the same bounded result shape:
 
 - `mutationId`
 - `replayed`
 - `runGuid`
 - `status`
-- `testMode` (`edit` in this slice)
+- `testMode` (`edit` or `play`)
 - `assemblyName`
 - normalized `testNames`
 - request/start/finish Unix-millisecond timestamps
@@ -113,27 +130,27 @@ Each issue contains:
 - stack trace
 - output
 
-Message/stack/output are individually truncated to 8,000 characters.
-
-Passing leaf tests are not repeated individually; aggregate counts are the normal compact success representation.
+Message/stack/output are individually truncated to 8,000 characters. Passing leaf tests are not repeated individually; aggregate counts are the normal compact success representation.
 
 ## Callback and reload behavior
 
 Unity Test Framework callbacks are not preserved through domain reload. Unity AI Bridge registers its public `IErrorCallbacks` listener from an `[InitializeOnLoad]` type in every loaded domain and stores run state/result data in `SessionState`.
 
-The implementation deliberately uses public Test Framework APIs compatible with the 1.4 line (`TestRunnerApi.Execute`, `RegisterTestCallback`, `Filter`, `ExecutionSettings`, `ITestAdaptor`, `ITestResultAdaptor`, `IErrorCallbacks`) rather than relying on internal Test Framework runners or newer-only API helpers.
+The implementation deliberately uses public Test Framework APIs compatible with the existing Unity 6000.3 package surface (`TestRunnerApi.Execute`, `RegisterTestCallback`, `Filter`, `ExecutionSettings`, `ITestAdaptor`, `ITestResultAdaptor`, `IErrorCallbacks`) rather than private Test Framework runners.
+
+Official Unity documentation defines `TestMode.PlayMode` for programmatic runs and notes that registered callbacks must be re-registered after domain reload.
 
 ## Concurrency limitation
 
-The public 1.4 callback interface does not include the Unity run GUID in `RunStarted`/`RunFinished`. The first slice therefore correlates callbacks using the single bridge-owned active journal plus the exact requested assembly/test selection.
+The public callback interface used by this slice does not include the Unity run GUID in `RunStarted`/`RunFinished`. The implementation therefore correlates callbacks using the single bridge-owned active journal plus the exact requested assembly/test selection.
 
-Unity AI Bridge refuses to start two owned runs concurrently. However, if an external/manual actor starts an indistinguishable run for the **same exact selection** while a bridge-owned run is active, public callback metadata may be insufficient to distinguish the two. This remains an explicit first-slice limitation; the bridge does not use private Test Framework internals to guess.
+Unity AI Bridge refuses to start two owned runs concurrently. However, if an external/manual actor starts an indistinguishable run for the **same exact selection** while a bridge-owned run is active, public callback metadata may be insufficient to distinguish the two. This remains explicit; the bridge does not use private Test Framework internals to guess.
 
 ## Verification
 
-Verified on **2026-08-24** with Windows + Unity **6000.3.21f1**.
+### EditMode — Verified 2026-08-24
 
-Evidence:
+Windows + Unity **6000.3.21f1**:
 
 - expanded installed-package EditMode suite: **98 Passed / 0 Failed**,
 - dedicated official-MCP-client `verify:test-runner` live gate: PASS,
@@ -142,4 +159,21 @@ Evidence:
 - conflicting same-id selection was rejected,
 - final Editor lifecycle state remained stable `edit`.
 
-The previous 97/97 candidate plus first live gate exposed the full-tree `RunStarted().TestCaseCount` mismatch described above; the count definition was corrected and regression-tested before this slice was marked Verified.
+The previous 97/97 candidate plus first live gate exposed the full-tree `RunStarted().TestCaseCount` mismatch described above; the count definition was corrected and regression-tested before EditMode control was marked Verified.
+
+### PlayMode — Verified 2026-08-24
+
+Windows + Unity **6000.3.21f1**, PR #48 product head `00fc44fb0b9e4fac855c5853d2aeb3fe1d7d125c`:
+
+- expanded ordinary EditMode regression suite: **100 Passed / 0 Failed**,
+- dedicated PlayMode assembly `EunSung.UnityAiBridge.PlayMode.Tests`: **1 Passed / 0 Failed**,
+- official-MCP-client `verify:playmode-tests`: PASS,
+- the exact one-frame `[UnityTest]` returned `selectedTestCaseCount=1`, `passCount=1`, `failCount=0`,
+- the verifier proved `Application.isPlaying == true` across a yielded frame,
+- immediate and completed same-id replays preserved one stable Unity `runGuid` (`463bc221-4385-4b94-87a4-78313e9dc60d`),
+- conflicting same-id PlayMode selection was rejected,
+- final native Editor state returned to stable Edit Mode,
+- Enter Play Mode settings were preserved (`enterPlayModeOptionsEnabled=false`, Domain Reload enabled, Scene Reload enabled in the verified environment),
+- `initialDeliveryReconciled=false` was the observed successful fast-path outcome; ambiguous disconnect/reconnect reconciliation remains separately covered by Node bridge tests.
+
+The PlayMode extension is therefore **Verified** for this named environment. This does not imply standalone Player test execution, broader Unity versions/OSes, concurrent owned runs, cancellation, or full Editor-restart recovery.

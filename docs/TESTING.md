@@ -55,7 +55,7 @@ Expected automatic sources:
 
 If automatic enabling cannot update the project manifest, use `Tools > Unity AI Bridge > Enable Package Tests` or add the package manually to the project's `testables` array.
 
-Verified history: 75/75 after Test Runner bootstrap, 80/80 after Prefab-property apply, 81/81 after PR #43 direct scene-Prefab override recording, 85/85 after PR #44 bounded Script read, 89/89 after PR #45 reload-safe Script replace, 93/93 after PR #46 reload-aware Play Mode control, 97/97 on the first PR #47 Test Runner-control candidate, and **98/98** after the selected-count regression fix.
+Verified history: 75/75 after Test Runner bootstrap, 80/80 after Prefab-property apply, 81/81 after PR #43 direct scene-Prefab override recording, 85/85 after PR #44 bounded Script read, 89/89 after PR #45 reload-safe Script replace, 93/93 after PR #46 reload-aware Play Mode control, 97/97 on the first PR #47 Test Runner-control candidate, **98/98** after the selected-count regression fix, and **100/100** after PR #48 PlayMode Test Runner contract coverage.
 
 ## 4. Unity EditMode suite
 
@@ -71,11 +71,11 @@ Latest real Unity evidence:
 
 ```text
 Date: 2026-08-24
-Candidate: PR #47 feature/test-runner-control
-Revision: 7543aa57d38899faf86ec26e6cc1adb8b04984db
+Candidate: PR #48 feature/playmode-test-runner-control
+Revision: 00fc44fb0b9e4fac855c5853d2aeb3fe1d7d125c
 Environment: Windows + Unity 6000.3.21f1
 Action: EditMode Run All
-Observed: 98 Passed / 0 Failed
+Observed: 100 Passed / 0 Failed
 Result: PASS
 ```
 
@@ -370,11 +370,89 @@ finalPlayModeState: edit
 projectMutationClaimedByBridge: false
 ```
 
-The first slice is intentionally EditMode-only, requires one exact assembly, allows at most 64 exact test names, allows only one bridge-owned unfinished run, and stores the run journal in `SessionState` for the current Editor process. Public Test Framework callbacks do not include the Unity run GUID, so correlation uses the one active bridge journal plus exact requested selection rather than private Test Framework internals.
+The first EditMode slice requires one exact assembly, allows at most 64 exact test names, allows only one bridge-owned unfinished run, and stores the run journal in `SessionState` for the current Editor process. Public Test Framework callbacks do not include the Unity run GUID, so correlation uses the one active bridge journal plus exact requested selection rather than private Test Framework internals.
 
 This gate is **Verified** on Windows + Unity 6000.3.21f1.
 
-## 11. Real local bridge + `editor.status` verification helper
+## 11. PlayMode Test Runner control Unity + MCP gate
+
+PR #48 extends the verified asynchronous Test Runner job model with `test.run.playMode.start`, exposed as `unity_start_playmode_tests`, while reusing `unity_get_test_run` for result polling.
+
+### EditMode regression gate
+
+The ordinary installed-package EditMode suite completed:
+
+```text
+100 Passed
+0 Failed
+```
+
+The two added EditMode tests validate PlayMode-run mode-specific intent identity and the same bounded selection rules without recursively starting a PlayMode run.
+
+### Direct PlayMode assembly gate
+
+The runtime-capable package test assembly:
+
+```text
+EunSung.UnityAiBridge.PlayMode.Tests
+```
+
+completed in Unity Test Runner PlayMode:
+
+```text
+1 Passed
+0 Failed
+```
+
+Its exact verifier test is a `[UnityTest]` that asserts `Application.isPlaying`, yields one frame, and asserts it again.
+
+### Live MCP gate
+
+With Unity open in stable Edit Mode:
+
+```text
+npm --prefix mcp-server ci
+npm --prefix mcp-server run verify:playmode-tests
+```
+
+Observed PASS record on 2026-08-24:
+
+```text
+unityVersion: 6000.3.21f1
+assemblyName: EunSung.UnityAiBridge.PlayMode.Tests
+exactTestName: UnityAiBridge.PlayMode.Tests.PlayModeVerifierTests.RunsOneFrameInsidePlayMode
+runGuid: 463bc221-4385-4b94-87a4-78313e9dc60d
+initialStatus: scheduled
+initialDeliveryReconciled: false
+immediateReplayReadOnly: true
+terminalStatus: completed
+resultState: Passed
+selectedTestCaseCount: 1
+passCount: 1
+failCount: 0
+skipCount: 0
+inconclusiveCount: 0
+issueCount: 0
+issuesTruncated: false
+completedReplayReadOnly: true
+runGuidStableAcrossReplays: true
+conflictingSameIdSelectionRejected: true
+finalPlayModeState: edit
+enterPlayModeOptionsEnabled: false
+disableDomainReload: false
+disableSceneReload: false
+userEnterPlayModeSettingsPreserved: true
+exactFinalEditStateRestored: true
+verifierTestProvedApplicationIsPlayingAcrossFrame: true
+```
+
+The live gate proves exactly one PlayMode test result, stable run identity across immediate/completed replay, conflicting same-id rejection, final stable Edit Mode, unchanged Enter Play Mode settings, and actual `Application.isPlaying` execution across a frame. `initialDeliveryReconciled=false` is the observed normal fast path; same-Editor/same-mutation ambiguous start reconciliation is separately covered by Node bridge tests.
+
+The PlayMode start and verifier use a bounded 180-second lifecycle timeout so slower machines/projects are not falsely failed by a short client timeout. PlayMode Test Framework lifecycle disconnects must preserve the same mutationId rather than create a fresh run intent.
+
+This gate is **Verified** on Windows + Unity 6000.3.21f1. See [`PLAYMODE_TEST_RUNNER_TESTING.md`](PLAYMODE_TEST_RUNNER_TESTING.md) for the dedicated repeatable gate.
+
+## 12. Real local bridge + `editor.status` verification helper
 
 With the Unity project open and the package loaded:
 
@@ -385,7 +463,7 @@ npm --prefix mcp-server run verify:unity
 
 The helper listens on the local bridge, waits for the real Unity Editor hello, sends `editor.status`, and prints structured Unity/project/scene/play/compile state. This verifies the real WebSocket/bridge path, not MCP stdio by itself.
 
-## 12. Real MCP `unity_get_status` end-to-end check
+## 13. Real MCP `unity_get_status` end-to-end check
 
 ```text
 npm --prefix mcp-server ci
@@ -394,7 +472,7 @@ npm --prefix mcp-server run verify:mcp-unity
 
 The official MCP client launches the normal server, completes MCP initialization, calls `unity_get_status`, and validates its structured result against the live Editor.
 
-## 13. Reconnect / domain reload / stale-generation check
+## 14. Reconnect / domain reload / stale-generation check
 
 ```text
 npm --prefix mcp-server run verify:reconnect
@@ -402,7 +480,7 @@ npm --prefix mcp-server run verify:reconnect
 
 When prompted, trigger a Unity script/domain reload. PASS requires the same editor identity to reconnect with a new connection generation, an intentionally old-generation route to fail with `routing/stale_connection`, and a current-generation status call to succeed.
 
-## 14. Hierarchy and object-resolution checks
+## 15. Hierarchy and object-resolution checks
 
 Hierarchy:
 
@@ -418,7 +496,7 @@ npm --prefix mcp-server run verify:resolver
 
 If an operation exists in checked-out source but Unity reports it unsupported, treat stale compiled package state as a candidate first; reimport/restart and re-run before concluding the operation is absent.
 
-## 15. Phase 3 domain verification
+## 16. Phase 3 domain verification
 
 Each new write/lifecycle/job family must carry the Phase 2 reliability contract appropriate to its domain before being marked Verified:
 
@@ -438,7 +516,7 @@ Each new write/lifecycle/job family must carry the Phase 2 reliability contract 
 
 Domain-specific verifier scripts and exact evidence belong in `STATUS.md` / linked docs rather than being inferred from source presence.
 
-## 16. Evidence format
+## 17. Evidence format
 
 Every real verification entry added to `STATUS.md` should record:
 

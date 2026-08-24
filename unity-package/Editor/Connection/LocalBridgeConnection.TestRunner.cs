@@ -21,7 +21,13 @@ namespace UnityAiBridge.Editor.Connection
         {
             if (string.Equals(command.operation, "test.run.editMode.start", StringComparison.Ordinal))
             {
-                await HandleEditModeTestStartAsync(current, command, rawJson, cancellationToken);
+                await HandleTestStartAsync(current, command, rawJson, false, cancellationToken);
+                return true;
+            }
+
+            if (string.Equals(command.operation, "test.run.playMode.start", StringComparison.Ordinal))
+            {
+                await HandleTestStartAsync(current, command, rawJson, true, cancellationToken);
                 return true;
             }
 
@@ -34,10 +40,11 @@ namespace UnityAiBridge.Editor.Connection
             return false;
         }
 
-        private static async Task HandleEditModeTestStartAsync(
+        private static async Task HandleTestStartAsync(
             ClientWebSocket current,
             BridgeCommandDto command,
             string rawJson,
+            bool playMode,
             CancellationToken cancellationToken)
         {
             if (!string.Equals(command.risk, "write", StringComparison.Ordinal))
@@ -47,7 +54,7 @@ namespace UnityAiBridge.Editor.Connection
                     command.requestId,
                     "validation",
                     "risk_mismatch",
-                    "test.run.editMode.start requires risk='write' because the selected tests may mutate Editor/project state.",
+                    $"{command.operation} requires risk='write' because the selected tests may mutate Editor/project state.",
                     cancellationToken);
                 return;
             }
@@ -61,7 +68,9 @@ namespace UnityAiBridge.Editor.Connection
             try
             {
                 var result = await EditorMainThreadDispatcher.InvokeAsync(
-                    () => TestRunnerControl.StartEditMode(assemblyName, testNames, mutationId),
+                    () => playMode
+                        ? PlayModeTestRunnerControl.StartPlayMode(assemblyName, testNames, mutationId)
+                        : TestRunnerControl.StartEditMode(assemblyName, testNames, mutationId),
                     command.deadlineUnixMs,
                     command.operation);
 

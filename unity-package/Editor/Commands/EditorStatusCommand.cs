@@ -35,6 +35,7 @@ namespace UnityAiBridge.Editor.Commands
             "editor.status",
             "editor.playMode.set",
             "test.run.editMode.start",
+            "test.run.playMode.start",
             "test.run.get",
             "scene.hierarchy",
             "editor.diagnostics",

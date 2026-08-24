@@ -100,9 +100,10 @@ Verified slices:
 - ✅ reload-safe Script replace/write — `unity_replace_script` / `script.replace`; real Unity **89/89** plus live MCP CAS/write/compile/reload/replay/stale/restore PASS through PR #45
 - ✅ reload-aware Play Mode control — `unity_set_play_mode` / `editor.playMode.set`; real Unity **93/93** plus live MCP edit/play/replay/stale/final-restore PASS through PR #46
 - ✅ bounded asynchronous EditMode Test Runner control — `unity_start_editmode_tests` + `unity_get_test_run`; real Unity **98/98** plus live MCP schedule/poll/replay/result/conflict PASS through PR #47
+- ✅ bounded asynchronous PlayMode Test Runner control — `unity_start_playmode_tests` + `unity_get_test_run`; real Unity **100/100 EditMode + 1/1 PlayMode** plus live MCP lifecycle/replay/result/conflict/final-restore PASS through PR #48
 - ⬜ diagnostics extensions where they unlock concrete workflows
 - ⬜ explicit Undo/recovery tools where useful to clients
-- ⬜ PlayMode Test Runner execution as a separately bounded lifecycle extension
+- ⬜ Test Runner selection/cancellation extensions where bounded contracts are clear
 
 ### Verified Play Mode strategy
 
@@ -136,33 +137,37 @@ Verified first-slice properties:
 
 ### Verified Test Runner strategy
 
-Long Unity test suites are jobs, not one long MCP request. The first Test Runner slice therefore uses an asynchronous start/get handle model and only supports explicitly bounded EditMode selections.
+Long Unity test suites are jobs, not one long MCP request. The verified Test Runner surface therefore uses an asynchronous start/get handle model for explicitly bounded EditMode and PlayMode selections.
 
 Verified lifecycle:
 
 ```text
 stable Edit Mode + not compiling
- -> exact test assembly + optional exact full test names
+ -> exact mode + test assembly + optional exact full test names
  -> mutationId journal
- -> TestRunnerApi.Execute
+ -> TestRunnerApi.Execute(EditMode | PlayMode)
  -> Unity runGuid + immediate scheduled/running result
+ -> optional PlayMode lifecycle/domain reload/reconnect
  -> public Test Framework callbacks
  -> SessionState run/result journal
  -> unity_get_test_run polling
  -> completed/error terminal result
  -> same-id replay preserves runGuid and never schedules twice
+ -> PlayMode run returns to stable Edit Mode
 ```
 
-Verified first-slice properties:
+Verified properties:
 
 - one explicit test assembly is mandatory; no implicit whole-project run,
 - exact test names are optional and bounded to 64,
-- one bridge-owned unfinished run at a time,
+- one bridge-owned unfinished run at a time across EditMode/PlayMode,
 - same-id same-intent replay is read-only and stable across scheduled/completed states,
-- same-id different selection fails closed,
+- mode is part of intent identity; same-id different mode/assembly/selection fails closed,
 - terminal aggregate counts and bounded non-passed leaf details are structured for AI clients,
 - terminal `selectedTestCaseCount` is based on actual test outcomes rather than the full loaded tree reported by `RunStarted`,
 - Test Framework callback registration is restored after script-domain reload while current-process run state is held in `SessionState`,
+- PlayMode start/reconciliation preserves the same Editor and mutation identity through transient lifecycle disconnects,
+- dedicated PlayMode verification proves `Application.isPlaying` across a yielded frame and exact final Edit Mode/settings preservation,
 - arbitrary selected tests may mutate project state, so no generic Undo/cleanup promise is made.
 
 ### Verified Script strategy
@@ -241,6 +246,7 @@ Supporting work:
 - ✅ reload-safe Script replace/CAS contract (PR #45, **89/89 + live MCP PASS**)
 - ✅ reload-aware Play Mode lifecycle control (PR #46, **93/93 + live MCP PASS**)
 - ✅ bounded asynchronous EditMode Test Runner control (PR #47, **98/98 + live MCP PASS**)
+- ✅ bounded asynchronous PlayMode Test Runner control (PR #48, **100/100 EditMode + 1/1 PlayMode + live MCP PASS**)
 - 🟨 consistent risk classification as new operations are added
 - ⬜ broader tool-schema compatibility tests as the surface grows
 - ⬜ better structured error explanations for AI clients
@@ -262,7 +268,7 @@ Reliability requirements inherited from Phase 2:
 
 ### Immediate next gate
 
-The next bounded Phase 3 work should strengthen the **test-fix-debug loop** rather than simply add tool count: diagnostics/recovery extensions where they unlock concrete workflows, followed by separately bounded PlayMode Test Runner execution or explicit recovery controls as evidence justifies them.
+The next bounded Phase 3 work should strengthen the **test-fix-debug loop** rather than simply add tool count: diagnostics/recovery extensions where they unlock concrete workflows, explicit recovery/Undo controls where useful, and broader schema/result compatibility tests as the surface grows.
 
 ### Exit gate
 
