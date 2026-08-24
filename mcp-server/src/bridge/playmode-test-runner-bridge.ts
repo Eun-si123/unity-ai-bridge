@@ -55,7 +55,7 @@ class TestRunnerBridgeAccess extends PrefabPropertyBridgeServer {
         throw new Error(`${message} mutationId=${mutationId}`);
       }
 
-      await this.waitForSameEditor(initialEditor.editorId, deadlineUnixMs);
+      await this.waitForSameEditorForTestRun(initialEditor.editorId, deadlineUnixMs);
       const remaining = remainingMs(deadlineUnixMs);
       if (remaining <= 0) {
         throw new Error(
@@ -118,7 +118,10 @@ class TestRunnerBridgeAccess extends PrefabPropertyBridgeServer {
     return result;
   }
 
-  private async waitForSameEditor(editorId: string, deadlineUnixMs: number): Promise<void> {
+  private async waitForSameEditorForTestRun(
+    editorId: string,
+    deadlineUnixMs: number,
+  ): Promise<void> {
     while (remainingMs(deadlineUnixMs) > 0) {
       const current = this.connectedEditor;
       if (current !== undefined) {
@@ -156,7 +159,7 @@ export async function requestStartPlayModeTests(
   timeoutMs = 180_000,
 ): Promise<AnyTestRunPayload> {
   return await TestRunnerBridgeAccess.prototype.startPlayModeTests.call(
-    bridge as TestRunnerBridgeAccess,
+    bridge as unknown as TestRunnerBridgeAccess,
     options,
     timeoutMs,
   );
@@ -168,7 +171,7 @@ export async function requestTestRunAnyMode(
   timeoutMs = 5_000,
 ): Promise<AnyTestRunPayload> {
   return await TestRunnerBridgeAccess.prototype.readTestRunAnyMode.call(
-    bridge as TestRunnerBridgeAccess,
+    bridge as unknown as TestRunnerBridgeAccess,
     mutationId,
     timeoutMs,
   );
