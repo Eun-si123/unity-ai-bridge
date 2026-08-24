@@ -35,7 +35,8 @@ This file maps the current repository at subsystem level and records what is onl
 │  │  ├─ Execution/
 │  │  ├─ Protocol/
 │  │  └─ Testing/
-│  │     └─ PackageTestBootstrap.cs
+│  │     ├─ PackageTestBootstrap.cs
+│  │     └─ TestRunnerControl.cs
 │  └─ Tests/
 │     ├─ README.md
 │     └─ Editor/
@@ -47,6 +48,7 @@ This file maps the current repository at subsystem level and records what is onl
 │  ├─ README.md
 │  ├─ PREFAB_PROPERTY_APPLY.md
 │  ├─ SCRIPT_READ.md
+│  ├─ TEST_RUNNER_CONTROL.md
 │  ├─ schemas/
 │  └─ fixtures/
 │
@@ -67,6 +69,7 @@ This file maps the current repository at subsystem level and records what is onl
    │  ├─ component-tools.ts
    │  ├─ gameobject-edit-tools.ts
    │  ├─ prefab-property-tools.ts
+   │  ├─ test-runner-tools.ts
    │  └─ additional domain/tool modules
    └─ tests/
 ```
@@ -84,6 +87,7 @@ This file maps the current repository at subsystem level and records what is onl
 - `docs/TESTING.md` and package test docs — repeatable verification procedures
 - `docs/OPEN_WEIGHT_MODEL_COMPATIBILITY.md` — deferred local/open-weight compatibility boundary and future Adaptive Router direction
 - `bridge-protocol/SCRIPT_READ.md` — bounded Script source observation contract and future file-content CAS boundary
+- `bridge-protocol/TEST_RUNNER_CONTROL.md` — bounded asynchronous EditMode Test Runner start/get contract, retry identity, current-session journaling, and result bounds
 - `llms.txt` — compact AI entrypoint
 
 ## Current source ownership
@@ -103,9 +107,10 @@ Home of the Unity Editor-side implementation:
 - Undo/dirty-state handling,
 - semantic native readback and rollback verification where applicable,
 - Editor status/hierarchy/diagnostics/object resolution,
-- Phase 3 Transform, GameObject, Component, Asset, Script, and Prefab handlers,
+- Phase 3 Transform, GameObject, Component, Asset, Script, Prefab, Play Mode, and Test Runner handlers,
 - bounded Script source reading through Unity asset/package identity rather than arbitrary filesystem paths,
 - persistent Prefab asset-write handlers with operation-specific safety/retry semantics where generic Unity Undo is not honestly available,
+- asynchronous EditMode Test Runner coordination through public Unity Test Framework APIs plus current-process SessionState result journals,
 - EditMode tests and live/manual verifiers,
 - development-install bootstrap for making non-embedded package tests visible in Unity Test Runner.
 
@@ -118,7 +123,7 @@ The Unity-facing transport-independent contract:
 - protocol-versioned command/hello/result JSON Schemas,
 - operation fixtures,
 - bridge protocol documentation,
-- operation-specific contracts such as bounded Prefab property apply and Script source read.
+- operation-specific contracts such as bounded Prefab property apply, Script source read, and asynchronous EditMode Test Runner control.
 
 MCP-facing tool contracts and Unity-facing bridge commands remain separate on purpose. Unity command semantics must not depend on a particular LLM vendor, MCP host, or WebSocket-specific detail.
 
@@ -134,6 +139,7 @@ The provider-neutral MCP/tool layer:
 - tool schemas/descriptions,
 - typed bridge adapters for current Unity domains,
 - bounded Script read tool/bridge adapter with raw-file SHA-256 metadata,
+- asynchronous EditMode Test Runner start/get tools with exact selection and bounded structured result validation,
 - domain-specific bridge subclasses/modules where that keeps large surfaces maintainable,
 - structured MCP results/errors,
 - simulated bridge tests and real-Unity verification helpers.

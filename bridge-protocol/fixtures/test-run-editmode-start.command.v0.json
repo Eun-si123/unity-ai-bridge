@@ -1,0 +1,18 @@
+{
+  "protocolVersion": "0",
+  "requestId": "fixture-test-run-editmode-start",
+  "operation": "test.run.editMode.start",
+  "arguments": {
+    "assemblyName": "EunSung.UnityAiBridge.Editor.Tests",
+    "testNames": [
+      "UnityAiBridge.Tests.Editor.TestRunnerControlTests.Get_RejectsMalformedOrUnknownMutationIdsWithoutStartingTests"
+    ],
+    "mutationId": "fixture-test-run-editmode-1"
+  },
+  "risk": "write",
+  "route": {
+    "editorId": "fixture-editor",
+    "connectionGeneration": 1
+  },
+  "deadlineUnixMs": 4102444800000
+}

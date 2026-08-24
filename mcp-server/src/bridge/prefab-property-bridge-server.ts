@@ -4,6 +4,7 @@ import { ScriptBridgeServer } from "./script-bridge-server.js";
 
 export type StablePlayMode = "edit" | "play";
 export type PlayModeState = StablePlayMode | "entering_play" | "exiting_play";
+export type TestRunStatus = "scheduled" | "running" | "completed" | "error";
 
 export interface PlayModeSetOptions {
   targetMode: StablePlayMode;
@@ -47,6 +48,45 @@ export interface PlayModeSetPayload extends PlayModeTransitionPayload {
   finalConnectionGeneration: number;
 }
 
+export interface TestRunStartOptions {
+  assemblyName: string;
+  testNames?: string[];
+  mutationId?: string;
+}
+
+export interface TestRunIssuePayload {
+  fullName: string;
+  resultState: string;
+  durationSeconds: number;
+  message: string;
+  stackTrace: string;
+  output: string;
+}
+
+export interface TestRunPayload {
+  mutationId: string;
+  replayed: boolean;
+  runGuid: string;
+  status: TestRunStatus;
+  testMode: "edit";
+  assemblyName: string;
+  testNames: string[];
+  requestedUnixMs: number;
+  startedUnixMs: number;
+  finishedUnixMs: number;
+  selectedTestCaseCount: number;
+  resultState: string;
+  durationSeconds: number;
+  passCount: number;
+  failCount: number;
+  skipCount: number;
+  inconclusiveCount: number;
+  assertCount: number;
+  issues: TestRunIssuePayload[];
+  issuesTruncated: boolean;
+  errorMessage: string;
+}
+
 export interface PrefabPropertyApplyOptions {
   componentGlobalObjectId: string;
   propertyPath: string;
@@ -81,6 +121,11 @@ const MAX_PREFAB_PATH_LENGTH = 512;
 const MAX_HASH_LENGTH = 128;
 const MAX_MUTATION_ID_LENGTH = 128;
 const MAX_STATE_EPOCH_LENGTH = 128;
+const MAX_TEST_ASSEMBLY_NAME_LENGTH = 256;
+const MAX_TEST_NAME_LENGTH = 512;
+const MAX_TEST_NAMES = 64;
+const MAX_TEST_ISSUES = 100;
+const MAX_TEST_DETAIL_LENGTH = 8_000;
 const MUTATION_ID_PATTERN = /^[A-Za-z0-9._:-]+$/;
 const PLAY_MODE_DELIVERY_TIMEOUT_MS = 5_000;
 const PLAY_MODE_POLL_INTERVAL_MS = 200;
@@ -158,6 +203,68 @@ export class PrefabPropertyBridgeServer extends ScriptBridgeServer {
       initialConnectionGeneration: initialEditor.connectionGeneration,
       finalConnectionGeneration: finalEditor.connectionGeneration,
     };
+  }
+
+  public async requestStartEditModeTests(
+    options: TestRunStartOptions,
+    timeoutMs = 5_000,
+  ): Promise<TestRunPayload> {
+    const editor = this.connectedEditor;
+    if (editor === undefined) {
+      throw new Error("No Unity Editor is connected to the local bridge.");
+    }
+
+    validateTestAssemblyName(options.assemblyName);
+    const testNames = normalizeTestNames(options.testNames);
+    const mutationId = options.mutationId ?? randomUUID();
+    validateMutationId(mutationId);
+
+    const result = await this.requestOperation(
+      "test.run.editMode.start",
+      {
+        assemblyName: options.assemblyName,
+        testNames,
+        mutationId,
+      },
+      {
+        editorId: editor.editorId,
+        connectionGeneration: editor.connectionGeneration,
+      },
+      timeoutMs,
+      "write",
+    );
+
+    if (!isTestRunPayload(result)) {
+      throw new Error("Unity returned an invalid test.run.editMode.start payload.");
+    }
+    return result;
+  }
+
+  public async requestTestRun(
+    mutationId: string,
+    timeoutMs = 5_000,
+  ): Promise<TestRunPayload> {
+    const editor = this.connectedEditor;
+    if (editor === undefined) {
+      throw new Error("No Unity Editor is connected to the local bridge.");
+    }
+    validateMutationId(mutationId);
+
+    const result = await this.requestOperation(
+      "test.run.get",
+      { mutationId },
+      {
+        editorId: editor.editorId,
+        connectionGeneration: editor.connectionGeneration,
+      },
+      timeoutMs,
+      "read",
+    );
+
+    if (!isTestRunPayload(result)) {
+      throw new Error("Unity returned an invalid test.run.get payload.");
+    }
+    return result;
   }
 
   public async requestApplyPrefabPropertyOverride(
@@ -382,6 +489,86 @@ function isPlayModeTransitionPayload(value: unknown): value is PlayModeTransitio
     isPlayModeSnapshotPayload(candidate.before) &&
     isPlayModeSnapshotPayload(candidate.afterRequest)
   );
+}
+
+function isTestRunPayload(value: unknown): value is TestRunPayload {
+  if (typeof value !== "object" || value === null) return false;
+  const candidate = value as Record<string, unknown>;
+  if (
+    typeof candidate.mutationId !== "string" || candidate.mutationId.length === 0 ||
+    typeof candidate.replayed !== "boolean" ||
+    typeof candidate.runGuid !== "string" || candidate.runGuid.length === 0 ||
+    !isTestRunStatus(candidate.status) ||
+    candidate.testMode !== "edit" ||
+    typeof candidate.assemblyName !== "string" || candidate.assemblyName.length === 0 ||
+    !Array.isArray(candidate.testNames) ||
+    !candidate.testNames.every((name) => typeof name === "string" && name.length > 0) ||
+    !isNonNegativeInteger(candidate.requestedUnixMs) ||
+    !isNonNegativeInteger(candidate.startedUnixMs) ||
+    !isNonNegativeInteger(candidate.finishedUnixMs) ||
+    !isNonNegativeInteger(candidate.selectedTestCaseCount) ||
+    typeof candidate.resultState !== "string" ||
+    typeof candidate.durationSeconds !== "number" || !Number.isFinite(candidate.durationSeconds) || candidate.durationSeconds < 0 ||
+    !isNonNegativeInteger(candidate.passCount) ||
+    !isNonNegativeInteger(candidate.failCount) ||
+    !isNonNegativeInteger(candidate.skipCount) ||
+    !isNonNegativeInteger(candidate.inconclusiveCount) ||
+    !isNonNegativeInteger(candidate.assertCount) ||
+    !Array.isArray(candidate.issues) || candidate.issues.length > MAX_TEST_ISSUES ||
+    !candidate.issues.every(isTestRunIssuePayload) ||
+    typeof candidate.issuesTruncated !== "boolean" ||
+    typeof candidate.errorMessage !== "string"
+  ) {
+    return false;
+  }
+  return true;
+}
+
+function isTestRunIssuePayload(value: unknown): value is TestRunIssuePayload {
+  if (typeof value !== "object" || value === null) return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.fullName === "string" && candidate.fullName.length > 0 &&
+    typeof candidate.resultState === "string" && candidate.resultState.length > 0 &&
+    typeof candidate.durationSeconds === "number" && Number.isFinite(candidate.durationSeconds) && candidate.durationSeconds >= 0 &&
+    typeof candidate.message === "string" && candidate.message.length <= MAX_TEST_DETAIL_LENGTH &&
+    typeof candidate.stackTrace === "string" && candidate.stackTrace.length <= MAX_TEST_DETAIL_LENGTH &&
+    typeof candidate.output === "string" && candidate.output.length <= MAX_TEST_DETAIL_LENGTH
+  );
+}
+
+function isTestRunStatus(value: unknown): value is TestRunStatus {
+  return value === "scheduled" || value === "running" || value === "completed" || value === "error";
+}
+
+function validateTestAssemblyName(value: string): void {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new Error("assemblyName is required.");
+  }
+  if (value.length > MAX_TEST_ASSEMBLY_NAME_LENGTH) {
+    throw new Error(`assemblyName must be at most ${MAX_TEST_ASSEMBLY_NAME_LENGTH} characters.`);
+  }
+  if (value.toLowerCase().endsWith(".dll")) {
+    throw new Error("assemblyName must not include the .dll extension.");
+  }
+}
+
+function normalizeTestNames(values: string[] | undefined): string[] {
+  if (values === undefined || values.length === 0) return [];
+  if (!Array.isArray(values) || values.length > MAX_TEST_NAMES) {
+    throw new Error(`testNames must contain at most ${MAX_TEST_NAMES} exact test names.`);
+  }
+  const normalized = new Set<string>();
+  for (const value of values) {
+    if (typeof value !== "string" || value.trim().length === 0) {
+      throw new Error("testNames may not contain empty values.");
+    }
+    if (value.length > MAX_TEST_NAME_LENGTH) {
+      throw new Error(`Each test name must be at most ${MAX_TEST_NAME_LENGTH} characters.`);
+    }
+    normalized.add(value);
+  }
+  return [...normalized].sort();
 }
 
 function isAmbiguousPlayModeDeliveryError(message: string): boolean {

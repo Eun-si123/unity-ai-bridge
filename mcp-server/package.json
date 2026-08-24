@@ -30,6 +30,7 @@
     "verify:script-read": "npm run build && node dist/src/dev/verify-script-read-unity.js",
     "verify:script-replace": "npm run build && node dist/src/dev/verify-script-replace-unity.js",
     "verify:play-mode": "npm run build && node dist/src/dev/verify-play-mode-unity.js",
+    "verify:test-runner": "npm run build && node dist/src/dev/verify-test-runner-unity.js",
     "verify:prefab": "npm run build && node dist/src/dev/verify-prefab-unity.js",
     "verify:prefab-asset-create": "npm run build && node dist/src/dev/verify-prefab-asset-create-unity.js",
     "verify:prefab-property-apply": "npm run build && node dist/src/dev/verify-prefab-property-apply-unity.js"

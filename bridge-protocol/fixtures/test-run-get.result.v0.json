@@ -1,0 +1,33 @@
+{
+  "protocolVersion": "0",
+  "requestId": "fixture-test-run-get",
+  "ok": true,
+  "result": {
+    "mutationId": "fixture-test-run-editmode-1",
+    "replayed": false,
+    "runGuid": "fixture-unity-test-run-guid",
+    "status": "completed",
+    "testMode": "edit",
+    "assemblyName": "EunSung.UnityAiBridge.Editor.Tests",
+    "testNames": [
+      "UnityAiBridge.Tests.Editor.TestRunnerControlTests.Get_RejectsMalformedOrUnknownMutationIdsWithoutStartingTests"
+    ],
+    "requestedUnixMs": 1787569500000,
+    "startedUnixMs": 1787569500100,
+    "finishedUnixMs": 1787569500200,
+    "selectedTestCaseCount": 1,
+    "resultState": "Passed",
+    "durationSeconds": 0.1,
+    "passCount": 1,
+    "failCount": 0,
+    "skipCount": 0,
+    "inconclusiveCount": 0,
+    "assertCount": 2,
+    "issues": [],
+    "issuesTruncated": false,
+    "errorMessage": ""
+  },
+  "warnings": [],
+  "dirtyState": "unknown",
+  "compileState": "idle"
+}

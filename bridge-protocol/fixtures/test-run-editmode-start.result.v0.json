@@ -1,0 +1,35 @@
+{
+  "protocolVersion": "0",
+  "requestId": "fixture-test-run-editmode-start",
+  "ok": true,
+  "result": {
+    "mutationId": "fixture-test-run-editmode-1",
+    "replayed": false,
+    "runGuid": "fixture-unity-test-run-guid",
+    "status": "scheduled",
+    "testMode": "edit",
+    "assemblyName": "EunSung.UnityAiBridge.Editor.Tests",
+    "testNames": [
+      "UnityAiBridge.Tests.Editor.TestRunnerControlTests.Get_RejectsMalformedOrUnknownMutationIdsWithoutStartingTests"
+    ],
+    "requestedUnixMs": 1787569500000,
+    "startedUnixMs": 0,
+    "finishedUnixMs": 0,
+    "selectedTestCaseCount": 0,
+    "resultState": "",
+    "durationSeconds": 0,
+    "passCount": 0,
+    "failCount": 0,
+    "skipCount": 0,
+    "inconclusiveCount": 0,
+    "assertCount": 0,
+    "issues": [],
+    "issuesTruncated": false,
+    "errorMessage": ""
+  },
+  "warnings": [
+    "Selected tests may mutate Editor/project state; no generic Undo or cleanup is claimed."
+  ],
+  "dirtyState": "unknown",
+  "compileState": "idle"
+}
