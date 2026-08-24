@@ -37,37 +37,50 @@ Broader Unity/OS compatibility is not implied.
 
 ## Latest real Unity verification
 
-On **2026-08-24**, the expanded installed-package EditMode suite for **PR #45** completed:
+On **2026-08-24**, the expanded installed-package EditMode suite for **PR #44** completed:
 
 ```text
 Windows
 Unity 6000.3.21f1
-89 Passed
+85 Passed
 0 Failed
 ```
 
-This supersedes the 85/85 PR #44 baseline for the installed-package EditMode suite. The new four tests cover the bounded Script-replace validation/intent/atomic-write helper surface without intentionally triggering a domain reload inside Test Runner.
-
-The dedicated live MCP `verify:script-replace` gate was then attempted. The first attempt reached a real script compilation/domain-reload boundary but the verifier process hit the MCP TypeScript SDK's default 60-second request timeout before the long-running tool returned. Immediate guarded recovery also ran before Unity had reconnected, so it could not inspect the target. The verifier saved an exact local recovery copy instead of blindly overwriting the script.
-
-That verifier defect is fixed on PR #45 head `1b12d498413c82c3eb80a886a451d8c3d089b251` by:
-
-- setting explicit 180-second MCP `callTool` request budgets for long Script-replace operations;
-- waiting for Unity Script capabilities to return before guarded recovery;
-- precomputing the intended modified raw SHA so recovery can reconcile even if the write response itself is lost;
-- writing a recovery copy before mutation and removing it only after exact restoration;
-- preserving the rule that any third/unrecognized SHA is never automatically overwritten.
-
-Latest automated CI for that verifier-fix head:
+The tested PR head was:
 
 ```text
-Node Verification: PASS
-Phase 1 Local Bridge Verification: PASS
+cee29f4bc364cce60e1dcf8dbb77e9cfc9d63020
 ```
 
-The live Script-replace gate must be rerun successfully before `script.replace` can become Verified or PR #45 can merge.
+PR #44 was then squash-merged to main as:
 
-Historical verified Script-read evidence from PR #44 remains valid: Unity 6000.3.21f1 completed **85/85**, and the dedicated `verify:script-read` MCP gate reconstructed `Packages/com.eunsung.unity-ai-bridge/Editor/Protocol/BridgeProtocol.cs` exactly with stable GUID/SHA/dependency identity and no project mutation.
+```text
+f0715f883bf7c921ed41e1a153b3489bd4f56352
+```
+
+This supersedes the 81/81 baseline while preserving it as the historical direct-Prefab-write milestone.
+
+The dedicated live MCP `verify:script-read` gate also passed against the same Unity 6000.3.21f1 candidate. Observed evidence:
+
+```text
+scriptPath: Packages/com.eunsung.unity-ai-bridge/Editor/Protocol/BridgeProtocol.cs
+guid: 535573b5098b07445b02ce5ea969259d
+sourceKind: Packages
+packageName: com.eunsung.unity-ai-bridge
+dependencyHash: 1b006f5ec0facfe79226658b89960cda
+contentSha256: b52e965c2c01290b03ba70ca1ca60f6eb62870b4665a821632e5993d7d776fc7
+encoding: utf-8
+hasUtf8Bom: false
+byteLength: 206
+utf16CharCount: 206
+lineCount: 9
+chunkSize: 64
+chunkCount: 4
+reconstructedExactly: true
+chunkIdentityStable: true
+immediateRepeatStable: true
+projectMutated: false
+```
 
 Separately, the dedicated PR #42 live MCP `verify:prefab-property-apply` gate passed on 2026-08-24 against Unity 6000.3.21f1. It verified changed Prefab dependency hash, independent fresh-instance readback, read-only same-`mutationId` replay, asset-removal observation, stale replay rejection, and scene-object cleanup.
 
@@ -91,13 +104,13 @@ Separately, the dedicated PR #42 live MCP `verify:prefab-property-apply` gate pa
 | Component add/remove | Verified | PR #25; exact Component types/identities, Undo, native verification and replay protection. |
 | Component property edit | Verified | PR #26; visible Boolean/Integer/Float/String/Vector3 serialized-property writes with semantic readback and Undo/replay protection. |
 | Asset search/inspect | Verified | PR #27; bounded `AssetDatabase` search and exact GUID/type/importer/dependency inspection. |
-| Script read | **Verified** | PR #44; exact `.cs` Unity assets under Assets/Packages, canonical GUID/path + MonoScript validation, strict UTF-8/BOM handling, raw SHA-256, dependencyHash, bounded paging and 4 MiB source cap. Real Unity 85/85 plus live MCP PASS. |
-| Script replace/write | **Implemented** | PR #45. Existing `Assets/*.cs` only; path+GUID+raw-SHA CAS, strict UTF-8/BOM preservation, editability preflight, atomic persistence, exact SHA readback, at-most-once SessionState reconciliation across compile/domain reload, compiler outcome separated from persistence, and fresh post-reload Script readback. Real Unity **89/89** passed; dedicated live MCP gate must be rerun after verifier timeout hardening before this can be Verified. |
+| Script read | **Verified** | PR #44; `script.read` / `unity_read_script`; exact `.cs` Unity assets under Assets/Packages, canonical GUID/path + MonoScript validation, Package Manager resolution, strict UTF-8/BOM handling, raw SHA-256, dependencyHash, bounded paging and 4 MiB source-size cap. Real Unity **85/85** plus live MCP reconstruction/identity/non-mutation gate PASS. |
 | Prefab inspect/instantiate | Verified | PR #28; bounded Prefab Asset hierarchy inspect, dependency-hash precondition, linked `PrefabUtility.InstantiatePrefab`, native linkage readback, same-id replay, Undo, stale-replay rejection. |
 | Prefab Asset creation | Verified | PR #29; create-only `SaveAsPrefabAsset`, source unchanged, GUID/dependencyHash/root readback, same-id replay, manual asset removal followed by stale-replay rejection. |
-| Package Test Runner discovery bootstrap | **Verified** | Development Local/LocalTarball/Git installs self-add `com.eunsung.unity-ai-bridge` to project `testables`; guarded package reimport handles Test Framework refresh. Latest expanded suite completed **89/89** on PR #45. |
+| Package Test Runner discovery bootstrap | **Verified** | Development Local/LocalTarball/Git installs self-add `com.eunsung.unity-ai-bridge` to project `testables`; guarded package reimport handles Test Framework refresh. Latest expanded suite completed **85/85**. |
 | Prefab single-property override apply | **Verified** | PR #36 + harness hardening #37–#40; 80/80 real Unity integration and dedicated PR #42 live MCP E2E PASS. |
-| Direct `Undo.RecordObject` Prefab-instance writes | **Verified** | #41 / PR #43. `PrefabUtility.RecordPrefabInstancePropertyModifications` is guarded to non-asset scene Prefab instances. Real integration verifies `m_LocalScale` and `m_IsActive` overrides persist after scene save; historical milestone 81/81. |
+| Direct `Undo.RecordObject` Prefab-instance writes | **Verified** | #41 / PR #43. `PrefabUtility.RecordPrefabInstancePropertyModifications` is guarded to non-asset scene Prefab instances. Real integration verifies `m_LocalScale` and `m_IsActive` overrides persist after scene save; historical milestone **81/81**. |
+| Script replace/write | Planned | Next Script reliability family; must use exact raw-content CAS and reload-safe reconciliation rather than blind overwrite. |
 | Remote gateway / Easy Connect | Planned | Not implemented. |
 | Pairing/authentication | Planned | Not implemented. |
 | Multi-user/editor routing | Planned | Current local bridge supports one active editor. |
@@ -134,14 +147,111 @@ The verified minimum included editor status, hierarchy, empty root GameObject cr
 
 ✅ **Completed 2026-08-23 for the implemented surface at exit.**
 
-Phase 2 established the reliability vocabulary and common transaction model used by later mutation families. Historical detailed evidence remains in `docs/PHASE2_EXIT_GATE.md` and repository history.
+Verified slices:
+
+- PR #10 stable resolver / create readback / stale replay
+- PR #11 capability metadata/preflight
+- PR #12 common transaction + Undo core
+- PR #13 forced rollback probe
+- PR #14 state revision / stale-state rejection
+- PR #15 domain-reload-safe same-session mutation lifecycle
+- PR #16 8/8 EditMode reliability tests
+- PR #17 structured verification + rollback verification, 12/12
+- PR #18 dirty-state reporting, 14/14
+- PR #19 explicit scene save, 16/16
+- PR #20 execution-boundary deadlines, 19/19
+
+See [`docs/PHASE2_EXIT_GATE.md`](docs/PHASE2_EXIT_GATE.md).
 
 ## Phase 3 — Useful Unity Editing Core
 
-🚧 **In progress.**
+Current objective: provide a small but genuinely useful Unity editing/inspection surface without arbitrary code execution while retaining Phase 2 reliability rules.
 
-Current verified families include Transform, GameObject, Component, Asset, Prefab, Script read, diagnostics/save/resolver, and direct Prefab-instance override semantics. Script replace is implemented and has passed the expanded 89/89 EditMode gate, but its dedicated real compile/domain-reload MCP gate remains pending after verifier timeout hardening.
+### Verified slices
 
-## Verification rule
+1. **Transform read/update — PR #22** — **23/23** milestone
+2. **GameObject update/delete — PR #23** — **29/29** milestone
+3. **Component inspection — PR #24** — **33/33** milestone
+4. **Component add/remove — PR #25** — **39/39** milestone
+5. **Component property edit — PR #26** — **45/45** milestone
+6. **Asset search/inspect — PR #27** — **50/50** milestone
+7. **Prefab inspect/instantiate — PR #28** — **56/56** milestone
+8. **Prefab Asset creation — PR #29** — **62/62** milestone
+9. **Installed-package Test Runner discovery — PRs #31–#35** — **75/75**, verified 2026-08-24
+10. **Bounded Prefab property override apply — PR #36 + #37–#40** — **80/80**, plus PR #42 live MCP E2E PASS
+11. **Direct scene-Prefab override recording — #41 / PR #43** — **81/81**, verified 2026-08-24
+12. **Bounded Script read — PR #44** — **85/85** plus live MCP `verify:script-read` PASS, verified 2026-08-24
 
-A feature is **Verified** only after its relevant real-runtime gate passes on a named environment/revision. CI-only or source-only implementation is never promoted to Verified.
+### Verified Script read contract
+
+- `script.read` / `unity_read_script`
+- exact project-relative `.cs` Unity asset paths only
+- reads both `Assets/` and resolved `Packages/`; no writes
+- canonical GUID/path and `MonoScript` validation
+- strict UTF-8 decode with optional BOM reporting
+- raw source-file SHA-256 for future content CAS
+- Unity dependencyHash as imported-state metadata
+- UTF-16 offset paging with surrogate-pair boundary protection
+- maximum 100,000 returned UTF-16 code units per call
+- maximum 4 MiB source file
+- raw bridge paging fields range-checked before `int` conversion
+- live multi-chunk reconstruction verifies stable identity/hash metadata and no project mutation
+
+### Script write direction
+
+The next Script write family is deliberately separate. `.cs` mutation can trigger Unity AssetDatabase import, script compilation, assembly reload, and domain reload, so it must not reuse a scene-mutation pattern blindly.
+
+Target first write contract:
+
+```text
+script.read observation
+ -> exact writable Assets/*.cs path
+ -> expected contentSha256 CAS precondition
+ -> bounded replacement content
+ -> mutationId + reload-safe lifecycle intent
+ -> file write
+ -> AssetDatabase import / compilation observation
+ -> reconnect/domain-reload reconciliation
+ -> native script re-read + new SHA verification
+ -> diagnostics/compile outcome
+```
+
+Important first-slice constraints:
+
+- Package scripts remain read-only.
+- Blind overwrite without the current `contentSha256` is not planned.
+- The same mutationId must never blindly repeat an already-started file write after reload or transport ambiguity.
+- Compile failure is an observable outcome, not proof that the file write failed.
+- Recovery/rollback semantics must be explicit; source-file persistence is not Unity Undo.
+
+### Current next candidates
+
+1. design and implement the bounded reload-safe `script.replace` CAS workflow,
+2. verify raw-file write/readback and stale-content rejection independently from compile outcome,
+3. verify compilation/domain-reload/reconnect reconciliation and same-id retry behavior,
+4. Play Mode and Test Runner controls,
+5. diagnostics extensions where they unlock real workflows,
+6. explicit Undo/recovery tools where useful to clients,
+7. only then consider broader Prefab apply/revert slices when bounded contracts are clear.
+
+No arbitrary C# execution fallback is planned.
+
+## Known limitations / future work
+
+- Exact `GlobalObjectId` behavior for every unsaved/new-scene/unusual object case is not exhaustively characterized; live verifiers that require durable scene-object IDs should use a saved active Scene.
+- `SessionState` mutation lifecycle does not survive a full Unity Editor restart.
+- Clean-scene dirty metadata restoration after Undo rollback is not implemented.
+- An already-started Unity API call is not force-cancelled when its deadline later expires.
+- Component property edit supports only the explicitly bounded first-slice value kinds; complex serialized forms remain future work.
+- Component add deliberately rejects Transform/RectTransform in the current contract.
+- Generic importer mutation and generic asset move/rename/delete are not implemented.
+- Script read supports strict UTF-8 source only, exact `.cs` Unity assets, at most 4 MiB per source file, and character paging rather than line/symbol parsing.
+- Script write/replace is not implemented yet; compilation/domain-reload-safe mutation semantics are the current next reliability problem.
+- Prefab Asset creation is create-only under `Assets`, never overwrites an existing asset, and is a persistent disk write without Unity Undo.
+- Prefab property apply covers exactly one existing visible non-array override, requires an explicit writable Prefab Asset target, rejects Model Prefabs, and does not claim generic automatic rollback after an ambiguous persistent asset mutation.
+- Prefab Apply All, object/component-wide Apply, Revert Overrides, unpacking, variant authoring, and generic asset deletion remain unimplemented.
+- Asset `dependencyHash` is imported-state metadata/precondition evidence for the current bounded asset contracts; it is not a general transaction token. Script writes use raw content SHA-256 as the intended file-content CAS token.
+- Recent Console text covers only the current domain-load capture window.
+- Unity support beyond 6000.3.21f1 is unverified.
+- Multi-editor routing, remote authentication/pairing, remote gateway hosting, and production AI-host integrations remain later-phase work.
+- Open-weight/local models remain a later compatibility target through MCP-capable agent runtimes; the Unity core does not own model serving.
