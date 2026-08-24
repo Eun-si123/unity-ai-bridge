@@ -1,0 +1,18 @@
+{
+  "protocolVersion": "0",
+  "requestId": "fixture-script-replace",
+  "operation": "script.replace",
+  "arguments": {
+    "path": "Assets/Scripts/PlayerController.cs",
+    "expectedGuid": "0123456789abcdef0123456789abcdef",
+    "expectedContentSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "content": "using UnityEngine;\n\npublic sealed class PlayerController : MonoBehaviour\n{\n}\n",
+    "mutationId": "fixture-script-replace-1"
+  },
+  "risk": "destructive",
+  "route": {
+    "editorId": "fixture-editor",
+    "connectionGeneration": 1
+  },
+  "deadlineUnixMs": 4102444800000
+}

@@ -1,0 +1,31 @@
+{
+  "protocolVersion": "0",
+  "requestId": "fixture-script-replace",
+  "ok": true,
+  "result": {
+    "mutationId": "fixture-script-replace-1",
+    "replayed": false,
+    "reconciled": false,
+    "changed": true,
+    "path": "Assets/Scripts/PlayerController.cs",
+    "guid": "0123456789abcdef0123456789abcdef",
+    "expectedGuid": "0123456789abcdef0123456789abcdef",
+    "expectedContentSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "contentSha256Before": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "contentSha256After": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "hasUtf8Bom": false,
+    "byteLengthBefore": 96,
+    "byteLengthAfter": 78,
+    "utf16CharCountAfter": 78,
+    "lineCountAfter": 6,
+    "baselineCompilationSequence": 12,
+    "writeCompletedUnixMs": 1787550000000,
+    "importRequested": true,
+    "importRequestedUnixMs": 1787550000001,
+    "importCallReturned": false,
+    "importError": ""
+  },
+  "warnings": [],
+  "dirtyState": "unchanged",
+  "compileState": "compiling"
+}

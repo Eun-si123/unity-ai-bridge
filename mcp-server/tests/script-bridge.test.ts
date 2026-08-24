@@ -102,7 +102,7 @@ test("script read rejects unsafe paths and out-of-range offsets before delivery"
     );
     await assert.rejects(
       bridge.requestReadScript({ path: "Assets/Safe.txt" }),
-      /requires an exact \.cs asset path/,
+      /require an exact \.cs asset path/,
     );
 
     await delay(20);

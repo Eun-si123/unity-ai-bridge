@@ -1,9 +1,4 @@
 using System;
-using System.IO;
-using System.Security.Cryptography;
-using System.Text;
-using UnityEditor;
-using UnityEngine;
 
 namespace UnityAiBridge.Editor.Commands
 {
@@ -49,9 +44,7 @@ namespace UnityAiBridge.Editor.Commands
         public const int DefaultMaxChars = 20000;
         public const int MaximumMaxChars = 100000;
         public const int MaximumPathLength = 512;
-        public const long MaximumSourceBytes = 4L * 1024L * 1024L;
-
-        private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
+        public const long MaximumSourceBytes = ScriptFileUtility.MaximumSourceBytes;
 
         public static void ValidateArguments(string path, int offset, int maxChars)
         {
@@ -71,52 +64,8 @@ namespace UnityAiBridge.Editor.Commands
         public static ScriptReadPayload Execute(string path, int offset, int maxChars)
         {
             ValidateArguments(path, offset, maxChars);
-
-            var guid = AssetDatabase.AssetPathToGUID(path);
-            if (string.IsNullOrEmpty(guid))
-            {
-                throw new ScriptUnavailableException(
-                    "The requested script is not a registered Unity asset or no longer exists.");
-            }
-
-            var canonicalPath = AssetDatabase.GUIDToAssetPath(guid);
-            ValidateProjectScriptPath(canonicalPath);
-
-            var monoScript = AssetDatabase.LoadAssetAtPath<MonoScript>(canonicalPath);
-            if (monoScript == null)
-            {
-                throw new ScriptUnavailableException(
-                    "The requested .cs asset is not available as a Unity MonoScript.");
-            }
-
-            var absolutePath = ResolveAbsolutePath(canonicalPath, out var sourceKind, out var packageName);
-            if (!File.Exists(absolutePath))
-            {
-                throw new ScriptUnavailableException(
-                    "Unity knows the script asset, but its source file is unavailable on disk.");
-            }
-
-            var fileInfo = new FileInfo(absolutePath);
-            if (fileInfo.Length > MaximumSourceBytes)
-            {
-                throw new ScriptReadLimitException(
-                    $"script.read refuses source files larger than {MaximumSourceBytes} bytes. " +
-                    $"Observed {fileInfo.Length} bytes for '{canonicalPath}'.");
-            }
-
-            var bytes = File.ReadAllBytes(absolutePath);
-            var hasUtf8Bom = HasUtf8Bom(bytes);
-            var textStart = hasUtf8Bom ? 3 : 0;
-            string text;
-            try
-            {
-                text = StrictUtf8.GetString(bytes, textStart, bytes.Length - textStart);
-            }
-            catch (DecoderFallbackException exception)
-            {
-                throw new ScriptEncodingUnsupportedException(
-                    "script.read currently supports UTF-8 source files only. " + exception.Message);
-            }
+            var snapshot = ScriptFileUtility.ReadSnapshot(path, true);
+            var text = snapshot.text;
 
             if (offset > text.Length)
             {
@@ -142,17 +91,17 @@ namespace UnityAiBridge.Editor.Commands
             var content = text.Substring(offset, end - offset);
             return new ScriptReadPayload
             {
-                guid = guid,
-                path = canonicalPath,
-                sourceKind = sourceKind,
-                packageName = packageName,
-                dependencyHash = AssetDatabase.GetAssetDependencyHash(canonicalPath).ToString(),
-                contentSha256 = ComputeSha256(bytes),
+                guid = snapshot.guid,
+                path = snapshot.path,
+                sourceKind = snapshot.sourceKind,
+                packageName = snapshot.packageName,
+                dependencyHash = snapshot.dependencyHash,
+                contentSha256 = snapshot.contentSha256,
                 encoding = "utf-8",
-                hasUtf8Bom = hasUtf8Bom,
-                byteLength = bytes.LongLength,
+                hasUtf8Bom = snapshot.hasUtf8Bom,
+                byteLength = snapshot.bytes.LongLength,
                 utf16CharCount = text.Length,
-                lineCount = CountLines(text),
+                lineCount = ScriptFileUtility.CountLines(text),
                 offset = offset,
                 maxChars = maxChars,
                 returnedCharCount = content.Length,
@@ -182,13 +131,13 @@ namespace UnityAiBridge.Editor.Commands
             }
             if (!path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
             {
-                throw new ArgumentException("script.read requires an exact .cs asset path.", nameof(path));
+                throw new ArgumentException("Script workflows require an exact .cs asset path.", nameof(path));
             }
             if (!path.StartsWith("Assets/", StringComparison.Ordinal) &&
                 !path.StartsWith("Packages/", StringComparison.Ordinal))
             {
                 throw new ArgumentException(
-                    "script.read paths must be under Assets or Packages.",
+                    "Script paths must be under Assets or Packages.",
                     nameof(path));
             }
 
@@ -204,86 +153,6 @@ namespace UnityAiBridge.Editor.Commands
                         nameof(path));
                 }
             }
-        }
-
-        private static string ResolveAbsolutePath(
-            string canonicalPath,
-            out string sourceKind,
-            out string packageName)
-        {
-            if (canonicalPath.StartsWith("Assets/", StringComparison.Ordinal))
-            {
-                var projectRoot = Directory.GetParent(Application.dataPath);
-                if (projectRoot == null)
-                {
-                    throw new ScriptUnavailableException("Could not resolve the Unity project root.");
-                }
-
-                sourceKind = "Assets";
-                packageName = string.Empty;
-                var combined = Path.Combine(
-                    projectRoot.FullName,
-                    canonicalPath.Replace('/', Path.DirectorySeparatorChar));
-                return Path.GetFullPath(combined);
-            }
-
-            var package = UnityEditor.PackageManager.PackageInfo.FindForAssetPath(canonicalPath);
-            if (package == null || string.IsNullOrEmpty(package.name) || string.IsNullOrEmpty(package.resolvedPath))
-            {
-                throw new ScriptUnavailableException(
-                    "Could not resolve the package containing the requested script.");
-            }
-
-            var packagePrefix = "Packages/" + package.name;
-            if (!canonicalPath.StartsWith(packagePrefix + "/", StringComparison.Ordinal))
-            {
-                throw new ScriptUnavailableException(
-                    "The requested script path does not match its resolved Unity package identity.");
-            }
-
-            sourceKind = "Packages";
-            packageName = package.name;
-            var relative = canonicalPath.Substring(packagePrefix.Length + 1)
-                .Replace('/', Path.DirectorySeparatorChar);
-            return Path.GetFullPath(Path.Combine(package.resolvedPath, relative));
-        }
-
-        private static bool HasUtf8Bom(byte[] bytes)
-        {
-            return bytes != null && bytes.Length >= 3 &&
-                bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF;
-        }
-
-        private static string ComputeSha256(byte[] bytes)
-        {
-            using (var sha256 = SHA256.Create())
-            {
-                var hash = sha256.ComputeHash(bytes ?? Array.Empty<byte>());
-                var builder = new StringBuilder(hash.Length * 2);
-                for (var index = 0; index < hash.Length; index++)
-                {
-                    builder.Append(hash[index].ToString("x2"));
-                }
-                return builder.ToString();
-            }
-        }
-
-        private static int CountLines(string text)
-        {
-            if (string.IsNullOrEmpty(text))
-            {
-                return 0;
-            }
-
-            var count = 1;
-            for (var index = 0; index < text.Length; index++)
-            {
-                if (text[index] == '\n')
-                {
-                    count++;
-                }
-            }
-            return count;
         }
     }
 }

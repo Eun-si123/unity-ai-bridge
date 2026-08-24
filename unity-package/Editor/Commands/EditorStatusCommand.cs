@@ -40,6 +40,7 @@ namespace UnityAiBridge.Editor.Commands
             "asset.search",
             "asset.inspect",
             "script.read",
+            "script.replace",
             "prefab.inspect",
             "prefab.instantiate",
             "prefab.asset.create",

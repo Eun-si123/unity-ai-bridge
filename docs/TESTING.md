@@ -55,7 +55,7 @@ Expected automatic sources:
 
 If automatic enabling cannot update the project manifest, use `Tools > Unity AI Bridge > Enable Package Tests` or add the package manually to the project's `testables` array.
 
-Verified history: 75/75 after Test Runner bootstrap, 80/80 after Prefab-property apply, 81/81 after PR #43 direct scene-Prefab override recording, and **85/85** after PR #44 bounded Script read.
+Verified history: 75/75 after Test Runner bootstrap, 80/80 after Prefab-property apply, 81/81 after PR #43 direct scene-Prefab override recording, 85/85 after PR #44 bounded Script read, and **89/89** after PR #45 reload-safe Script replace.
 
 ## 4. Unity EditMode suite
 
@@ -71,12 +71,11 @@ Latest real Unity evidence:
 
 ```text
 Date: 2026-08-24
-Candidate: PR #44 head cee29f4bc364cce60e1dcf8dbb77e9cfc9d63020
+Candidate: PR #45 feat/script-replace
 Environment: Windows + Unity 6000.3.21f1
 Action: EditMode Run All
-Observed: 85 Passed / 0 Failed
+Observed: 89 Passed / 0 Failed
 Result: PASS
-Merged as: f0715f883bf7c921ed41e1a153b3489bd4f56352
 ```
 
 ## 5. Bounded Prefab property apply Unity verification gate
@@ -156,40 +155,88 @@ projectMutated: false
 
 The read surface is intentionally bounded: exact `.cs` Unity assets only, Assets/Packages only, strict UTF-8 with optional BOM, at most 4 MiB per source file, at most 100,000 UTF-16 code units returned per call, and paging offsets limited to the C# `int` range.
 
-This gate is now **Verified**. GitHub Actions alone was not used as proof of the real Unity behavior.
+This gate is **Verified**. GitHub Actions alone was not used as proof of the real Unity behavior.
 
-## 8. Script replace/write gate — next reliability family
+## 8. Script replace/write Unity + MCP gate
 
-Script mutation is a separate reliability family. A `.cs` change can lead to AssetDatabase import, script compilation, assembly reload, and domain reload, so its verifier must cover more than file readback.
+PR #45 introduces the first bounded persistent Script mutation as `script.replace` / `unity_replace_script`.
 
-The first bounded write should require:
+### EditMode gate
 
-- exact writable `Assets/*.cs` target,
-- current raw `contentSha256` from `script.read` as a compare-and-swap precondition,
-- explicit mutationId/replay identity,
-- defined UTF-8/BOM/newline behavior,
-- bounded replacement content,
-- a pre-write re-hash that fails stale without touching the file,
-- persistent new-byte readback with a new raw SHA,
-- AssetDatabase import/compile observation,
-- reconnect/domain-reload reconciliation,
-- diagnostics/compiler outcome,
-- fail-closed handling for ambiguous started-but-not-terminal writes.
-
-Package scripts remain read-only in the initial write slice.
-
-The write verifier should distinguish at least these outcomes:
+The full candidate suite completed:
 
 ```text
-stale_content      -> no bytes changed
-write_failed       -> persistence failed
-written            -> exact new bytes confirmed
-compile_succeeded  -> Unity accepted resulting compilation
-compile_failed     -> bytes persisted but compiler diagnostics contain failure
-ambiguous          -> do not automatically repeat same mutationId
+89 Passed
+0 Failed
 ```
 
-A compile failure is not automatically a file-write failure. Source-file persistence is not Unity Undo, so recovery/rollback behavior must be designed and tested explicitly.
+The four non-reloading Script-replace EditMode tests cover bounded validation/intent and atomic file helper behavior without deliberately reloading the test assembly from inside the ordinary suite. Real compilation/domain reload is instead verified by the dedicated live MCP gate below.
+
+### Live MCP gate
+
+Prepare exactly this dedicated sentinel under the consuming Unity project's `Assets` folder:
+
+```csharp
+// UNITY_AI_BRIDGE_SCRIPT_REPLACE_VERIFIER
+
+public static class UnityAiBridgeScriptReplaceVerifier
+{
+    public const int UnityAiBridgeVerifierValue = 1;
+}
+```
+
+Then run:
+
+```text
+npm --prefix mcp-server ci
+npm --prefix mcp-server run verify:script-replace
+```
+
+The verifier is intentionally restricted to `Assets/UnityAiBridge_ScriptReplaceVerify.cs`. It performs:
+
+1. exact pre-write full Script read and sentinel validation,
+2. a pre-mutation exact recovery copy,
+3. CAS replace of verifier value `1 -> 2`,
+4. Unity import/compile observation,
+5. real domain reload + bridge reconnect observation,
+6. post-reload GUID/SHA readback,
+7. exact same-mutationId replay with no second source write,
+8. stale old-SHA write rejection with modified bytes unchanged,
+9. CAS restore `2 -> 1`,
+10. second compile/reload observation,
+11. exact original GUID/SHA/content restoration,
+12. removal of the recovery copy only after exact successful restoration.
+
+Observed PASS record on 2026-08-24:
+
+```text
+unityVersion: 6000.3.21f1
+scriptPath: Assets/UnityAiBridge_ScriptReplaceVerify.cs
+guid: 858b3c89136ccfd49bc534aefa7ef77f
+originalContentSha256: 7c224abcea8bc199f94ac1f15d28e3a881ae67e67c8da28585fc9137d48af676
+modifiedContentSha256: ae4761b741782fe4b40a2cfa03c7f3eb7dfc480ebf4cd682ec0891c5554dd9bb
+writeCompileStatus: succeeded
+writeCompilationSequence: 4
+writeReloadObserved: true
+sameIdReplayReadOnly: true
+staleOldShaRejected: true
+staleAttemptLeftModifiedBytesUnchanged: true
+restoreCompileStatus: succeeded
+restoreReloadObserved: true
+exactOriginalRestored: true
+finalContentSha256: 7c224abcea8bc199f94ac1f15d28e3a881ae67e67c8da28585fc9137d48af676
+recoveryCopyRemovedAfterSuccess: true
+```
+
+### Timeout / slow-machine requirement
+
+The first live attempt on a slower machine exposed an important verifier/client requirement: the MCP SDK default request timeout can expire while Unity is legitimately performing source import, compilation, domain reload, and reconnect. This is a false timeout, not proof that persistence failed.
+
+The verifier therefore uses explicit longer tool-call timeouts for `unity_replace_script`, waits for Script capabilities to return before guarded recovery, precomputes the intended modified raw SHA before mutation, and preserves a recovery copy until exact restoration succeeds.
+
+For future clients, do **not** assume a short fixed wall-clock timeout is universally safe for reload-bound Unity operations. Machine speed and project size can materially change compilation/reload duration. Ambiguous timeout/disconnect handling must preserve the same mutationId and reconcile current state rather than blindly issuing a new write.
+
+This gate is **Verified** on Windows + Unity 6000.3.21f1.
 
 ## 9. Real local bridge + `editor.status` verification helper
 
