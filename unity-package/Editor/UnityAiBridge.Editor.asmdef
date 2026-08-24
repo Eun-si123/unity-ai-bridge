@@ -1,7 +1,9 @@
 {
   "name": "EunSung.UnityAiBridge.Editor",
   "rootNamespace": "UnityAiBridge.Editor",
-  "references": [],
+  "references": [
+    "UnityEditor.TestRunner"
+  ],
   "includePlatforms": [
     "Editor"
   ],
