@@ -2,6 +2,51 @@ import { randomUUID } from "node:crypto";
 
 import { ScriptBridgeServer } from "./script-bridge-server.js";
 
+export type StablePlayMode = "edit" | "play";
+export type PlayModeState = StablePlayMode | "entering_play" | "exiting_play";
+
+export interface PlayModeSetOptions {
+  targetMode: StablePlayMode;
+  expectedCurrentMode: StablePlayMode;
+  mutationId?: string;
+}
+
+export interface PlayModeSnapshotPayload {
+  mode: PlayModeState;
+  isPlaying: boolean;
+  isPaused: boolean;
+  isPlayingOrWillChangePlaymode: boolean;
+  enterPlayModeOptionsEnabled: boolean;
+  disableDomainReload: boolean;
+  disableSceneReload: boolean;
+}
+
+export interface PlayModeTransitionPayload {
+  mutationId: string;
+  replayed: boolean;
+  reconciled: boolean;
+  changed: boolean;
+  transitionRequested: boolean;
+  targetMode: StablePlayMode;
+  expectedCurrentMode: StablePlayMode;
+  requestedUnixMs: number;
+  before: PlayModeSnapshotPayload;
+  afterRequest: PlayModeSnapshotPayload;
+}
+
+export interface PlayModeSetPayload extends PlayModeTransitionPayload {
+  finalMode: StablePlayMode;
+  finalIsPlaying: boolean;
+  finalIsPaused: boolean;
+  finalIsPlayingOrWillChangePlaymode: boolean;
+  enterPlayModeOptionsEnabled: boolean;
+  disableDomainReload: boolean;
+  disableSceneReload: boolean;
+  reloadObserved: boolean;
+  initialConnectionGeneration: number;
+  finalConnectionGeneration: number;
+}
+
 export interface PrefabPropertyApplyOptions {
   componentGlobalObjectId: string;
   propertyPath: string;
@@ -37,8 +82,84 @@ const MAX_HASH_LENGTH = 128;
 const MAX_MUTATION_ID_LENGTH = 128;
 const MAX_STATE_EPOCH_LENGTH = 128;
 const MUTATION_ID_PATTERN = /^[A-Za-z0-9._:-]+$/;
+const PLAY_MODE_DELIVERY_TIMEOUT_MS = 5_000;
+const PLAY_MODE_POLL_INTERVAL_MS = 200;
 
 export class PrefabPropertyBridgeServer extends ScriptBridgeServer {
+  public async requestSetPlayMode(
+    options: PlayModeSetOptions,
+    timeoutMs = 120_000,
+  ): Promise<PlayModeSetPayload> {
+    const initialEditor = this.connectedEditor;
+    if (initialEditor === undefined) {
+      throw new Error("No Unity Editor is connected to the local bridge.");
+    }
+
+    validateStablePlayMode(options.targetMode, "targetMode");
+    validateStablePlayMode(options.expectedCurrentMode, "expectedCurrentMode");
+    const mutationId = options.mutationId ?? randomUUID();
+    validateMutationId(mutationId);
+
+    const args = {
+      targetMode: options.targetMode,
+      expectedCurrentMode: options.expectedCurrentMode,
+      mutationId,
+    };
+    const deadlineUnixMs = Date.now() + timeoutMs;
+
+    let transition: PlayModeTransitionPayload;
+    try {
+      transition = await this.deliverPlayModeTransition(
+        args,
+        Math.min(PLAY_MODE_DELIVERY_TIMEOUT_MS, Math.max(1, remainingMs(deadlineUnixMs))),
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!isAmbiguousPlayModeDeliveryError(message)) {
+        throw new Error(`${message} mutationId=${mutationId}`);
+      }
+
+      await this.waitForSameEditor(initialEditor.editorId, deadlineUnixMs);
+      const remaining = remainingMs(deadlineUnixMs);
+      if (remaining <= 0) {
+        throw new Error(
+          `editor.playMode.set delivery became ambiguous and the same Editor did not become available for reconciliation before timeout. mutationId=${mutationId}`,
+        );
+      }
+
+      transition = await this.deliverPlayModeTransition(
+        args,
+        Math.min(PLAY_MODE_DELIVERY_TIMEOUT_MS, remaining),
+      );
+    }
+
+    const finalStatus = await this.waitForStablePlayMode(
+      initialEditor.editorId,
+      options.targetMode,
+      deadlineUnixMs,
+    );
+    const finalEditor = this.connectedEditor;
+    if (finalEditor === undefined || finalEditor.editorId !== initialEditor.editorId) {
+      throw new Error(
+        `The expected Unity Editor was not connected after the Play Mode transition. mutationId=${mutationId}`,
+      );
+    }
+
+    return {
+      ...transition,
+      finalMode: finalStatus.playModeState,
+      finalIsPlaying: finalStatus.isPlaying,
+      finalIsPaused: finalStatus.isPaused,
+      finalIsPlayingOrWillChangePlaymode: finalStatus.isPlayingOrWillChangePlaymode,
+      enterPlayModeOptionsEnabled: finalStatus.enterPlayModeOptionsEnabled,
+      disableDomainReload: finalStatus.disableDomainReload,
+      disableSceneReload: finalStatus.disableSceneReload,
+      reloadObserved: finalEditor.connectionGeneration !== initialEditor.connectionGeneration,
+      initialConnectionGeneration: initialEditor.connectionGeneration,
+      finalConnectionGeneration: finalEditor.connectionGeneration,
+    };
+  }
+
   public async requestApplyPrefabPropertyOverride(
     options: PrefabPropertyApplyOptions,
     timeoutMs = 5000,
@@ -85,6 +206,195 @@ export class PrefabPropertyBridgeServer extends ScriptBridgeServer {
       throw new Error(`${message} mutationId=${mutationId}`);
     }
   }
+
+  private async deliverPlayModeTransition(
+    args: {
+      targetMode: StablePlayMode;
+      expectedCurrentMode: StablePlayMode;
+      mutationId: string;
+    },
+    timeoutMs: number,
+  ): Promise<PlayModeTransitionPayload> {
+    const editor = this.connectedEditor;
+    if (editor === undefined) {
+      throw new Error("No Unity Editor is connected to the local bridge.");
+    }
+
+    const result = await this.requestOperation(
+      "editor.playMode.set",
+      args,
+      {
+        editorId: editor.editorId,
+        connectionGeneration: editor.connectionGeneration,
+      },
+      timeoutMs,
+      "write",
+    );
+    if (!isPlayModeTransitionPayload(result)) {
+      throw new Error("Unity returned an invalid editor.playMode.set payload.");
+    }
+    return result;
+  }
+
+  private async waitForStablePlayMode(
+    editorId: string,
+    targetMode: StablePlayMode,
+    deadlineUnixMs: number,
+  ): Promise<PlayModeAwareStatus> {
+    let lastObservation = "No editor.status observation received.";
+
+    while (remainingMs(deadlineUnixMs) > 0) {
+      await this.waitForSameEditor(editorId, deadlineUnixMs);
+      try {
+        const status = asPlayModeAwareStatus(
+          await this.requestEditorStatus(
+            Math.min(2_000, Math.max(1, remainingMs(deadlineUnixMs))),
+          ),
+        );
+        lastObservation = `${status.playModeState}, compiling=${status.isCompiling}`;
+        if (status.playModeState === targetMode && !status.isCompiling) {
+          return status;
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (!isAmbiguousPlayModeDeliveryError(message)) {
+          throw error;
+        }
+        lastObservation = message;
+      }
+
+      await delay(Math.min(
+        PLAY_MODE_POLL_INTERVAL_MS,
+        Math.max(1, remainingMs(deadlineUnixMs)),
+      ));
+    }
+
+    throw new Error(
+      `Timed out waiting for Unity to reach stable Play Mode state '${targetMode}'. Last observation: ${lastObservation}`,
+    );
+  }
+
+  private async waitForSameEditor(editorId: string, deadlineUnixMs: number): Promise<void> {
+    while (remainingMs(deadlineUnixMs) > 0) {
+      const current = this.connectedEditor;
+      if (current !== undefined) {
+        if (current.editorId !== editorId) {
+          throw new Error(
+            `A different Unity Editor connected during Play Mode reconciliation. expectedEditorId=${editorId} observedEditorId=${current.editorId}`,
+          );
+        }
+        return;
+      }
+
+      try {
+        const hello = await this.waitForEditor(
+          Math.min(2_000, Math.max(1, remainingMs(deadlineUnixMs))),
+        );
+        if (hello.editorId !== editorId) {
+          throw new Error(
+            `A different Unity Editor connected during Play Mode reconciliation. expectedEditorId=${editorId} observedEditorId=${hello.editorId}`,
+          );
+        }
+        return;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (message.includes("different Unity Editor")) throw error;
+      }
+    }
+  }
+}
+
+interface PlayModeAwareStatus {
+  isPlaying: boolean;
+  isPaused: boolean;
+  isPlayingOrWillChangePlaymode: boolean;
+  playModeState: PlayModeState;
+  enterPlayModeOptionsEnabled: boolean;
+  disableDomainReload: boolean;
+  disableSceneReload: boolean;
+  isCompiling: boolean;
+}
+
+function asPlayModeAwareStatus(value: unknown): PlayModeAwareStatus {
+  if (typeof value !== "object" || value === null) {
+    throw new Error("Unity editor.status did not return an object while observing Play Mode.");
+  }
+  const candidate = value as Record<string, unknown>;
+  if (
+    typeof candidate.isPlaying !== "boolean" ||
+    typeof candidate.isPaused !== "boolean" ||
+    typeof candidate.isPlayingOrWillChangePlaymode !== "boolean" ||
+    !isPlayModeState(candidate.playModeState) ||
+    typeof candidate.enterPlayModeOptionsEnabled !== "boolean" ||
+    typeof candidate.disableDomainReload !== "boolean" ||
+    typeof candidate.disableSceneReload !== "boolean" ||
+    typeof candidate.isCompiling !== "boolean"
+  ) {
+    throw new Error(
+      "Unity editor.status does not expose the required Play Mode lifecycle fields. Recompile/reload the current Unity AI Bridge package before using editor.playMode.set.",
+    );
+  }
+  return candidate as unknown as PlayModeAwareStatus;
+}
+
+function validateStablePlayMode(value: string, name: string): asserts value is StablePlayMode {
+  if (value !== "edit" && value !== "play") {
+    throw new Error(`${name} must be exactly 'edit' or 'play'.`);
+  }
+}
+
+function isPlayModeState(value: unknown): value is PlayModeState {
+  return value === "edit" ||
+    value === "entering_play" ||
+    value === "play" ||
+    value === "exiting_play";
+}
+
+function isPlayModeSnapshotPayload(value: unknown): value is PlayModeSnapshotPayload {
+  if (typeof value !== "object" || value === null) return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    isPlayModeState(candidate.mode) &&
+    typeof candidate.isPlaying === "boolean" &&
+    typeof candidate.isPaused === "boolean" &&
+    typeof candidate.isPlayingOrWillChangePlaymode === "boolean" &&
+    typeof candidate.enterPlayModeOptionsEnabled === "boolean" &&
+    typeof candidate.disableDomainReload === "boolean" &&
+    typeof candidate.disableSceneReload === "boolean"
+  );
+}
+
+function isPlayModeTransitionPayload(value: unknown): value is PlayModeTransitionPayload {
+  if (typeof value !== "object" || value === null) return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.mutationId === "string" && candidate.mutationId.length > 0 &&
+    typeof candidate.replayed === "boolean" &&
+    typeof candidate.reconciled === "boolean" &&
+    typeof candidate.changed === "boolean" &&
+    typeof candidate.transitionRequested === "boolean" &&
+    (candidate.targetMode === "edit" || candidate.targetMode === "play") &&
+    (candidate.expectedCurrentMode === "edit" || candidate.expectedCurrentMode === "play") &&
+    isNonNegativeInteger(candidate.requestedUnixMs) &&
+    isPlayModeSnapshotPayload(candidate.before) &&
+    isPlayModeSnapshotPayload(candidate.afterRequest)
+  );
+}
+
+function isAmbiguousPlayModeDeliveryError(message: string): boolean {
+  const normalized = message.toLowerCase();
+  return normalized.includes("timed out") ||
+    normalized.includes("disconnected before the request completed") ||
+    normalized.includes("no unity editor is connected") ||
+    normalized.includes("no unity editor connected within");
+}
+
+function remainingMs(deadlineUnixMs: number): number {
+  return Math.max(0, deadlineUnixMs - Date.now());
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function validateGlobalObjectId(value: string): void {
@@ -201,4 +511,8 @@ function isPrefabPropertyApplyPayload(value: unknown): value is PrefabPropertyAp
 
 function isPositiveInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
+}
+
+function isNonNegativeInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 }
