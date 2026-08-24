@@ -88,7 +88,7 @@ const PLAY_MODE_POLL_INTERVAL_MS = 200;
 export class PrefabPropertyBridgeServer extends ScriptBridgeServer {
   public async requestSetPlayMode(
     options: PlayModeSetOptions,
-    timeoutMs = 120_000,
+    timeoutMs = 180_000,
   ): Promise<PlayModeSetPayload> {
     const initialEditor = this.connectedEditor;
     if (initialEditor === undefined) {
@@ -119,7 +119,7 @@ export class PrefabPropertyBridgeServer extends ScriptBridgeServer {
         throw new Error(`${message} mutationId=${mutationId}`);
       }
 
-      await this.waitForSameEditor(initialEditor.editorId, deadlineUnixMs);
+      await this.waitForSameEditorForPlayMode(initialEditor.editorId, deadlineUnixMs);
       const remaining = remainingMs(deadlineUnixMs);
       if (remaining <= 0) {
         throw new Error(
@@ -147,7 +147,7 @@ export class PrefabPropertyBridgeServer extends ScriptBridgeServer {
 
     return {
       ...transition,
-      finalMode: finalStatus.playModeState,
+      finalMode: options.targetMode,
       finalIsPlaying: finalStatus.isPlaying,
       finalIsPaused: finalStatus.isPaused,
       finalIsPlayingOrWillChangePlaymode: finalStatus.isPlayingOrWillChangePlaymode,
@@ -244,7 +244,7 @@ export class PrefabPropertyBridgeServer extends ScriptBridgeServer {
     let lastObservation = "No editor.status observation received.";
 
     while (remainingMs(deadlineUnixMs) > 0) {
-      await this.waitForSameEditor(editorId, deadlineUnixMs);
+      await this.waitForSameEditorForPlayMode(editorId, deadlineUnixMs);
       try {
         const status = asPlayModeAwareStatus(
           await this.requestEditorStatus(
@@ -274,7 +274,10 @@ export class PrefabPropertyBridgeServer extends ScriptBridgeServer {
     );
   }
 
-  private async waitForSameEditor(editorId: string, deadlineUnixMs: number): Promise<void> {
+  private async waitForSameEditorForPlayMode(
+    editorId: string,
+    deadlineUnixMs: number,
+  ): Promise<void> {
     while (remainingMs(deadlineUnixMs) > 0) {
       const current = this.connectedEditor;
       if (current !== undefined) {
