@@ -55,7 +55,7 @@ Expected automatic sources:
 
 If automatic enabling cannot update the project manifest, use `Tools > Unity AI Bridge > Enable Package Tests` or add the package manually to the project's `testables` array.
 
-Verified history: 75/75 after Test Runner bootstrap, 80/80 after Prefab-property apply, and **81/81** after PR #43 direct scene-Prefab override recording.
+Verified history: 75/75 after Test Runner bootstrap, 80/80 after Prefab-property apply, 81/81 after PR #43 direct scene-Prefab override recording, and **85/85** after PR #44 bounded Script read.
 
 ## 4. Unity EditMode suite
 
@@ -67,19 +67,17 @@ After package tests are visible in Test Runner:
 4. clean any temporary Assets/objects created by the test or verifier path,
 5. do not overwrite the last verified count in `STATUS.md` with a new count unless the exact candidate/environment actually ran.
 
-Latest verified baseline before PR #44:
+Latest real Unity evidence:
 
 ```text
 Date: 2026-08-24
-Candidate: PR #43 head dfa183ce46056f45613c152516df6cdcebd29a02
+Candidate: PR #44 head cee29f4bc364cce60e1dcf8dbb77e9cfc9d63020
 Environment: Windows + Unity 6000.3.21f1
 Action: EditMode Run All
-Observed: 81 Passed / 0 Failed
+Observed: 85 Passed / 0 Failed
 Result: PASS
-Merged as: f9e5c9b1561175629b3ba15ae27502c253dec889
+Merged as: f0715f883bf7c921ed41e1a153b3489bd4f56352
 ```
-
-PR #44 adds four Script-read EditMode tests, so its expected source suite is **85 tests**.
 
 ## 5. Bounded Prefab property apply Unity verification gate
 
@@ -104,18 +102,18 @@ This uses the official MCP TypeScript client over stdio and checks the real publ
 
 ## 7. Bounded Script read Unity + MCP gate
 
-PR #44 introduces the first Script workflow as read-only `script.read` / `unity_read_script`. This slice must be verified before Script mutation work begins.
+PR #44 introduces the first Script workflow as read-only `script.read` / `unity_read_script`.
 
 ### EditMode gate
 
-Run the full EditMode suite on the PR #44 candidate. Expected count:
+The full PR #44 candidate suite completed:
 
 ```text
 85 Passed
 0 Failed
 ```
 
-The four new tests verify:
+The four Script-read tests verify:
 
 1. Assets and Packages `.cs` paths are accepted,
 2. traversal, backslashes, non-script extensions, and paths outside Assets/Packages are rejected,
@@ -124,48 +122,74 @@ The four new tests verify:
 
 ### Live MCP gate
 
-With Unity open and the PR #44 package compiled:
+Command:
 
 ```text
 npm --prefix mcp-server ci
 npm --prefix mcp-server run verify:script-read
 ```
 
-No saved Scene or manual Project-window action is required. The verifier:
+No saved Scene or manual Project-window action is required. The verifier starts the normal MCP server over stdio, confirms `unity_read_script`, waits for live `script.read`, reads `Packages/com.eunsung.unity-ai-bridge/Editor/Protocol/BridgeProtocol.cs` in 64-code-unit chunks, reconstructs the exact source, and verifies stable identity/hash/encoding/size metadata plus immediate repeat stability.
 
-1. starts the normal MCP server over stdio,
-2. confirms `unity_read_script` is advertised,
-3. waits for the live Agent to advertise `script.read`,
-4. reads `Packages/com.eunsung.unity-ai-bridge/Editor/Protocol/BridgeProtocol.cs` in 64-code-unit chunks,
-5. requires canonical path/package identity and a 64-hex raw-file SHA-256,
-6. requires GUID, dependencyHash, SHA-256, byte/character/line metadata, encoding and BOM metadata to remain identical across all chunks,
-7. reconstructs the exact full source without overlap/gaps,
-8. requires expected `BridgeProtocol` / `PackageVersion` declarations,
-9. immediately repeats the first chunk and requires identity/hash/content stability,
-10. reports `projectMutated: false`.
+Observed PASS record on 2026-08-24:
+
+```text
+unityVersion: 6000.3.21f1
+scriptPath: Packages/com.eunsung.unity-ai-bridge/Editor/Protocol/BridgeProtocol.cs
+guid: 535573b5098b07445b02ce5ea969259d
+sourceKind: Packages
+packageName: com.eunsung.unity-ai-bridge
+dependencyHash: 1b006f5ec0facfe79226658b89960cda
+contentSha256: b52e965c2c01290b03ba70ca1ca60f6eb62870b4665a821632e5993d7d776fc7
+encoding: utf-8
+hasUtf8Bom: false
+byteLength: 206
+utf16CharCount: 206
+lineCount: 9
+chunkSize: 64
+chunkCount: 4
+reconstructedExactly: true
+chunkIdentityStable: true
+immediateRepeatStable: true
+projectMutated: false
+```
 
 The read surface is intentionally bounded: exact `.cs` Unity assets only, Assets/Packages only, strict UTF-8 with optional BOM, at most 4 MiB per source file, at most 100,000 UTF-16 code units returned per call, and paging offsets limited to the C# `int` range.
 
-Do not mark `script.read` Verified from GitHub Actions alone. Both the 85/85 EditMode result and this live MCP gate should pass on a real Unity Editor.
+This gate is now **Verified**. GitHub Actions alone was not used as proof of the real Unity behavior.
 
-## 8. Future Script replace/write gate
+## 8. Script replace/write gate — next reliability family
 
-Script mutation is a separate reliability family. A `.cs` change can lead to AssetDatabase import, script compilation, assembly reload, and domain reload, so a future write verifier must cover more than file readback.
+Script mutation is a separate reliability family. A `.cs` change can lead to AssetDatabase import, script compilation, assembly reload, and domain reload, so its verifier must cover more than file readback.
 
-The first bounded write is expected to require:
+The first bounded write should require:
 
 - exact writable `Assets/*.cs` target,
 - current raw `contentSha256` from `script.read` as a compare-and-swap precondition,
 - explicit mutationId/replay identity,
 - defined UTF-8/BOM/newline behavior,
 - bounded replacement content,
+- a pre-write re-hash that fails stale without touching the file,
+- persistent new-byte readback with a new raw SHA,
 - AssetDatabase import/compile observation,
 - reconnect/domain-reload reconciliation,
-- post-reload native script re-read and new SHA verification,
 - diagnostics/compiler outcome,
 - fail-closed handling for ambiguous started-but-not-terminal writes.
 
-Package scripts should remain read-only in the initial write slice.
+Package scripts remain read-only in the initial write slice.
+
+The write verifier should distinguish at least these outcomes:
+
+```text
+stale_content      -> no bytes changed
+write_failed       -> persistence failed
+written            -> exact new bytes confirmed
+compile_succeeded  -> Unity accepted resulting compilation
+compile_failed     -> bytes persisted but compiler diagnostics contain failure
+ambiguous          -> do not automatically repeat same mutationId
+```
+
+A compile failure is not automatically a file-write failure. Source-file persistence is not Unity Undo, so recovery/rollback behavior must be designed and tested explicitly.
 
 ## 9. Real local bridge + `editor.status` verification helper
 
