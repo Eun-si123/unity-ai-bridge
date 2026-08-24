@@ -2,9 +2,9 @@
 
 Candidate: PR #46 / `feature/play-mode-control`
 
-Status: **Implemented, real Unity verification pending**.
+Status: **Verified on Windows + Unity 6000.3.21f1**.
 
-This document is the candidate-specific verification checklist. `STATUS.md` remains authoritative for merged/verified behavior and must not be advanced from the current 89/89 baseline until this gate actually passes.
+This document records the candidate-specific verification gate. `STATUS.md` is authoritative for the merged/verified surface.
 
 ## Why this is a separate reliability family
 
@@ -14,11 +14,11 @@ The first slice therefore treats the native lifecycle and reconnection as part o
 
 ## Automated checks
 
-GitHub Actions must pass:
+GitHub Actions passed on the verified PR #46 candidate:
 
 ```text
-Node Verification
-Phase 1 Local Bridge Verification
+Node Verification: PASS
+Phase 1 Local Bridge Verification: PASS
 ```
 
 Node coverage includes:
@@ -29,11 +29,14 @@ Node coverage includes:
 
 ## Unity EditMode suite
 
-Target environment:
+Verified environment:
 
 ```text
 Windows
 Unity 6000.3.21f1
+PR #46 head d3c4ab9260199a6fd973f0ca7d55c36b55de678a
+93 Passed
+0 Failed
 ```
 
 The candidate adds four non-transition EditMode tests:
@@ -45,16 +48,9 @@ The candidate adds four non-transition EditMode tests:
 
 The tests intentionally do not enter real Play Mode from inside the normal EditMode suite because doing so would destabilize the test assembly/lifecycle being used to run the suite.
 
-Expected candidate total:
-
-```text
-93 Passed
-0 Failed
-```
-
 ## Live MCP gate
 
-With Unity open and the candidate package compiled:
+Command:
 
 ```text
 npm --prefix mcp-server ci
@@ -63,10 +59,10 @@ npm --prefix mcp-server run verify:play-mode
 
 No sentinel asset or manual Play-button action is required.
 
-The verifier uses the official MCP TypeScript client and must prove:
+The official MCP TypeScript client gate passed and proved:
 
 1. `unity_get_status` advertises `editor.playMode.set` and exposes the detailed Play Mode fields,
-2. the Editor begins the main gate in stable Edit Mode (a pre-existing stable Play Mode session is normalized back to Edit Mode first),
+2. the Editor starts the main gate in stable Edit Mode,
 3. `unity_set_play_mode(edit -> play)` reaches stable native Play Mode,
 4. same enter mutationId is replay/readback-only and does not request a second transition,
 5. a stale `expectedCurrentMode=edit` request while actually in Play Mode is rejected without changing mode,
@@ -74,13 +70,42 @@ The verifier uses the official MCP TypeScript client and must prove:
 7. same exit mutationId is replay/readback-only,
 8. the verifier ends in exact stable Edit Mode,
 9. the user's Enter Play Mode settings are unchanged,
-10. connection-generation changes are reported but are **not required** because Domain Reload may be disabled.
+10. connection-generation changes are reported but are **not required** because lifecycle/reload behavior can differ.
+
+Observed PASS record on 2026-08-24:
+
+```text
+unityVersion: 6000.3.21f1
+initialMode: edit
+finalMode: edit
+enterChanged: true
+enterReplayReadOnly: true
+enterReconciled: true
+enterReloadObserved: true
+enterInitialConnectionGeneration: 1787569109635
+enterFinalConnectionGeneration: 1787569158803
+staleExpectedModeRejected: true
+staleAttemptLeftPlayModeUnchanged: true
+exitChanged: true
+exitReplayReadOnly: true
+exitReconciled: true
+exitReloadObserved: false
+exitInitialConnectionGeneration: 1787569158803
+exitFinalConnectionGeneration: 1787569158803
+enterPlayModeOptionsEnabled: false
+disableDomainReload: false
+disableSceneReload: false
+userEnterPlayModeSettingsPreserved: true
+exactFinalEditStateRestored: true
+```
+
+`enterReloadObserved=true` and `exitReloadObserved=false` are both valid observations. The contract does not infer success from reconnect behavior; the terminal stable native mode is authoritative.
 
 ## Timeout policy
 
 The MCP SDK has its own request timeout. A lifecycle operation must not rely on a short client default while Unity may legitimately be performing scene/domain reload and reconnection.
 
-This verifier explicitly uses a 180-second tool-call window, and the production Play Mode bridge uses the same long bounded default. This follows the Script-replace live finding where a slower machine exceeded the SDK's default 60-second request timeout even though Unity was behaving normally.
+The verifier explicitly uses a 180-second tool-call window, and the production Play Mode bridge uses the same long bounded default. This follows the Script-replace live finding where a slower machine exceeded the SDK's default 60-second request timeout even though Unity was behaving normally.
 
 A timeout remains a bounded failure, but ambiguous delivery must reconcile using the **same mutationId** rather than issue a new blind Enter/Exit Play Mode request.
 
@@ -105,11 +130,11 @@ A reload is therefore an observed outcome, not a required success condition.
 
 ## Exit gate
 
-Only after both of the following pass on the same candidate should PR #46 be marked Verified and merged:
+Passed on 2026-08-24:
 
 ```text
 93 Passed / 0 Failed
 verify:play-mode PASS
 ```
 
-After that, update `STATUS.md`, `ROADMAP.md`, `README.md`, `docs/TESTING.md`, and package-test history to the new verified baseline before merging.
+PR #46 may be marked Verified and merged after source-of-truth docs and final CI are green.
