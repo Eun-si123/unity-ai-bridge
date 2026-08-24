@@ -27,6 +27,8 @@ namespace UnityAiBridge.Editor.Commands
         public long writeCompletedUnixMs;
         public bool importRequested;
         public long importRequestedUnixMs;
+        public bool importCallReturned;
+        public string importError;
     }
 
     [Serializable]
@@ -49,6 +51,8 @@ namespace UnityAiBridge.Editor.Commands
         public long writeCompletedUnixMs;
         public bool importRequested;
         public long importRequestedUnixMs;
+        public bool importCallReturned;
+        public string importError;
     }
 
     internal sealed class ScriptReplaceCompilingException : InvalidOperationException
@@ -106,6 +110,7 @@ namespace UnityAiBridge.Editor.Commands
         private const string PreparedStatus = "prepared";
         private const string WrittenStatus = "written";
         private const string SessionKeyPrefix = "UnityAiBridge.Mutation.ScriptReplace.v1.";
+        private const int MaximumImportErrorCharacters = 2048;
 
         public static void ValidateArguments(
             string path,
@@ -145,17 +150,6 @@ namespace UnityAiBridge.Editor.Commands
         {
             ValidateArguments(path, expectedGuid, expectedContentSha256, content, mutationId);
 
-            if (EditorApplication.isCompiling)
-            {
-                throw new ScriptReplaceCompilingException(
-                    "Unity is already compiling; script.replace was not started.");
-            }
-            if (EditorApplication.isPlaying || EditorApplication.isPlayingOrWillChangePlaymode)
-            {
-                throw new ScriptReplacePlayModeException(
-                    "script.replace is disabled while Unity is in or transitioning to Play Mode.");
-            }
-
             var replacementBodyBytes = ScriptFileUtility.EncodeStrictUtf8(content, false);
             if (replacementBodyBytes.Length > MaximumReplacementUtf8Bytes)
             {
@@ -165,6 +159,9 @@ namespace UnityAiBridge.Editor.Commands
             }
             var replacementTextSha256 = ScriptFileUtility.ComputeSha256(replacementBodyBytes);
 
+            // A same-id retry after a source-triggered compilation/domain reload is a
+            // reconciliation read, not a new write. Handle it before the new-write compile
+            // and Play Mode preflight so a compiling Editor cannot force a blind new id.
             var sessionKey = SessionKeyPrefix + mutationId;
             var existing = ReadJournal(sessionKey);
             if (existing != null)
@@ -176,6 +173,17 @@ namespace UnityAiBridge.Editor.Commands
                     expectedContentSha256,
                     replacementTextSha256);
                 return ReplayOrReconcile(existing, sessionKey, content);
+            }
+
+            if (EditorApplication.isCompiling)
+            {
+                throw new ScriptReplaceCompilingException(
+                    "Unity is already compiling; a new script.replace mutation was not started.");
+            }
+            if (EditorApplication.isPlaying || EditorApplication.isPlayingOrWillChangePlaymode)
+            {
+                throw new ScriptReplacePlayModeException(
+                    "script.replace is disabled while Unity is in or transitioning to Play Mode.");
             }
 
             var snapshot = ScriptFileUtility.ReadSnapshot(path, false);
@@ -233,6 +241,8 @@ namespace UnityAiBridge.Editor.Commands
                 writeCompletedUnixMs = 0,
                 importRequested = false,
                 importRequestedUnixMs = 0,
+                importCallReturned = false,
+                importError = string.Empty,
             };
             WriteJournal(sessionKey, journal);
 
@@ -263,9 +273,22 @@ namespace UnityAiBridge.Editor.Commands
             WriteJournal(sessionKey, journal);
 
             // Do not force synchronous import here. A C# import can compile and reload the
-            // current Editor domain. The journal is terminal for byte persistence before
-            // the import begins so a reconnect can reconcile without another source write.
-            AssetDatabase.ImportAsset(snapshot.path, ImportAssetOptions.ForceUpdate);
+            // current Editor domain. The journal is already terminal for byte persistence,
+            // so a disconnect can reconcile without another source write.
+            try
+            {
+                AssetDatabase.ImportAsset(snapshot.path, ImportAssetOptions.ForceUpdate);
+                journal.importCallReturned = true;
+                WriteJournal(sessionKey, journal);
+            }
+            catch (Exception exception)
+            {
+                // Exact replacement bytes are already persisted and verified. Preserve that
+                // successful persistence result instead of collapsing it into a generic
+                // write failure. The MCP layer may report compilation as not_observed.
+                journal.importError = BoundImportError(exception.Message);
+                WriteJournal(sessionKey, journal);
+            }
 
             return BuildPayload(journal, false, false);
         }
@@ -383,6 +406,8 @@ namespace UnityAiBridge.Editor.Commands
                 writeCompletedUnixMs = journal.writeCompletedUnixMs,
                 importRequested = journal.importRequested,
                 importRequestedUnixMs = journal.importRequestedUnixMs,
+                importCallReturned = journal.importCallReturned,
+                importError = journal.importError ?? string.Empty,
             };
         }
 
@@ -450,6 +475,7 @@ namespace UnityAiBridge.Editor.Commands
             {
                 throw new InvalidOperationException("The stored script.replace mutation journal is invalid.");
             }
+            journal.importError = journal.importError ?? string.Empty;
             return journal;
         }
 
@@ -519,6 +545,17 @@ namespace UnityAiBridge.Editor.Commands
                     }
                 }
             }
+        }
+
+        private static string BoundImportError(string value)
+        {
+            if (string.IsNullOrEmpty(value))
+            {
+                return string.Empty;
+            }
+            return value.Length <= MaximumImportErrorCharacters
+                ? value
+                : value.Substring(0, MaximumImportErrorCharacters);
         }
 
         private static void ValidateHex(string value, int length, string parameterName)
