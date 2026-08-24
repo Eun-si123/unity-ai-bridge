@@ -101,9 +101,10 @@ namespace UnityAiBridge.Editor.Tests
             var unique = Guid.NewGuid().ToString("N");
             var prefabPath = $"Assets/UnityAiBridge_PrefabPropertyApply_{unique}.prefab";
             var scenePath = $"Assets/UnityAiBridge_PrefabPropertyApply_{unique}.unity";
-            var sceneName = "UnityAiBridge_PrefabPropertyApply_" + unique;
             var mutationId = "prefab-property-apply-" + unique;
             var previousActiveScene = SceneManager.GetActiveScene();
+            var replacedCleanUntitledScene = false;
+            var untitledRestoreSetup = NewSceneSetup.EmptyScene;
             Scene testScene = default;
             GameObject instance = null;
 
@@ -117,11 +118,35 @@ namespace UnityAiBridge.Editor.Tests
                 var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
                 Assert.That(prefab, Is.Not.Null);
 
-                // EditorSceneManager.NewScene(Additive) refuses to run while Test Runner owns an
-                // untitled unsaved scene. SceneManager.CreateScene creates an isolated additive
-                // empty scene without requiring the existing transient scene to be saved first.
-                // Save only this test-owned scene before obtaining the durable GlobalObjectId.
-                testScene = SceneManager.CreateScene(sceneName);
+                if (HasUnsavedUntitledScene())
+                {
+                    // Unity rejects NewScene(Additive) while ANY untitled Scene is open. Test Runner
+                    // commonly owns one clean transient Scene. In that exact safe case, replace it
+                    // temporarily with a Single test Scene and reconstruct an equivalent clean
+                    // Untitled Scene afterward. Never discard a dirty/custom untitled user Scene.
+                    if (SceneManager.sceneCount != 1 ||
+                        !previousActiveScene.IsValid() ||
+                        !previousActiveScene.isLoaded ||
+                        !string.IsNullOrEmpty(previousActiveScene.path) ||
+                        previousActiveScene.isDirty ||
+                        !TryGetSafeUntitledRestoreSetup(previousActiveScene, out untitledRestoreSetup))
+                    {
+                        Assert.Ignore(
+                            "Prefab property apply integration test requires either saved open scenes or the clean default Test Runner Untitled scene. It will not replace an unknown/dirty unsaved user scene.");
+                    }
+
+                    testScene = EditorSceneManager.NewScene(
+                        NewSceneSetup.EmptyScene,
+                        NewSceneMode.Single);
+                    replacedCleanUntitledScene = true;
+                }
+                else
+                {
+                    testScene = EditorSceneManager.NewScene(
+                        NewSceneSetup.EmptyScene,
+                        NewSceneMode.Additive);
+                }
+
                 Assert.That(testScene.IsValid(), Is.True);
                 Assert.That(testScene.isLoaded, Is.True);
                 Assert.That(EditorSceneManager.SaveScene(testScene, scenePath), Is.True);
@@ -209,18 +234,74 @@ namespace UnityAiBridge.Editor.Tests
                     UnityEngine.Object.DestroyImmediate(instance);
                 }
 
-                if (previousActiveScene.IsValid() && previousActiveScene.isLoaded)
+                if (testScene.IsValid() && testScene.isLoaded && !string.IsNullOrEmpty(testScene.path))
                 {
-                    SceneManager.SetActiveScene(previousActiveScene);
+                    // The temporary Scene may be dirty after deleting the temporary Prefab.
+                    // Save only this test-owned asset so replacing/closing it cannot prompt.
+                    EditorSceneManager.SaveScene(testScene);
                 }
-                if (testScene.IsValid() && testScene.isLoaded)
+
+                if (replacedCleanUntitledScene)
                 {
-                    EditorSceneManager.CloseScene(testScene, true);
+                    EditorSceneManager.NewScene(untitledRestoreSetup, NewSceneMode.Single);
+                }
+                else
+                {
+                    if (previousActiveScene.IsValid() && previousActiveScene.isLoaded)
+                    {
+                        SceneManager.SetActiveScene(previousActiveScene);
+                    }
+                    if (testScene.IsValid() && testScene.isLoaded)
+                    {
+                        EditorSceneManager.CloseScene(testScene, true);
+                    }
                 }
 
                 DeleteTemporaryAsset(prefabPath);
                 DeleteTemporaryAsset(scenePath);
             }
+        }
+
+        private static bool HasUnsavedUntitledScene()
+        {
+            for (var index = 0; index < SceneManager.sceneCount; index++)
+            {
+                var scene = SceneManager.GetSceneAt(index);
+                if (scene.IsValid() && scene.isLoaded && string.IsNullOrEmpty(scene.path))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private static bool TryGetSafeUntitledRestoreSetup(
+            Scene scene,
+            out NewSceneSetup setup)
+        {
+            setup = NewSceneSetup.EmptyScene;
+            var roots = scene.GetRootGameObjects();
+            if (roots.Length == 0)
+            {
+                return true;
+            }
+
+            // Unity's standard/default scenes in the target editor line contain some combination
+            // of these roots depending on the active render-pipeline template. Anything else is
+            // treated as user/custom scene content and is never discarded by this test.
+            for (var index = 0; index < roots.Length; index++)
+            {
+                var name = roots[index].name;
+                if (!string.Equals(name, "Main Camera", StringComparison.Ordinal) &&
+                    !string.Equals(name, "Directional Light", StringComparison.Ordinal) &&
+                    !string.Equals(name, "Global Volume", StringComparison.Ordinal))
+                {
+                    return false;
+                }
+            }
+
+            setup = NewSceneSetup.DefaultGameObjects;
+            return true;
         }
 
         private static void DeleteTemporaryAsset(string path)
