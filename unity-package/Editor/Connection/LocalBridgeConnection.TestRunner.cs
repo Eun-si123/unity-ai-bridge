@@ -19,6 +19,12 @@ namespace UnityAiBridge.Editor.Connection
             string rawJson,
             CancellationToken cancellationToken)
         {
+            if (string.Equals(command.operation, "test.list", StringComparison.Ordinal))
+            {
+                await HandleTestDiscoveryAsync(current, command, rawJson, cancellationToken);
+                return true;
+            }
+
             if (string.Equals(command.operation, "test.run.editMode.start", StringComparison.Ordinal))
             {
                 await HandleTestStartAsync(current, command, rawJson, false, cancellationToken);
@@ -38,6 +44,88 @@ namespace UnityAiBridge.Editor.Connection
             }
 
             return false;
+        }
+
+        private static async Task HandleTestDiscoveryAsync(
+            ClientWebSocket current,
+            BridgeCommandDto command,
+            string rawJson,
+            CancellationToken cancellationToken)
+        {
+            if (!string.Equals(command.risk, "read", StringComparison.Ordinal))
+            {
+                await SendErrorAsync(
+                    current,
+                    command.requestId,
+                    "validation",
+                    "risk_mismatch",
+                    "test.list requires risk='read'.",
+                    cancellationToken);
+                return;
+            }
+
+            var dto = JsonUtility.FromJson<TestDiscoveryBridgeCommandDto>(rawJson);
+            var arguments = dto != null ? dto.arguments : null;
+            var testMode = arguments != null ? arguments.testMode : null;
+            var assemblyName = arguments != null ? arguments.assemblyName : null;
+            var nameContains = arguments != null ? arguments.nameContains : null;
+            var offset = arguments != null ? arguments.offset : 0;
+            var maxResults = arguments != null ? arguments.maxResults : 0;
+
+            try
+            {
+                var pending = await EditorMainThreadDispatcher.InvokeAsync(
+                    () => TestDiscoveryControl.RetrieveAsync(
+                        testMode,
+                        assemblyName,
+                        nameContains,
+                        offset,
+                        maxResults,
+                        command.deadlineUnixMs),
+                    command.deadlineUnixMs,
+                    command.operation);
+                var result = await pending;
+
+                var response = new BridgeTestDiscoveryResultDto
+                {
+                    protocolVersion = BridgeProtocol.Version,
+                    requestId = command.requestId,
+                    ok = true,
+                    result = result,
+                    warnings = Array.Empty<string>(),
+                    dirtyState = "unchanged",
+                    compileState = EditorApplication.isCompiling ? "compiling" : "idle",
+                };
+                await SendJsonAsync(current, JsonUtility.ToJson(response), cancellationToken);
+            }
+            catch (EditorDispatchDeadlineExceededException exception)
+            {
+                await SendErrorAsync(current, command.requestId, "timeout", "deadline_exceeded", exception.Message, cancellationToken);
+            }
+            catch (TimeoutException exception)
+            {
+                await SendErrorAsync(current, command.requestId, "timeout", "deadline_exceeded", exception.Message, cancellationToken);
+            }
+            catch (ArgumentException exception)
+            {
+                await SendErrorAsync(current, command.requestId, "validation", "invalid_arguments", exception.Message, cancellationToken);
+            }
+            catch (TestDiscoveryCompilingException exception)
+            {
+                await SendErrorAsync(current, command.requestId, "compile_reload", "editor_compiling", exception.Message, cancellationToken);
+            }
+            catch (TestDiscoveryPlayModeException exception)
+            {
+                await SendErrorAsync(current, command.requestId, "stale_state", "edit_mode_required", exception.Message, cancellationToken);
+            }
+            catch (TestDiscoveryAssemblyUnavailableException exception)
+            {
+                await SendErrorAsync(current, command.requestId, "stale_target", "test_assembly_unavailable", exception.Message, cancellationToken);
+            }
+            catch (Exception exception)
+            {
+                await SendErrorAsync(current, command.requestId, "unity_api", "test_discovery_failed", exception.Message, cancellationToken);
+            }
         }
 
         private static async Task HandleTestStartAsync(
@@ -171,6 +259,22 @@ namespace UnityAiBridge.Editor.Connection
         }
 
         [Serializable]
+        private sealed class TestDiscoveryBridgeCommandDto
+        {
+            public TestDiscoveryArgumentsDto arguments;
+        }
+
+        [Serializable]
+        private sealed class TestDiscoveryArgumentsDto
+        {
+            public string testMode;
+            public string assemblyName;
+            public string nameContains;
+            public long offset;
+            public long maxResults;
+        }
+
+        [Serializable]
         private sealed class TestRunStartBridgeCommandDto
         {
             public TestRunStartArgumentsDto arguments;
@@ -194,6 +298,18 @@ namespace UnityAiBridge.Editor.Connection
         private sealed class TestRunGetArgumentsDto
         {
             public string mutationId;
+        }
+
+        [Serializable]
+        private sealed class BridgeTestDiscoveryResultDto
+        {
+            public string protocolVersion;
+            public string requestId;
+            public bool ok;
+            public TestDiscoveryPayload result;
+            public string[] warnings;
+            public string dirtyState;
+            public string compileState;
         }
 
         [Serializable]
