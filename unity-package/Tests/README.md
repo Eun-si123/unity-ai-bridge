@@ -21,20 +21,33 @@ Unity Test Framework does not always immediately discover a package after `testa
 
 ## Verified installed-package behavior
 
-On **2026-08-24**, the non-embedded development-install flow was reproduced in Unity **6000.3.21f1**:
+On **2026-08-24**, the non-embedded development-install flow and expanded package suites were reproduced in Unity **6000.3.21f1**:
 
 - automatic project-manifest `testables` registration: PASS
 - guarded package reimport / test-assembly discovery: PASS
 - `EunSung.UnityAiBridge.Editor.Tests` visible in EditMode Test Runner: PASS
-- then-current suite: **75 Passed / 0 Failed**
+- historical suite milestones: 75/75, 80/80, 81/81, 85/85
+- current verified suite after PR #45 Script replace tests: **89 Passed / 0 Failed**
 
-Tests introduced after that run are not implicitly Verified merely because they appear in source. `STATUS.md` records the current verified baseline and any later implemented-but-unverified tests/write families.
+`STATUS.md` records the current verified baseline and the exact runtime evidence for each later write family.
 
 ## Prefab property apply integration test
 
 PR #36 adds an EditMode integration test for the first bounded existing-Prefab asset mutation. The test uses a temporary writable Prefab under `Assets`, creates a real Transform serialized-property override on a linked instance, applies exactly that property, verifies source/instance readback, verifies same-mutation replay, then deletes the temporary asset and proves stale replay fails closed. The temporary scene instance/asset are cleaned in `finally`.
 
-This new test must run successfully in a real Unity Editor before `prefab.property.apply` is marked Verified.
+The corresponding real Unity suite and dedicated live MCP verifier passed before the operation was marked Verified.
+
+## Script replace tests
+
+PR #45 adds non-reloading EditMode coverage for the first bounded Script mutation family. The ordinary package suite verifies validation/intent and atomic helper behavior without deliberately triggering a domain reload from inside the test assembly itself.
+
+Real source persistence, Unity compilation, domain reload/reconnect, same-id replay, stale-content rejection, and exact source restoration are verified separately by:
+
+```text
+npm --prefix mcp-server run verify:script-replace
+```
+
+This separation keeps the normal EditMode suite deterministic while still requiring a real Unity end-to-end gate before `script.replace` is considered Verified.
 
 ## Manual fallback
 
