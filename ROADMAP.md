@@ -10,16 +10,17 @@ Unity AI Bridge aims to make safe AI control of the Unity Editor easy enough tha
 
 - Capability gates matter more than dates.
 - A feature advances only with implementation plus relevant verification evidence.
-- Reliability, Undo, reconnect behavior, object identity, and security are product features.
+- Reliability, Undo, reconnect behavior, object identity, persistent-write safety, and security are product features.
 - The project will not chase a huge tool count before the core is trustworthy.
 - MCP/provider neutrality is an architectural boundary, not a later compatibility patch.
 - ChatGPT is an important first production host target, not the owner of the public core architecture.
 - Portable packaging standards may reduce duplicated integration work, but they do not replace the canonical MCP/tool contract.
+- Model compatibility should be capability/profile oriented rather than hardcoded by model name.
 
 ## Legend
 
 - ⬜ Planned
-- 🟨 In progress
+- 🟨 In progress / implemented but not yet fully runtime-verified
 - ✅ Verified milestone/slice
 - ⛔ Blocked
 
@@ -62,7 +63,7 @@ Verified foundations include:
 - ✅ common mutation preflight
 - ✅ Undo transaction grouping
 - ✅ semantic native readback
-- ✅ rollback + rollback verification
+- ✅ rollback + rollback verification where a write family can honestly provide it
 - ✅ same-session mutation lifecycle across domain reload
 - ✅ capability/version preflight
 - ✅ receive-time + execution-boundary deadlines
@@ -91,13 +92,43 @@ Verified slices:
 - ✅ Component property edit — `unity_set_component_property`, **45/45** EditMode
 - ✅ Asset search/inspect — `unity_search_assets` + `unity_inspect_asset`, **50/50** EditMode
 - ✅ Prefab inspect + linked scene instantiate — `unity_inspect_prefab` + `unity_instantiate_prefab`, **56/56** EditMode
-- ✅ Prefab Asset creation — `unity_create_prefab_asset`, create-only disk write with native GUID/hash/root verification and stale replay after manual removal, **62/62** EditMode
-- 🟨 Bounded Prefab Apply Overrides workflow — next Prefab slice
-- ⬜ Script read/write workflows
-- ⬜ Diagnostics extensions where they unlock concrete workflows
+- ✅ Prefab Asset creation — `unity_create_prefab_asset`, create-only disk write with native GUID/hash/root verification and stale replay after manual removal, **62/62** milestone
+- ✅ installed-package Test Runner discovery/bootstrap — automatic `testables` registration + guarded package reimport, real Unity 6000.3.21f1 regression baseline **75/75** on 2026-08-24
+- 🟨 bounded single-property Prefab override apply — `unity_apply_prefab_property_override` / `prefab.property.apply`, implemented in PR #36 and awaiting expanded real-Unity verification
+- ⬜ script read/write workflows
 - ⬜ Play Mode control
 - ⬜ Unity Test Runner control
-- ⬜ Explicit Undo/recovery tools where useful to clients
+- ⬜ diagnostics extensions where they unlock concrete workflows
+- ⬜ explicit Undo/recovery tools where useful to clients
+
+### Current Prefab apply strategy
+
+Do not jump directly from Prefab creation to broad Apply All.
+
+The first apply slice is intentionally narrow:
+
+```text
+scene Prefab instance
+ -> exact Component GlobalObjectId
+ -> exact visible non-array SerializedProperty override
+ -> explicit writable Prefab Asset path
+ -> exact Prefab dependencyHash + scene state preconditions
+ -> ApplyPropertyOverride
+ -> native source/instance serialized readback
+```
+
+The first slice rejects Model Prefabs, `m_Script`, arrays/elements, non-Prefab targets, stale assets/state, and automatic nested-Prefab target selection. It is a persistent asset write, classified `destructive`, and does not claim Unity Undo or generic automatic rollback after an ambiguous asset mutation.
+
+Broader Prefab operations remain separate future contracts:
+
+- object/component-wide apply,
+- Apply All,
+- Revert Overrides,
+- added/removed object/component apply/revert,
+- Prefab variants,
+- unpacking.
+
+They should be added only when their authority, preconditions, readback, retry, and recovery behavior can be bounded and tested independently.
 
 Supporting work:
 
@@ -106,10 +137,11 @@ Supporting work:
 - ✅ bounded AssetDatabase search/inspection
 - ✅ Prefab asset-side precondition using Unity dependencyHash
 - ✅ create-only Prefab disk-write contract that never overwrites an existing destination
+- ✅ development-install Test Runner discovery bootstrap, verified with **75/75** real Unity EditMode run
+- 🟨 persistent-existing-Prefab property-write contract with explicit target/hash/readback, PR #36
 - 🟨 consistent risk classification as new operations are added
 - ⬜ broader tool-schema compatibility tests as the surface grows
 - ⬜ better structured error explanations for AI clients
-- 🟨 development-install Test Runner discovery bootstrap for package tests; implementation exists and requires fresh Unity runtime verification before being marked Verified
 
 Reliability requirements inherited from Phase 2:
 
@@ -119,11 +151,26 @@ Reliability requirements inherited from Phase 2:
 - main-thread execution,
 - Undo grouping where applicable,
 - native readback/semantic verification,
-- rollback + rollback verification where applicable,
+- rollback + rollback verification where the operation can safely support it,
+- conservative ambiguous-outcome handling where persistent writes cannot safely be generically rolled back,
 - mutation identity/replay semantics,
 - execution-boundary deadline enforcement,
 - explicit dirty/save behavior,
 - automated + real Unity verification before write families become Verified.
+
+### Immediate next gate
+
+Run the expanded Unity 6000.3.21f1 EditMode suite for PR #36/merged revision. The new integration test must prove the temporary Prefab workflow:
+
+1. create/import a temporary writable Prefab,
+2. instantiate it,
+3. create a real Transform serialized-property override,
+4. apply exactly that property to the explicit Prefab target,
+5. verify source value + cleared instance override,
+6. replay the same mutation without a second write,
+7. remove the asset and prove the same mutationId fails stale instead of recreating/reapplying.
+
+Only then mark this new write family Verified.
 
 ### Exit gate
 
@@ -193,11 +240,11 @@ A new user can install the Unity side and use at least one production AI host th
 
 ---
 
-# Phase 6 — Multi-Client Compatibility
+# Phase 6 — Multi-Client and Local-Agent Compatibility
 
 **State:** ⬜ Planned
 
-Goal: prove the public core is genuinely provider-neutral rather than merely claiming it.
+Goal: prove the public core is genuinely provider/model-neutral rather than merely claiming it.
 
 Potential compatibility targets include:
 
@@ -207,13 +254,18 @@ Potential compatibility targets include:
 - Gemini / Gemini CLI,
 - Cursor,
 - Copilot,
+- MCP-capable local/open-weight agent runtimes,
 - other standards-compliant MCP hosts.
 
-Work includes a compatibility matrix covering tool discovery, structured results, write safety/approval behavior where host-controlled, authentication/remote transport differences, and host-specific packaging only where required.
+Open-weight models are not integrated as raw inference endpoints. The compatibility target is a real agent/runtime/harness that can perform MCP discovery/invocation, structured-result handling, retries, approval policy, and multi-step workflows. See [`docs/OPEN_WEIGHT_MODEL_COMPATIBILITY.md`](docs/OPEN_WEIGHT_MODEL_COMPATIBILITY.md).
+
+Work includes a compatibility matrix covering tool discovery, structured results, write safety/approval behavior where host-controlled, authentication/remote transport differences, model/host capability profiles, and host-specific packaging only where required.
+
+A later Adaptive Router may expose Workflow/Semantic/Primitive abstraction levels based on explicit capability/profile evidence. It must not hardcode model names into Unity execution semantics.
 
 ### Exit gate
 
-Multiple independently implemented MCP hosts can perform the same representative Unity workflows against one shared public core, with any host-specific exceptions explicitly documented rather than hidden in duplicated Unity code.
+Multiple independently implemented MCP hosts, including at least one meaningfully different runtime class, can perform the same representative Unity workflows against one shared public core, with exceptions explicitly documented rather than hidden in duplicated Unity code.
 
 ---
 
@@ -259,6 +311,7 @@ Intentionally deferred:
 - Unity Hub account automation
 - multi-agent orchestration
 - TeamForge integration
+- embedding model download/inference/GPU scheduling into the Unity core
 - billing/monetization before the product works reliably
 
 ---

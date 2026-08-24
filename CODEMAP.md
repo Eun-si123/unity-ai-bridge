@@ -21,6 +21,7 @@ This file maps the current repository at subsystem level and records what is onl
 ├─ CHANGELOG.md
 ├─ llms.txt
 ├─ docs/
+│  └─ OPEN_WEIGHT_MODEL_COMPATIBILITY.md
 │
 ├─ unity-package/
 │  ├─ package.json
@@ -43,6 +44,7 @@ This file maps the current repository at subsystem level and records what is onl
 │
 ├─ bridge-protocol/
 │  ├─ README.md
+│  ├─ PREFAB_PROPERTY_APPLY.md
 │  ├─ schemas/
 │  └─ fixtures/
 │
@@ -54,11 +56,13 @@ This file maps the current repository at subsystem level and records what is onl
    │  ├─ index.ts
    │  ├─ agent/
    │  ├─ bridge/
+   │  │  └─ prefab-property-bridge-server.ts
    │  ├─ protocol/
    │  ├─ dev/
    │  ├─ asset-tools.ts
    │  ├─ component-tools.ts
    │  ├─ gameobject-edit-tools.ts
+   │  ├─ prefab-property-tools.ts
    │  └─ additional domain/tool modules
    └─ tests/
 ```
@@ -74,6 +78,7 @@ This file maps the current repository at subsystem level and records what is onl
 - `REFERENCES.md` — external research references; not proof of code reuse
 - `CHANGELOG.md` — notable project changes
 - `docs/TESTING.md` and package test docs — repeatable verification procedures
+- `docs/OPEN_WEIGHT_MODEL_COMPATIBILITY.md` — deferred local/open-weight compatibility boundary and future Adaptive Router direction
 - `llms.txt` — compact AI entrypoint
 
 ## Current source ownership
@@ -94,6 +99,7 @@ Home of the Unity Editor-side implementation:
 - semantic native readback and rollback verification where applicable,
 - Editor status/hierarchy/diagnostics/object resolution,
 - Phase 3 Transform, GameObject, Component, Asset, and Prefab handlers,
+- persistent Prefab asset-write handlers with operation-specific safety/retry semantics where generic Unity Undo is not honestly available,
 - EditMode tests and live/manual verifiers,
 - development-install bootstrap for making non-embedded package tests visible in Unity Test Runner.
 
@@ -105,7 +111,8 @@ The Unity-facing transport-independent contract:
 
 - protocol-versioned command/hello/result JSON Schemas,
 - operation fixtures,
-- bridge protocol documentation.
+- bridge protocol documentation,
+- operation-specific persistent-write contracts such as bounded Prefab property apply.
 
 MCP-facing tool contracts and Unity-facing bridge commands remain separate on purpose. Unity command semantics must not depend on a particular LLM vendor, MCP host, or WebSocket-specific detail.
 
@@ -120,10 +127,11 @@ The provider-neutral MCP/tool layer:
 - capability preflight,
 - tool schemas/descriptions,
 - typed bridge adapters for current Unity domains,
+- domain-specific bridge subclasses/modules where that keeps large surfaces maintainable,
 - structured MCP results/errors,
 - simulated bridge tests and real-Unity verification helpers.
 
-Current MCP tools cover the verified Phase 3 surface summarized in `STATUS.md`; exact tool names live in source rather than being duplicated exhaustively here.
+Current MCP tools cover the verified/implemented Phase 3 surface summarized in `STATUS.md`; exact tool names live in source rather than being duplicated exhaustively here.
 
 Remote Streamable HTTP, hosted authentication/pairing, multi-user/editor routing, and managed-service policy remain later-phase work.
 
@@ -151,6 +159,8 @@ integrations/
 ```
 
 The canonical product logic remains in the shared MCP/core layers. Provider directories must not become duplicate Unity implementations.
+
+Open-weight/local models are expected to connect through real MCP-capable agent/runtime layers later; model serving/download/GPU scheduling is intentionally outside the Unity core.
 
 ## Private hosted infrastructure
 
