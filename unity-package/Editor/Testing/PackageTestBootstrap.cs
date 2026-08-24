@@ -29,7 +29,7 @@ namespace UnityAiBridge.Editor.Testing
         {
             try
             {
-                var packageInfo = PackageInfo.FindForAssembly(typeof(PackageTestBootstrap).Assembly);
+                var packageInfo = PackageInfo.FindForPackageName(PackageName);
                 if (packageInfo == null)
                 {
                     return;
@@ -95,10 +95,21 @@ namespace UnityAiBridge.Editor.Testing
             }
 
             var tempPath = manifestPath + ".unity-ai-bridge.tmp";
-            File.WriteAllText(tempPath, updated, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-            File.Copy(tempPath, manifestPath, overwrite: true);
-            File.Delete(tempPath);
+            try
+            {
+                File.WriteAllText(tempPath, updated, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+                File.Copy(tempPath, manifestPath, overwrite: true);
+            }
+            finally
+            {
+                if (File.Exists(tempPath))
+                {
+                    File.Delete(tempPath);
+                }
+            }
 
+            // The package assembly is already loaded when this delayed callback runs. Force a package
+            // resolve after changing the project manifest so Test Framework can pick up the testable package.
             Client.Resolve();
 
             if (logSuccess)
