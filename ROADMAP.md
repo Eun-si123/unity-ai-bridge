@@ -98,10 +98,40 @@ Verified slices:
 - ✅ direct `Undo.RecordObject` scene-Prefab override recording — Transform/GameObject direct writes; real Unity **81/81** through PR #43
 - ✅ bounded Script read — `unity_read_script` / `script.read`; real Unity **85/85** plus live MCP reconstruction/identity/non-mutation PASS through PR #44
 - ✅ reload-safe Script replace/write — `unity_replace_script` / `script.replace`; real Unity **89/89** plus live MCP CAS/write/compile/reload/replay/stale/restore PASS through PR #45
-- ⬜ Play Mode control
+- ✅ reload-aware Play Mode control — `unity_set_play_mode` / `editor.playMode.set`; real Unity **93/93** plus live MCP edit/play/replay/stale/final-restore PASS through PR #46
 - ⬜ Unity Test Runner control
 - ⬜ diagnostics extensions where they unlock concrete workflows
 - ⬜ explicit Undo/recovery tools where useful to clients
+
+### Verified Play Mode strategy
+
+Play Mode is an Editor lifecycle boundary, not a synchronous Boolean mutation. The first slice therefore exposes stable preconditions/targets while observing transient native states and optional reload/reconnect behavior.
+
+Verified lifecycle:
+
+```text
+editor.status observation
+ -> stable expected mode: edit | play
+ -> target mode: edit | play
+ -> record mutationId journal before transition
+ -> request Unity EnterPlaymode / ExitPlaymode
+ -> observe edit / entering_play / play / exiting_play
+ -> tolerate optional domain reload / bridge reconnect
+ -> same-editor reconciliation
+ -> wait for stable target mode
+ -> same-id retry remains readback-only
+ -> stale expected mode fails closed
+```
+
+Verified first-slice properties:
+
+- `editor.status` reports four-state lifecycle, pause state, and effective Enter Play Mode reload flags,
+- user Enter Play Mode settings are observed but never changed,
+- reload/connection-generation change is reported but is not mandatory for success,
+- same-id retries do not blindly request a second transition,
+- no automatic scene save and no Unity Undo claim,
+- explicit 180-second bounded lifecycle timeout for slow/project-heavy cases,
+- live verifier proves edit -> play -> edit, replay, stale-precondition rejection, settings preservation, and exact final stable Edit Mode.
 
 ### Verified Script strategy
 
@@ -177,6 +207,7 @@ Supporting work:
 - ✅ direct scene-Prefab write override recording audit/fix (#41 / PR #43)
 - ✅ bounded Script read + raw SHA-256 observation token (PR #44, **85/85 + live MCP PASS**)
 - ✅ reload-safe Script replace/CAS contract (PR #45, **89/89 + live MCP PASS**)
+- ✅ reload-aware Play Mode lifecycle control (PR #46, **93/93 + live MCP PASS**)
 - 🟨 consistent risk classification as new operations are added
 - ⬜ broader tool-schema compatibility tests as the surface grows
 - ⬜ better structured error explanations for AI clients
@@ -198,7 +229,7 @@ Reliability requirements inherited from Phase 2:
 
 ### Immediate next gate
 
-Choose the next bounded workflow based on usefulness and testability. Current candidates are Play Mode control and Unity Test Runner control. Whichever is selected must preserve capability preflight, bounded inputs/results, explicit lifecycle/timeout behavior, and real Unity verification before it is marked Verified.
+**Unity Test Runner control** is the next bounded Phase 3 workflow. It should support a deliberate run request, bounded selection/filtering, asynchronous progress/completion, exact result counts/details, lifecycle/reload-safe observation, and conservative retry semantics before it is marked Verified.
 
 ### Exit gate
 
@@ -257,85 +288,3 @@ Potential compatibility targets include ChatGPT, Claude, Codex, Gemini / Gemini 
 Open-weight models are not integrated as raw inference endpoints. The compatibility target is a real agent/runtime/harness that can perform MCP discovery/invocation, structured-result handling, retries, approval policy, and multi-step workflows. See [`docs/OPEN_WEIGHT_MODEL_COMPATIBILITY.md`](docs/OPEN_WEIGHT_MODEL_COMPATIBILITY.md).
 
 A later Adaptive Router may expose Workflow/Semantic/Primitive abstraction levels based on explicit capability/profile evidence. It must not hardcode model names into Unity execution semantics.
-
-### Exit gate
-
-Multiple independently implemented MCP hosts, including at least one meaningfully different runtime class, can perform the same representative Unity workflows against one shared public core, with exceptions explicitly documented.
-
----
-
-# Phase 7 — Advanced Unity Domains
-
-**State:** ⬜ Planned
-
-Candidate domains, prioritized by demand and testability:
-
-- Terrain
-- NavMesh
-- Animation/Animator
-- UI and UI Toolkit
-- Lighting
-- Particles/VFX
-- Shader Graph
-- Profiler / memory / frame diagnostics
-- Build tooling
-- Package Manager
-- Multiplayer Play Mode
-- GameView/screenshot inspection
-
-This list is not a promise that every domain will ship.
-
----
-
-# Phase 8 — Extensibility and Ecosystem
-
-**State:** ⬜ Planned
-
-Possible work includes a safe custom-tool extension API, lazy capability discovery, third-party package adapters, versioned extension contracts, validation/security guidance, and templates. Arbitrary code execution is not considered a substitute for a real extension system.
-
----
-
-# Not on the early roadmap
-
-Intentionally deferred:
-
-- 300+ tools for marketing purposes
-- arbitrary shell/process control
-- unrestricted arbitrary C# execution
-- arbitrary third-party EditorWindow GUI automation
-- Unity Hub account automation
-- multi-agent orchestration
-- TeamForge integration
-- embedding model download/inference/GPU scheduling into the Unity core
-- billing/monetization before the product works reliably
-
----
-
-# Version direction
-
-Likely semantic progression, not a release promise:
-
-```text
-0.0.x  foundation / protocol experiments
-0.1.x  verified local core
-0.2.x  reliability + useful editing
-0.3.x  remote Easy Connect
-0.4.x  portable/client integration beta
-0.x    expansion and compatibility hardening
-1.0    only after stable contracts, migration policy, security review,
-       and repeatable real-world usage justify it
-```
-
-Do not bump versions merely to make the project appear mature.
-
----
-
-# How roadmap items move
-
-1. implementation exists,
-2. relevant automated/manual verification is performed,
-3. evidence is recorded in `STATUS.md` or linked test output,
-4. documentation is updated,
-5. known limitations are stated.
-
-A roadmap checkbox alone is never proof that a feature works.
