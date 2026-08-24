@@ -38,9 +38,25 @@ namespace UnityAiBridge.Editor.Connection
             var bridgeCommand = JsonUtility.FromJson<ScriptReadBridgeCommandDto>(rawJson);
             var arguments = bridgeCommand != null ? bridgeCommand.arguments : null;
             var path = arguments != null ? arguments.path : null;
-            var offset = arguments != null ? arguments.offset : 0;
-            var maxChars = arguments != null && arguments.maxChars > 0
-                ? arguments.maxChars
+            var rawOffset = arguments != null ? arguments.offset : 0L;
+            var rawMaxChars = arguments != null ? arguments.maxChars : 0L;
+
+            if (rawOffset < 0 || rawOffset > int.MaxValue ||
+                rawMaxChars < int.MinValue || rawMaxChars > int.MaxValue)
+            {
+                await SendErrorAsync(
+                    current,
+                    command.requestId,
+                    "validation",
+                    "invalid_arguments",
+                    "script.read offset/maxChars must fit the Unity signed 32-bit integer range, and offset must be non-negative.",
+                    cancellationToken);
+                return true;
+            }
+
+            var offset = (int)rawOffset;
+            var maxChars = rawMaxChars > 0
+                ? (int)rawMaxChars
                 : ScriptReadCommand.DefaultMaxChars;
 
             try
@@ -124,8 +140,8 @@ namespace UnityAiBridge.Editor.Connection
         private sealed class ScriptReadCommandArgumentsDto
         {
             public string path;
-            public int offset;
-            public int maxChars;
+            public long offset;
+            public long maxChars;
         }
 
         [Serializable]
