@@ -1,0 +1,32 @@
+{
+  "protocolVersion": "0",
+  "requestId": "fixture-test-list-tests",
+  "ok": true,
+  "result": {
+    "testMode": "play",
+    "scope": "tests",
+    "assemblyName": "EunSung.UnityAiBridge.PlayMode.Tests",
+    "nameContains": "RunsOneFrame",
+    "totalMatches": 1,
+    "offset": 0,
+    "maxResults": 20,
+    "returnedCount": 1,
+    "nextOffset": 1,
+    "truncated": false,
+    "assemblies": [],
+    "tests": [
+      {
+        "name": "RunsOneFrameInsidePlayMode",
+        "fullName": "UnityAiBridge.PlayMode.Tests.PlayModeVerifierTests.RunsOneFrameInsidePlayMode",
+        "uniqueName": "EunSung.UnityAiBridge.PlayMode.Tests.dll/UnityAiBridge.PlayMode.Tests.PlayModeVerifierTests/[Tests][UnityAiBridge.PlayMode.Tests.PlayModeVerifierTests.RunsOneFrameInsidePlayMode]",
+        "parentFullName": "UnityAiBridge.PlayMode.Tests.PlayModeVerifierTests",
+        "runState": "Runnable",
+        "categories": [],
+        "selectableByBridge": true
+      }
+    ]
+  },
+  "warnings": [],
+  "dirtyState": "unchanged",
+  "compileState": "idle"
+}
