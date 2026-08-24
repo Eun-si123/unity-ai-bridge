@@ -50,6 +50,9 @@ test("script replace sends destructive CAS command and reports successful compil
 
       if (command.operation === "editor.diagnostics") {
         sendSuccess(client, command.requestId, diagnosticsPayload(11, []));
+        // A successful C# compilation normally reloads the Editor domain. Model that
+        // generation change before the bridge performs its final Script readback.
+        client.send(JSON.stringify(hello(501)));
         return;
       }
 
@@ -74,9 +77,9 @@ test("script replace sends destructive CAS command and reports successful compil
     assert.equal(result.compilerErrorCount, 0);
     assert.equal(result.contentSha256After, afterSha);
     assert.equal(result.postReloadReadbackVerified, true);
-    assert.equal(result.reloadObserved, false);
+    assert.equal(result.reloadObserved, true);
     assert.equal(result.initialConnectionGeneration, 500);
-    assert.equal(result.finalConnectionGeneration, 500);
+    assert.equal(result.finalConnectionGeneration, 501);
   } finally {
     await bridge.stop();
     if (client.readyState !== WebSocket.CLOSED) client.terminate();
