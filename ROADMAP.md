@@ -101,6 +101,7 @@ Verified slices:
 - ✅ reload-aware Play Mode control — `unity_set_play_mode` / `editor.playMode.set`; real Unity **93/93** plus live MCP edit/play/replay/stale/final-restore PASS through PR #46
 - ✅ bounded asynchronous EditMode Test Runner control — `unity_start_editmode_tests` + `unity_get_test_run`; real Unity **98/98** plus live MCP schedule/poll/replay/result/conflict PASS through PR #47
 - ✅ bounded asynchronous PlayMode Test Runner control — `unity_start_playmode_tests` + `unity_get_test_run`; real Unity **100/100 EditMode + 1/1 PlayMode** plus live MCP lifecycle/replay/result/conflict/final-restore PASS through PR #48
+- ✅ bounded native Test Framework discovery — `unity_list_tests` / `test.list`; real Unity **105/105** plus live MCP EditMode/PlayMode assembly discovery, exact leaf selectors, deterministic paging, past-end cursor, unknown-assembly rejection, and read-only state-token PASS through PR #49
 - ⬜ diagnostics extensions where they unlock concrete workflows
 - ⬜ explicit Undo/recovery tools where useful to clients
 - ⬜ Test Runner selection/cancellation extensions where bounded contracts are clear
@@ -169,6 +170,37 @@ Verified properties:
 - PlayMode start/reconciliation preserves the same Editor and mutation identity through transient lifecycle disconnects,
 - dedicated PlayMode verification proves `Application.isPlaying` across a yielded frame and exact final Edit Mode/settings preservation,
 - arbitrary selected tests may mutate project state, so no generic Undo/cleanup promise is made.
+
+### Verified Test Framework discovery strategy
+
+AI clients should not infer runnable Unity test selectors from source text. `test.list` / `unity_list_tests` reads the test tree Unity Test Framework actually discovers and feeds its exact assembly/leaf selectors into the already-verified Test Runner start tools.
+
+Verified workflow:
+
+```text
+stable Edit Mode + not compiling
+ -> test.list(testMode, no assembly)
+ -> exact discovered assembly names
+ -> test.list(testMode, exact assembly)
+ -> exact discovered leaf fullName values
+ -> optional case-insensitive nameContains filter
+ -> deterministic ordinal paging
+ -> unity_start_editmode_tests / unity_start_playmode_tests
+```
+
+Verified first-slice properties:
+
+- read-only; no test execution, Play Mode transition, scene/asset mutation, or dirty-state claim,
+- uses public Test Framework `RetrieveTestList` with a 1.4-compatible API surface,
+- supports both EditMode and PlayMode discovery while the Editor itself remains in stable Edit Mode,
+- omitting `assemblyName` returns assemblies only; supplying an exact assembly returns leaf tests only,
+- `nameContains` is an optional case-insensitive substring filter,
+- deterministic ordinal ordering with `offset` + `maxResults`, default 100 and max 200,
+- paging invariant is `nextOffset = offset + returnedCount`; a past-end request returns an empty page without rewinding the cursor,
+- exact leaf `fullName` is not truncated; `selectableByBridge` reports whether it fits the current 512-character exact-run selector bound,
+- unknown exact assemblies fail closed,
+- live verification proved the discovered PlayMode selector exactly matches the previously verified one-frame PlayMode test,
+- live verification also proved scene state epoch/revision is unchanged and `projectMutated=false`.
 
 ### Verified Script strategy
 
@@ -247,6 +279,7 @@ Supporting work:
 - ✅ reload-aware Play Mode lifecycle control (PR #46, **93/93 + live MCP PASS**)
 - ✅ bounded asynchronous EditMode Test Runner control (PR #47, **98/98 + live MCP PASS**)
 - ✅ bounded asynchronous PlayMode Test Runner control (PR #48, **100/100 EditMode + 1/1 PlayMode + live MCP PASS**)
+- ✅ bounded native Test Framework discovery (PR #49, **105/105 + live MCP PASS**)
 - 🟨 consistent risk classification as new operations are added
 - ⬜ broader tool-schema compatibility tests as the surface grows
 - ⬜ better structured error explanations for AI clients
@@ -268,7 +301,7 @@ Reliability requirements inherited from Phase 2:
 
 ### Immediate next gate
 
-The next bounded Phase 3 work should strengthen the **test-fix-debug loop** rather than simply add tool count: diagnostics/recovery extensions where they unlock concrete workflows, explicit recovery/Undo controls where useful, and broader schema/result compatibility tests as the surface grows.
+No new slice is started as part of PR #49 closeout. The next bounded Phase 3 work should be chosen deliberately from diagnostics/recovery extensions, explicit recovery/Undo controls, broader schema/result compatibility tests, or other evidence-backed gaps.
 
 ### Exit gate
 
