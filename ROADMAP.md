@@ -12,7 +12,9 @@ Unity AI Bridge aims to make safe AI control of the Unity Editor easy enough tha
 - A feature advances only with implementation plus relevant verification evidence.
 - Reliability, Undo, reconnect behavior, object identity, and security are product features.
 - The project will not chase a huge tool count before the core is trustworthy.
-- ChatGPT is an important target, but the public core remains provider-neutral.
+- MCP/provider neutrality is an architectural boundary, not a later compatibility patch.
+- ChatGPT is an important first production host target, not the owner of the public core architecture.
+- Portable packaging standards may reduce duplicated integration work, but they do not replace the canonical MCP/tool contract.
 
 ## Legend
 
@@ -97,7 +99,17 @@ Verified slices:
 - ⬜ Unity Test Runner control
 - ⬜ Explicit Undo/recovery tools where useful to clients
 
-Prefab verification now covers bounded Prefab Asset inspection, linked scene instantiation, dual scene/asset preconditions, create-only Prefab Asset authoring from a plain scene GameObject, native GUID/dependencyHash/root readback, mutation replay, Undo where the scene operation supports it, and stale-replay rejection after Undo or external asset removal.
+Supporting work:
+
+- ✅ capability/version reporting foundation
+- ✅ bounded structured Component inspection
+- ✅ bounded AssetDatabase search/inspection
+- ✅ Prefab asset-side precondition using Unity dependencyHash
+- ✅ create-only Prefab disk-write contract that never overwrites an existing destination
+- 🟨 consistent risk classification as new operations are added
+- ⬜ broader tool-schema compatibility tests as the surface grows
+- ⬜ better structured error explanations for AI clients
+- 🟨 development-install Test Runner discovery bootstrap for package tests; implementation exists and requires fresh Unity runtime verification before being marked Verified
 
 Reliability requirements inherited from Phase 2:
 
@@ -113,28 +125,17 @@ Reliability requirements inherited from Phase 2:
 - explicit dirty/save behavior,
 - automated + real Unity verification before write families become Verified.
 
-Supporting work:
-
-- ✅ capability/version reporting foundation
-- ✅ bounded structured Component inspection
-- ✅ bounded AssetDatabase search/inspection
-- ✅ Prefab asset-side precondition using Unity dependencyHash
-- ✅ create-only Prefab disk-write contract that never overwrites an existing destination
-- 🟨 consistent risk classification as new operations are added
-- ⬜ broader tool-schema compatibility tests as the surface grows
-- ⬜ better structured error explanations for AI clients
-
 ### Exit gate
 
 A small Unity project can be meaningfully inspected and edited from an MCP client without arbitrary code execution, and the useful editing operations retain the reliability guarantees required for their domains.
 
 ---
 
-# Phase 4 — Easy Connect / Remote Gateway
+# Phase 4 — Remote MCP / Easy Connect
 
 **State:** ⬜ Planned
 
-Goal: remove local networking/MCP setup from the normal user experience.
+Goal: remove local networking/MCP setup from the normal cloud-AI user experience while preserving a self-host path.
 
 Target experience:
 
@@ -146,7 +147,17 @@ Install Unity package
  -> connected
 ```
 
-Targets include secure outbound Unity WebSocket, remote Streamable HTTP MCP endpoint, short-lived pairing, scoped credentials, editor routing, multi-editor isolation, rate limits, disconnect/presence state, and a self-hosted deployment path.
+Targets include:
+
+- remote Streamable HTTP MCP endpoint,
+- secure outbound Unity connection,
+- short-lived pairing,
+- scoped credentials,
+- account/workspace/editor routing,
+- multi-editor isolation,
+- rate limits and abuse controls,
+- disconnect/presence state,
+- self-hosted deployment path.
 
 ### Exit gate
 
@@ -154,32 +165,55 @@ Two different users with multiple Unity Editors can connect concurrently and aut
 
 ---
 
-# Phase 5 — ChatGPT Integration Beta
+# Phase 5 — Portable Integration Beta
 
 **State:** ⬜ Planned
+
+Goal: package the proven MCP core so multiple AI ecosystems can consume the same Unity implementation with as little vendor-specific duplication as practical.
 
 Targets:
 
-- verify current OpenAI integration requirements at implementation time,
-- thin ChatGPT-facing adapter/metadata,
-- tool descriptions optimized for safe model use,
-- authentication/pairing UX,
+- verify current MCP/client requirements at implementation time,
+- harden tool descriptions, schemas, structured results, and compatibility behavior,
+- evaluate and, if still appropriate, package the integration using **Agent Plugins 1.0** or a successor portable standard,
+- add reusable Agent Skills only where they improve workflows without hiding core tool semantics,
+- keep vendor-specific adapters/metadata thin,
+- use ChatGPT as an important first production-host validation target,
+- authentication/pairing UX for the chosen first host,
 - destructive-action policy behavior,
 - real end-to-end integration tests,
 - beginner installation docs,
-- private beta and public submission work if eligible.
+- private beta/public submission work where eligible.
+
+Agent Plugins is a distribution/packaging candidate, not a replacement for MCP and not a required dependency of the Unity execution core.
 
 ### Exit gate
 
-A new user can install the Unity side, connect from ChatGPT using documented steps, perform core editing tasks, and recover from normal failures without manually editing MCP configuration.
+A new user can install the Unity side and use at least one production AI host through the shared MCP core without manually rebuilding vendor-specific Unity logic, and the packaging approach is documented well enough to reuse for additional hosts.
 
 ---
 
-# Phase 6 — Multi-Provider Integrations
+# Phase 6 — Multi-Client Compatibility
 
 **State:** ⬜ Planned
 
-Potential targets include Claude, Codex, Gemini/Gemini CLI, and other standards-compliant MCP clients, with a compatibility test matrix proving the public core stays provider-neutral.
+Goal: prove the public core is genuinely provider-neutral rather than merely claiming it.
+
+Potential compatibility targets include:
+
+- ChatGPT,
+- Claude,
+- Codex,
+- Gemini / Gemini CLI,
+- Cursor,
+- Copilot,
+- other standards-compliant MCP hosts.
+
+Work includes a compatibility matrix covering tool discovery, structured results, write safety/approval behavior where host-controlled, authentication/remote transport differences, and host-specific packaging only where required.
+
+### Exit gate
+
+Multiple independently implemented MCP hosts can perform the same representative Unity workflows against one shared public core, with any host-specific exceptions explicitly documented rather than hidden in duplicated Unity code.
 
 ---
 
@@ -238,7 +272,7 @@ Likely semantic progression, not a release promise:
 0.1.x  verified local core
 0.2.x  reliability + useful editing
 0.3.x  remote Easy Connect
-0.4.x  client/app beta integrations
+0.4.x  portable/client integration beta
 0.x    expansion and compatibility hardening
 1.0    only after stable contracts, migration policy, security review,
        and repeatable real-world usage justify it
