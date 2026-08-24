@@ -30,7 +30,7 @@ PASS requires the installed package to load and the Editor assembly to compile s
 
 When switching Git branches while Unity remains open, Unity can temporarily keep the previously compiled Editor assembly even though the package source changed. If a newly added operation reports `unsupported/operation_not_supported` but current source contains the route, force package reimport/domain reload or restart Unity before classifying the implementation as missing.
 
-## 3. Installed-package Test Runner discovery check
+## 3. Installed-package Test Runner visibility/bootstrap check
 
 Unity's package-test behavior differs between embedded and non-embedded packages. For a non-embedded Local, LocalTarball, or Git install, Unity AI Bridge adds `com.eunsung.unity-ai-bridge` to the consuming project's top-level `Packages/manifest.json` `testables` array automatically.
 
@@ -55,7 +55,9 @@ Expected automatic sources:
 
 If automatic enabling cannot update the project manifest, use `Tools > Unity AI Bridge > Enable Package Tests` or add the package manually to the project's `testables` array.
 
-Verified history: 75/75 after Test Runner bootstrap, 80/80 after Prefab-property apply, 81/81 after PR #43 direct scene-Prefab override recording, 85/85 after PR #44 bounded Script read, 89/89 after PR #45 reload-safe Script replace, 93/93 after PR #46 reload-aware Play Mode control, 97/97 on the first PR #47 Test Runner-control candidate, **98/98** after the selected-count regression fix, and **100/100** after PR #48 PlayMode Test Runner contract coverage.
+Verified history: 75/75 after Test Runner bootstrap, 80/80 after Prefab-property apply, 81/81 after PR #43 direct scene-Prefab override recording, 85/85 after PR #44 bounded Script read, 89/89 after PR #45 reload-safe Script replace, 93/93 after PR #46 reload-aware Play Mode control, 97/97 on the first PR #47 Test Runner-control candidate, **98/98** after the selected-count regression fix, **100/100** after PR #48 PlayMode Test Runner contract coverage, and **105/105** after PR #49 bounded Test Framework discovery coverage.
+
+The installation bootstrap above is distinct from PR #49's `test.list` / `unity_list_tests`: bootstrap makes tests visible, while Test Framework discovery reads the native tree after visibility is established.
 
 ## 4. Unity EditMode suite
 
@@ -71,11 +73,11 @@ Latest real Unity evidence:
 
 ```text
 Date: 2026-08-24
-Candidate: PR #48 feature/playmode-test-runner-control
-Revision: 00fc44fb0b9e4fac855c5853d2aeb3fe1d7d125c
+Candidate: PR #49 feature/test-runner-discovery
+Revision: 736103567e863eb27f1035c431f6dc6aec023bb7
 Environment: Windows + Unity 6000.3.21f1
 Action: EditMode Run All
-Observed: 100 Passed / 0 Failed
+Observed: 105 Passed / 0 Failed
 Result: PASS
 ```
 
@@ -452,7 +454,72 @@ The PlayMode start and verifier use a bounded 180-second lifecycle timeout so sl
 
 This gate is **Verified** on Windows + Unity 6000.3.21f1. See [`PLAYMODE_TEST_RUNNER_TESTING.md`](PLAYMODE_TEST_RUNNER_TESTING.md) for the dedicated repeatable gate.
 
-## 12. Real local bridge + `editor.status` verification helper
+## 12. Native Test Framework discovery Unity + MCP gate
+
+PR #49 adds read-only `test.list`, exposed through MCP as `unity_list_tests`, so clients can discover the exact assembly and leaf test selectors Unity Test Framework actually sees before scheduling a bounded EditMode or PlayMode run.
+
+### EditMode regression gate
+
+The ordinary installed-package EditMode suite completed:
+
+```text
+105 Passed
+0 Failed
+```
+
+Five PR #49 tests cover discovery argument normalization/bounds and cursor semantics without recursively retrieving the full Test Framework tree from inside the ordinary suite.
+
+### Live MCP gate
+
+With Unity open in stable Edit Mode:
+
+```text
+npm --prefix mcp-server ci
+npm --prefix mcp-server run verify:test-discovery
+```
+
+Observed PASS record on 2026-08-24:
+
+```text
+unityVersion: 6000.3.21f1
+editAssembly: EunSung.UnityAiBridge.Editor.Tests
+editAssemblyTestCaseCount: 105
+discoveryContractTestCount: 5
+deterministicDiscoveryOrder: true
+pagingVerified: true
+pastEndCursorMonotonic: true
+firstPageFullName: UnityAiBridge.Editor.Tests.AssetCommandTests.InspectValidateArguments_AcceptsDocumentedDependencyBounds
+secondPageFullName: UnityAiBridge.Editor.Tests.AssetCommandTests.ProjectPathValidation_RejectsOutsideAssetsAndPackages
+playAssembly: EunSung.UnityAiBridge.PlayMode.Tests
+playAssemblyTestCaseCount: 1
+exactPlayModeSelector: UnityAiBridge.PlayMode.Tests.PlayModeVerifierTests.RunsOneFrameInsidePlayMode
+exactPlayModeSelectorSelectable: true
+unknownAssemblyRejected: true
+finalPlayModeState: edit
+stateEpoch: cdba6362ce6c44ed89bf271a12fe0150
+stateRevision: 121
+readOnlyStateTokenUnchanged: true
+projectMutated: false
+```
+
+The live gate proves:
+
+1. native EditMode assembly discovery and exact test count,
+2. five exact discovery-contract leaf selectors,
+3. deterministic ordinal ordering,
+4. one-result paging,
+5. past-end paging without cursor rewind,
+6. native PlayMode assembly discovery,
+7. exact compatibility with the already-verified one-frame PlayMode selector,
+8. fail-closed unknown exact assembly behavior,
+9. stable final Edit Mode,
+10. unchanged scene state epoch/revision and no claimed project mutation.
+
+This read-only operation uses public Test Framework `RetrieveTestList` with the 1.4-compatible API surface, requires stable Edit Mode/not compiling while discovery starts, and caps pages at 200 results. See [`TEST_DISCOVERY_TESTING.md`](TEST_DISCOVERY_TESTING.md) for the dedicated verified gate.
+
+This gate is **Verified** on Windows + Unity 6000.3.21f1.
+
+## 13. Real local bridge + `editor.status` verification helper
 
 With the Unity project open and the package loaded:
 
@@ -463,7 +530,7 @@ npm --prefix mcp-server run verify:unity
 
 The helper listens on the local bridge, waits for the real Unity Editor hello, sends `editor.status`, and prints structured Unity/project/scene/play/compile state. This verifies the real WebSocket/bridge path, not MCP stdio by itself.
 
-## 13. Real MCP `unity_get_status` end-to-end check
+## 14. Real MCP `unity_get_status` end-to-end check
 
 ```text
 npm --prefix mcp-server ci
@@ -472,7 +539,7 @@ npm --prefix mcp-server run verify:mcp-unity
 
 The official MCP client launches the normal server, completes MCP initialization, calls `unity_get_status`, and validates its structured result against the live Editor.
 
-## 14. Reconnect / domain reload / stale-generation check
+## 15. Reconnect / domain reload / stale-generation check
 
 ```text
 npm --prefix mcp-server run verify:reconnect
@@ -480,7 +547,7 @@ npm --prefix mcp-server run verify:reconnect
 
 When prompted, trigger a Unity script/domain reload. PASS requires the same editor identity to reconnect with a new connection generation, an intentionally old-generation route to fail with `routing/stale_connection`, and a current-generation status call to succeed.
 
-## 15. Hierarchy and object-resolution checks
+## 16. Hierarchy and object-resolution checks
 
 Hierarchy:
 
@@ -496,9 +563,9 @@ npm --prefix mcp-server run verify:resolver
 
 If an operation exists in checked-out source but Unity reports it unsupported, treat stale compiled package state as a candidate first; reimport/restart and re-run before concluding the operation is absent.
 
-## 16. Phase 3 domain verification
+## 17. Phase 3 domain verification
 
-Each new write/lifecycle/job family must carry the Phase 2 reliability contract appropriate to its domain before being marked Verified:
+Each new write/lifecycle/job/read family must carry the Phase 2 reliability contract appropriate to its domain before being marked Verified:
 
 - capability/version preflight,
 - stable target or lifecycle/job-state identity,
@@ -516,7 +583,7 @@ Each new write/lifecycle/job family must carry the Phase 2 reliability contract 
 
 Domain-specific verifier scripts and exact evidence belong in `STATUS.md` / linked docs rather than being inferred from source presence.
 
-## 17. Evidence format
+## 18. Evidence format
 
 Every real verification entry added to `STATUS.md` should record:
 
