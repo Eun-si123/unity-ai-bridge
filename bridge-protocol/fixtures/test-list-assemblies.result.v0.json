@@ -1,0 +1,27 @@
+{
+  "protocolVersion": "0",
+  "requestId": "fixture-test-list-assemblies",
+  "ok": true,
+  "result": {
+    "testMode": "edit",
+    "scope": "assemblies",
+    "assemblyName": "",
+    "nameContains": "UnityAiBridge",
+    "totalMatches": 1,
+    "offset": 0,
+    "maxResults": 50,
+    "returnedCount": 1,
+    "nextOffset": 1,
+    "truncated": false,
+    "assemblies": [
+      {
+        "name": "EunSung.UnityAiBridge.Editor.Tests",
+        "testCaseCount": 104
+      }
+    ],
+    "tests": []
+  },
+  "warnings": [],
+  "dirtyState": "unchanged",
+  "compileState": "idle"
+}
