@@ -6,6 +6,32 @@ The project is pre-alpha. Internal package version `0.0.1` does not represent a 
 
 ## Unreleased
 
+### Phase 3 — Native Test Framework Discovery — Verified slice
+
+#### Added
+
+- Unity bridge `test.list` and MCP `unity_list_tests` for read-only Test Framework discovery.
+- EditMode/PlayMode assembly discovery from Unity's native Test Framework tree.
+- Exact leaf `fullName` selectors, bounded informational metadata, and `selectableByBridge` compatibility reporting.
+- Optional case-insensitive `nameContains` filtering.
+- Deterministic ordinal `offset`/`maxResults` paging with a 200-result maximum and monotonic past-end cursor semantics.
+- Fail-closed exact assembly validation and stable-Edit-mode/not-compiling preconditions.
+- Protocol fixtures, Node bridge coverage, five EditMode contract tests, and `verify:test-discovery` live MCP verification.
+
+#### Verification
+
+- Product head `736103567e863eb27f1035c431f6dc6aec023bb7`: Node Verification **PASS** and Phase 1 Local Bridge Verification **PASS**.
+- Real Windows + Unity 6000.3.21f1 installed-package EditMode suite: **105 Passed / 0 Failed**.
+- Live `verify:test-discovery`: **PASS**.
+- Live discovery exposed `EunSung.UnityAiBridge.Editor.Tests` with `testCaseCount=105`, exactly five discovery-contract leaves, deterministic paging, and monotonic past-end cursor behavior.
+- PlayMode discovery exposed `EunSung.UnityAiBridge.PlayMode.Tests` with one exact selector matching the previously verified one-frame PlayMode test.
+- Unknown exact assembly rejection, stable final Edit Mode, unchanged scene state epoch/revision, and `projectMutated=false` were all verified.
+
+#### Clarified
+
+- Installed-package Test Runner **visibility/bootstrap** (`testables` + guarded reimport) is distinct from Test Framework **native selector discovery** (`unity_list_tests`).
+- Native discovery is read-only and does not run tests or enter Play Mode.
+
 ### Governance
 
 - Adopted the **Apache License 2.0** for the public `unity-ai-bridge` repository.
@@ -98,116 +124,3 @@ The project is pre-alpha. Internal package version `0.0.1` does not represent a 
 
 - Revision `2969bcfa379f10498d4b5bac69fb085f209d499d`: Node Verification run `32606458264` **PASS** and Phase 1 Local Bridge Verification run `32606458269` **PASS**.
 - Real Unity 6000.3.21f1 / Windows `npm.cmd --prefix mcp-server run verify:create`: **PASS (manual verification, 2026-08-23)**.
-- First create returned `replayed=false` and `GlobalObjectId_V1-2-99c9720ab356a0642a771bea13969a05-1399885475-0`.
-- Identical retry returned `replayed=true` with the same mutation ID and same `GlobalObjectId`.
-- Live `unity_get_hierarchy` readback reported `hierarchyMatches=1`; the Unity Hierarchy visibly contained one generated `MCP_Create_Verify_1787442917163` object.
-- Scene dirty state was visible and the create is registered with Unity Undo.
-
-#### Known limitation
-
-- Current duplicate replay trusts the cached same-session result. If the created object is manually deleted or undone before a later replay, the cached replay is not yet revalidated against native Unity state. Phase 2 native readback/verification will close this gap.
-
-### Phase 1 — Active Scene Hierarchy Read — Verified slice
-
-#### Added
-
-- Unity `scene.hierarchy` read operation running through the existing Editor main-thread dispatcher.
-- MCP `unity_get_hierarchy` tool with bounded `maxDepth` / `maxNodes` inputs.
-- Flat preorder hierarchy result containing Unity `GlobalObjectId`, transient `instanceId`, parent identity, depth, sibling index, child count, active state, and informational hierarchy path.
-- Default traversal bounds of depth 8 / 200 nodes and hard bounds of depth 32 / 500 nodes.
-- `truncatedByDepth` and `truncatedByNodes` result flags.
-- Batched `GlobalObjectId.GetGlobalObjectIdsSlow` lookup instead of per-node conversion calls.
-- Simulated Node bridge tests for hierarchy routing/result validation and invalid limit rejection.
-- `verify:hierarchy` command using the official MCP TypeScript client to call `unity_get_hierarchy` against a live Unity Editor.
-- Protocol v0 hierarchy request/result fixtures.
-
-#### Fixed during implementation
-
-- First hierarchy CI build exposed `exactOptionalPropertyTypes` rejecting explicitly forwarded `undefined` option fields. The MCP handler now omits absent option properties before calling the bridge.
-- Real Unity 6000.3.21f1 compilation exposed a `GlobalObjectId.GetGlobalObjectIdsSlow` signature mismatch: the current target requires a preallocated output array without the C# `out` modifier. `HierarchyCommand` now allocates `GlobalObjectId[]` and passes it directly.
-
-#### Verification
-
-- Initial revision `7ccc84b8f3f3176ed04b6662293a5a7ce1741780`: **FAIL at TypeScript build** due to the optional-property issue above; tests did not run.
-- Node Verification run `32568901972` and Phase 1 Local Bridge Verification run `32568901982` at revision `2619472abe97ffe9149e05fbe826936f439d62e2`: **PASS**.
-- Unity 6000.3.21f1 hierarchy compile before compatibility fix: **FAIL** with CS1615 at `GetGlobalObjectIdsSlow(..., out ...)`.
-- Unity 6000.3.21f1 compile after compatibility fix `005327886b6ed40f35c8338559e721d256d900b6`: **PASS (manual Windows verification, 2026-08-22)**.
-- Real MCP `unity_get_hierarchy` against live Unity 6000.3.21f1: **PASS (manual Windows verification, 2026-08-22)**.
-- Returned live `SampleScene` hierarchy: `rootCount=3`, `returnedNodeCount=3`, default depth/node limits 8/200, no truncation, and roots `Main Camera`, `Directional Light`, `Global Volume` in sibling order 0/1/2 with non-empty `GlobalObjectId` values.
-
-### Phase 1 — Local Unity Heartbeat / `editor.status` — Verified slice
-
-#### Added
-
-- Local WebSocket bridge server bound to `127.0.0.1:5081`.
-- Unity outbound `ClientWebSocket` connection/reconnect loop.
-- Bridge protocol v0 `hello` schema with editor identity and `connectionGeneration`.
-- Unity Editor main-thread dispatcher boundary for Unity API access.
-- `editor.status` bridge operation returning Unity version, project name, active scene, Play Mode state, and compilation state.
-- MCP `unity_get_status` tool wired through the local bridge.
-- Request ID correlation, deadlines/timeouts, disconnect handling, stale-generation rejection, bounded payloads, and serialized Unity-side sends.
-- Simulated Unity WebSocket integration tests covering hello/status round-trip and the no-editor failure path.
-- Simulated explicit-route test covering propagation of `routing/stale_connection`.
-- Phase 1 design document and CI workflow.
-- `docs/TESTING.md` with repeatable Node, Unity compile, real bridge, MCP end-to-end, and reconnect verification procedures.
-- `verify:unity`, `verify:mcp-unity`, and `verify:reconnect` developer commands.
-
-#### Dependencies
-
-- Added exact `ws` `8.21.3` runtime dependency.
-- Added exact `@types/ws` `8.18.1` development dependency.
-- Added exact `@modelcontextprotocol/client` `2.0.0` development dependency for the MCP verifier.
-- Refreshed `mcp-server/package-lock.json` with the Phase 1 dependency graph.
-
-#### Fixed
-
-- Corrected WebSocket send callback handling so both `null` and `undefined` are treated as successful sends.
-- Made WebSocket test/server teardown deterministic so transport cleanup details do not mask request-path failures.
-
-#### Verification
-
-- Node Verification and Phase 1 Local Bridge Verification: **PASS** on the merged heartbeat/status slice.
-- Unity 6000.3.21f1 package load/compile: **PASS**.
-- Real Unity WebSocket hello/status: **PASS**.
-- Real MCP stdio `unity_get_status`: **PASS**.
-- Real domain reload reconnection: **PASS** with stable editor identity and new connection generation.
-- Real stale-generation rejection: **PASS** with `routing/stale_connection`.
-- Successful post-reconnect status: **PASS**.
-
-## Phase 0 — Foundation Runtime Scaffold — 2026-08-22
-
-### Added
-
-- Initial project README and scope.
-- Mandatory AI/contributor guardrails in `AGENTS.md`.
-- Canonical implementation/verification tracking in `STATUS.md`.
-- High-level architecture summary in `ARCHITECTURE.md`.
-- Durable detailed system design in `DESIGN.md`.
-- Architecture decision history in `DECISIONS.md`.
-- Public capability-gated roadmap in `ROADMAP.md`.
-- Repository/source layout tracking in `CODEMAP.md`.
-- Compact AI-agent entrypoint in `llms.txt`.
-- `REFERENCES.md` for external research influences that are not incorporated code.
-- Initial `unity-package/` UPM scaffold targeting Unity 6000.3.21f1.
-- Initial bridge protocol v0 command/result JSON Schemas and editor-status fixtures.
-- Bridge protocol v0 C# and TypeScript version/type definitions.
-- Initial `mcp-server/` TypeScript MCP v2 stdio bootstrap.
-- Strict TypeScript build configuration and Node test-runner protocol smoke tests.
-- Root build/test delegation, Node 24.19.0 runtime pin, and repository ignore rules.
-- GitHub Actions Node verification workflow.
-- Generated `mcp-server/package-lock.json` dependency lockfile.
-
-### Changed
-
-- Moved the project from documentation-only foundation work to an initial runtime/source scaffold.
-- Pinned the initial direct MCP/server toolchain to Node 24.19.0, `@modelcontextprotocol/server` 2.0.0, TypeScript 7.0.2, and `@types/node` 24.13.3.
-- Recorded successful CI verification for lockfile generation, `npm ci`, TypeScript build, and protocol smoke tests.
-- Clarified that a public GitHub repository is **not** an open-source license; the project license was still undecided at the time of the Phase 0 scaffold merge.
-- Separated accepted design decisions from implementation status in `STATUS.md`.
-- Clarified the public-core/private-managed-service boundary and third-party reference policy.
-
-### Verification at Phase 0 merge
-
-- Node/MCP dependency install, TypeScript build, and protocol smoke tests: **Verified by GitHub Actions**.
-- Unity 6000.3.21f1 package load/compile: later manually verified during Phase 1.
-- Project license: later resolved to Apache-2.0 in Unreleased.
