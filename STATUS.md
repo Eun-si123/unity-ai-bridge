@@ -35,7 +35,7 @@ Phase 2 exit evidence and non-goals are recorded in [`docs/PHASE2_EXIT_GATE.md`]
 
 Broader Unity/OS compatibility is not implied.
 
-## Current verified surface
+## Current verified / implemented surface
 
 | Area | Status | Evidence / notes |
 |---|---|---|
@@ -57,10 +57,12 @@ Broader Unity/OS compatibility is not implied.
 | Asset search/inspect | Verified | PR #27; 50/50 EditMode; bounded `AssetDatabase` search and exact GUID/type/importer/dependency inspection. |
 | Prefab inspect/instantiate | Verified | PR #28; 56/56 EditMode; bounded Prefab Asset hierarchy inspect, dependency-hash precondition, linked `PrefabUtility.InstantiatePrefab`, native linkage readback, same-id replay, Undo, stale-replay rejection. |
 | Prefab Asset creation | Verified | PR #29; 62/62 EditMode; create-only `SaveAsPrefabAsset`, source unchanged, GUID/dependencyHash/root readback, same-id replay, manual asset removal followed by stale-replay rejection. |
+| Package Test Runner discovery bootstrap | Implemented | Test assembly already exists. New Editor bootstrap adds `com.eunsung.unity-ai-bridge` to project `testables` for Local/LocalTarball/Git installs, leaves Embedded/Registry untouched, and has manifest-transform EditMode tests. Fresh non-embedded Unity install verification is still required before marking Verified. |
 | Remote gateway / Easy Connect | Planned | Not implemented. |
 | Pairing/authentication | Planned | Not implemented. |
 | Multi-user/editor routing | Planned | Current local bridge supports one active editor. |
 | ChatGPT integration | Planned | Not implemented or submitted. |
+| Portable Agent Plugins packaging | Planned | Architecture/roadmap decision recorded; no plugin manifest/skills package implemented yet. |
 
 ## Phase 0 — Foundation
 
@@ -122,6 +124,11 @@ Current objective: provide a small but genuinely useful Unity editing/inspection
 7. **Prefab inspect/instantiate — PR #28** — **56/56 EditMode**
 8. **Prefab Asset creation — PR #29** — **62/62 EditMode**
 
+### Implemented after latest verified Unity run
+
+- **Package Test Runner discovery bootstrap** — development-style non-embedded installs can self-add the package to the project manifest `testables` array; automatic behavior is intentionally not claimed Verified until reproduced in a fresh Unity project.
+- Manifest transformation tests cover adding a missing `testables`, appending without deleting existing package names, idempotent no-op, malformed-value rejection, and package-source gating.
+
 ### Prefab Asset creation verification — PR #29
 
 ```text
@@ -143,11 +150,12 @@ Real verification also caught two useful contract/verifier issues: fixed destina
 
 ### Current next candidates
 
-1. bounded Prefab Apply Overrides workflow,
-2. script read/write workflows,
-3. Play Mode and Test Runner controls,
-4. diagnostics extensions where they unlock real workflows,
-5. explicit Undo/recovery tools where useful to clients.
+1. verify package Test Runner auto-discovery in a fresh Local or Git package install,
+2. bounded Prefab Apply Overrides workflow,
+3. script read/write workflows,
+4. Play Mode and Test Runner controls,
+5. diagnostics extensions where they unlock real workflows,
+6. explicit Undo/recovery tools where useful to clients.
 
 No arbitrary C# execution fallback is planned.
 
@@ -165,4 +173,5 @@ No arbitrary C# execution fallback is planned.
 - Asset `dependencyHash` is an imported-state observation used as the current Prefab asset precondition; it is not a replacement for GUID identity or a general asset transaction token.
 - Recent Console text covers only the current domain-load capture window.
 - Unity support beyond 6000.3.21f1 is unverified.
-- Multi-editor routing, remote authentication/pairing, remote gateway hosting, and ChatGPT integration remain later-phase work.
+- Package Test Runner auto-discovery has source-level/unit-test coverage but still needs fresh installed-package runtime verification.
+- Multi-editor routing, remote authentication/pairing, remote gateway hosting, and production AI-host integrations remain later-phase work.
