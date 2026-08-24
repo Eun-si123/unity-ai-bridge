@@ -1,0 +1,43 @@
+{
+  "protocolVersion": "0",
+  "requestId": "fixture-play-mode-set",
+  "ok": true,
+  "result": {
+    "mutationId": "fixture-play-mode-set-1",
+    "replayed": false,
+    "reconciled": false,
+    "changed": true,
+    "transitionRequested": true,
+    "targetMode": "play",
+    "expectedCurrentMode": "edit",
+    "requestedUnixMs": 1787568000000,
+    "before": {
+      "mode": "edit",
+      "isPlaying": false,
+      "isPaused": false,
+      "isPlayingOrWillChangePlaymode": false,
+      "enterPlayModeOptionsEnabled": true,
+      "disableDomainReload": false,
+      "disableSceneReload": false
+    },
+    "afterRequest": {
+      "mode": "entering_play",
+      "isPlaying": false,
+      "isPaused": false,
+      "isPlayingOrWillChangePlaymode": true,
+      "enterPlayModeOptionsEnabled": true,
+      "disableDomainReload": false,
+      "disableSceneReload": false
+    }
+  },
+  "warnings": [
+    "Play Mode transitions are asynchronous operational state changes and are not Unity Undo operations."
+  ],
+  "changedTargets": [],
+  "dirtyState": "unchanged",
+  "undo": {
+    "available": false,
+    "groupName": ""
+  },
+  "compileState": "idle"
+}
