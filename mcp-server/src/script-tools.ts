@@ -18,6 +18,7 @@ const scriptReadInputSchema = fromJsonSchema({
     offset: {
       type: "integer",
       minimum: 0,
+      maximum: 2147483647,
       default: 0,
       description:
         "Zero-based UTF-16 code-unit offset into the decoded UTF-8 source. Use nextOffset from a previous result to continue reading without overlap.",
