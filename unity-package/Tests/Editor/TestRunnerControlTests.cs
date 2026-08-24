@@ -62,6 +62,20 @@ namespace UnityAiBridge.Tests.Editor
         }
 
         [Test]
+        public void CompletedCaseCount_UsesTerminalOutcomeTotals_NotLoadedTreeSize()
+        {
+            Assert.AreEqual(
+                1,
+                TestRunnerControl.CountCompletedTestCasesForVerification(1, 0, 0, 0));
+            Assert.AreEqual(
+                10,
+                TestRunnerControl.CountCompletedTestCasesForVerification(6, 2, 1, 1));
+            Assert.AreEqual(
+                2,
+                TestRunnerControl.CountCompletedTestCasesForVerification(-5, 1, 1, 0));
+        }
+
+        [Test]
         public void Get_RejectsMalformedOrUnknownMutationIdsWithoutStartingTests()
         {
             Assert.Throws<ArgumentException>(() => TestRunnerControl.Get("bad mutation id"));
