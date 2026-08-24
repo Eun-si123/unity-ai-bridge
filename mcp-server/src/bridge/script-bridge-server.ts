@@ -95,27 +95,42 @@ function isScriptReadPayload(value: unknown): value is ScriptReadPayload {
   if (!isNonEmptyString(value.dependencyHash)) return false;
   if (!/^[0-9a-f]{64}$/.test(String(value.contentSha256))) return false;
   if (value.encoding !== "utf-8" || typeof value.hasUtf8Bom !== "boolean") return false;
-  for (const key of [
-    "byteLength",
-    "utf16CharCount",
-    "lineCount",
-    "offset",
-    "maxChars",
-    "returnedCharCount",
-    "nextOffset",
-  ] as const) {
-    if (!Number.isSafeInteger(value[key]) || (value[key] as number) < 0) return false;
+
+  const byteLength = nonNegativeInteger(value.byteLength);
+  const utf16CharCount = nonNegativeInteger(value.utf16CharCount);
+  const lineCount = nonNegativeInteger(value.lineCount);
+  const offset = nonNegativeInteger(value.offset);
+  const maxChars = nonNegativeInteger(value.maxChars);
+  const returnedCharCount = nonNegativeInteger(value.returnedCharCount);
+  const nextOffset = nonNegativeInteger(value.nextOffset);
+  if (
+    byteLength === undefined ||
+    utf16CharCount === undefined ||
+    lineCount === undefined ||
+    offset === undefined ||
+    maxChars === undefined ||
+    returnedCharCount === undefined ||
+    nextOffset === undefined
+  ) {
+    return false;
   }
-  if (value.offset > MAX_OFFSET || value.nextOffset > MAX_OFFSET) return false;
-  if (value.maxChars < 1 || value.maxChars > MAX_CHARS) return false;
-  if (value.offset > value.utf16CharCount || value.nextOffset > value.utf16CharCount) return false;
-  if (value.nextOffset !== value.offset + value.returnedCharCount) return false;
+
+  if (offset > MAX_OFFSET || nextOffset > MAX_OFFSET) return false;
+  if (maxChars < 1 || maxChars > MAX_CHARS) return false;
+  if (offset > utf16CharCount || nextOffset > utf16CharCount) return false;
+  if (nextOffset !== offset + returnedCharCount) return false;
   if (typeof value.truncated !== "boolean" || typeof value.content !== "string") return false;
-  if (value.content.length !== value.returnedCharCount) return false;
-  if (value.truncated !== (value.nextOffset < value.utf16CharCount)) return false;
+  if (value.content.length !== returnedCharCount) return false;
+  if (value.truncated !== (nextOffset < utf16CharCount)) return false;
   if (value.sourceKind === "Assets" && value.packageName.length !== 0) return false;
   if (value.sourceKind === "Packages" && value.packageName.length === 0) return false;
   return true;
+}
+
+function nonNegativeInteger(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0
+    ? value
+    : undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
