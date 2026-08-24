@@ -23,6 +23,7 @@ This file maps the current repository at subsystem level and records what is onl
 ├─ docs/
 │  ├─ TESTING.md
 │  ├─ PLAYMODE_TEST_RUNNER_TESTING.md
+│  ├─ TEST_DISCOVERY_TESTING.md
 │  └─ OPEN_WEIGHT_MODEL_COMPATIBILITY.md
 │
 ├─ unity-package/
@@ -38,7 +39,8 @@ This file maps the current repository at subsystem level and records what is onl
 │  │  └─ Testing/
 │  │     ├─ PackageTestBootstrap.cs
 │  │     ├─ TestRunnerControl.cs
-│  │     └─ PlayModeTestRunnerControl.cs
+│  │     ├─ PlayModeTestRunnerControl.cs
+│  │     └─ TestDiscoveryControl.cs
 │  └─ Tests/
 │     ├─ README.md
 │     ├─ Editor/
@@ -54,6 +56,7 @@ This file maps the current repository at subsystem level and records what is onl
 │  ├─ PREFAB_PROPERTY_APPLY.md
 │  ├─ SCRIPT_READ.md
 │  ├─ TEST_RUNNER_CONTROL.md
+│  ├─ TEST_DISCOVERY.md
 │  ├─ schemas/
 │  └─ fixtures/
 │
@@ -67,7 +70,8 @@ This file maps the current repository at subsystem level and records what is onl
    │  ├─ bridge/
    │  │  ├─ script-bridge-server.ts
    │  │  ├─ prefab-property-bridge-server.ts
-   │  │  └─ playmode-test-runner-bridge.ts
+   │  │  ├─ playmode-test-runner-bridge.ts
+   │  │  └─ test-discovery-bridge.ts
    │  ├─ protocol/
    │  ├─ dev/
    │  ├─ asset-tools.ts
@@ -92,9 +96,11 @@ This file maps the current repository at subsystem level and records what is onl
 - `CHANGELOG.md` — notable project changes
 - `docs/TESTING.md` and package test docs — repeatable verification procedures
 - `docs/PLAYMODE_TEST_RUNNER_TESTING.md` — dedicated real-Unity PlayMode Test Runner gate and evidence
+- `docs/TEST_DISCOVERY_TESTING.md` — candidate real-Unity gate for bounded Test Framework discovery
 - `docs/OPEN_WEIGHT_MODEL_COMPATIBILITY.md` — deferred local/open-weight compatibility boundary and future Adaptive Router direction
-- `bridge-protocol/SCRIPT_READ.md` — bounded Script source observation contract and future file-content CAS boundary
+- `bridge-protocol/SCRIPT_READ.md` — bounded Script source observation contract and file-content CAS boundary
 - `bridge-protocol/TEST_RUNNER_CONTROL.md` — bounded asynchronous EditMode/PlayMode Test Runner start/get contract, retry identity, current-session journaling, lifecycle behavior, and result bounds
+- `bridge-protocol/TEST_DISCOVERY.md` — bounded read-only Test Framework assembly/leaf discovery contract and paging semantics
 - `llms.txt` — compact AI entrypoint
 
 ## Current source ownership
@@ -118,6 +124,7 @@ Home of the Unity Editor-side implementation:
 - bounded Script source reading through Unity asset/package identity rather than arbitrary filesystem paths,
 - persistent Prefab asset-write handlers with operation-specific safety/retry semantics where generic Unity Undo is not honestly available,
 - asynchronous EditMode and PlayMode Test Runner coordination through public Unity Test Framework APIs plus current-process SessionState result journals,
+- bounded read-only Test Framework discovery using public 1.4-compatible test-tree APIs,
 - EditMode contract/regression tests plus a dedicated runtime-capable PlayMode verifier assembly,
 - development-install bootstrap for making non-embedded package tests visible in Unity Test Runner.
 
@@ -130,7 +137,7 @@ The Unity-facing transport-independent contract:
 - protocol-versioned command/hello/result JSON Schemas,
 - operation fixtures,
 - bridge protocol documentation,
-- operation-specific contracts such as bounded Prefab property apply, Script source read, and asynchronous EditMode/PlayMode Test Runner control.
+- operation-specific contracts such as bounded Prefab property apply, Script source read, asynchronous EditMode/PlayMode Test Runner control, and bounded Test discovery.
 
 MCP-facing tool contracts and Unity-facing bridge commands remain separate on purpose. Unity command semantics must not depend on a particular LLM vendor, MCP host, or WebSocket-specific detail.
 
@@ -147,6 +154,7 @@ The provider-neutral MCP/tool layer:
 - typed bridge adapters for current Unity domains,
 - bounded Script read tool/bridge adapter with raw-file SHA-256 metadata,
 - asynchronous EditMode/PlayMode Test Runner start tools with shared any-mode result polling, exact selection, lifecycle/reconnect reconciliation, and bounded structured result validation,
+- bounded `unity_list_tests` discovery that exposes Unity-native assembly/exact leaf selectors without source inference,
 - domain-specific bridge subclasses/modules where that keeps large surfaces maintainable,
 - structured MCP results/errors,
 - simulated bridge tests and real-Unity verification helpers.
