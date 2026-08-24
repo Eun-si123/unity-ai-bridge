@@ -32,17 +32,18 @@ When switching Git branches while Unity remains open, Unity can temporarily keep
 
 ## 3. Installed-package Test Runner discovery check
 
-Unity's package-test behavior differs between embedded and non-embedded packages. For a non-embedded Local, LocalTarball, or Git install, Unity AI Bridge now attempts to add `com.eunsung.unity-ai-bridge` to the consuming project's top-level `Packages/manifest.json` `testables` array automatically.
+Unity's package-test behavior differs between embedded and non-embedded packages. For a non-embedded Local, LocalTarball, or Git install, Unity AI Bridge adds `com.eunsung.unity-ai-bridge` to the consuming project's top-level `Packages/manifest.json` `testables` array automatically.
 
-Fresh verification procedure:
+Verification procedure:
 
 1. Start with a Unity project whose `Packages/manifest.json` does **not** already contain `com.eunsung.unity-ai-bridge` in `testables`.
 2. Install Unity AI Bridge as a Local/Add-package-from-disk or Git package dependency.
-3. Wait for the initial package compile, the automatic manifest update, Package Manager resolution, and the following recompile/domain reload to finish.
-4. Open **Window -> General -> Test Runner** and select **EditMode**.
-5. Confirm assembly `EunSung.UnityAiBridge.Editor.Tests` appears without manually editing the manifest.
-6. Confirm the project manifest now contains the package exactly once in `testables` and preserves all pre-existing dependencies/testable package entries.
-7. Run the EditMode suite.
+3. Wait for the initial package compile and automatic manifest update.
+4. When Test Framework does not immediately load the package test assembly, the bootstrap performs one guarded package reimport for the Editor session.
+5. Open **Window -> General -> Test Runner** and select **EditMode**.
+6. Confirm assembly `EunSung.UnityAiBridge.Editor.Tests` appears without manually editing the manifest.
+7. Confirm the project manifest contains the package exactly once in `testables` and preserves existing dependencies/testable entries.
+8. Run the EditMode suite.
 
 Expected automatic sources:
 
@@ -58,7 +59,7 @@ If automatic enabling cannot update the project manifest, use:
 
 or add the package manually to the project's `testables` array.
 
-**Verification rule:** source-level tests for the manifest transformer do not by themselves prove Test Runner discovery. Mark this feature Verified only after the fresh installed-package procedure above succeeds in a real Unity Editor.
+**Verified evidence:** this flow was reproduced on Unity 6000.3.21f1 on 2026-08-24. The package tests appeared automatically and the then-current suite completed **75 passed / 0 failed**.
 
 ## 4. Unity EditMode suite
 
@@ -70,9 +71,32 @@ After package tests are visible in Test Runner:
 4. clean any temporary Assets/objects created by the test or verifier path,
 5. do not overwrite the last verified count in `STATUS.md` with a new count unless the exact revision/environment actually ran.
 
-The last recorded verified suite before later unverified changes is **62 passed / 0 failed**. Additional tests introduced afterward increase the source test count but remain unverified until a new Unity run is recorded.
+The last real Unity baseline before PR #36 is **75 passed / 0 failed** on Unity 6000.3.21f1. Tests added by PR #36 increase the source suite but remain unverified until that expanded suite actually runs in Unity.
 
-## 5. Real local bridge + `editor.status` verification helper
+## 5. Bounded Prefab property apply verification gate
+
+PR #36 adds the first persistent existing-Prefab modification: `prefab.property.apply` / `unity_apply_prefab_property_override`.
+
+The new EditMode integration test must pass in real Unity before the write family becomes Verified. It creates only a temporary Prefab asset under `Assets` and cleans it afterward.
+
+PASS requires the test to prove:
+
+1. a writable temporary Prefab is copied/imported,
+2. a linked scene instance is created,
+3. a real `m_LocalScale` serialized Prefab override is produced on the instance Transform,
+4. the command accepts the explicit Component `GlobalObjectId`, property path, Prefab path, current dependencyHash, and scene state token,
+5. `PrefabUtility.ApplyPropertyOverride` results in the source Prefab storing the overridden value,
+6. fresh instance readback reports `prefabOverride == false`,
+7. instance/source data match after apply,
+8. the completed same-`mutationId` call replays without performing a second asset write,
+9. after the test deletes the Prefab asset, the same mutationId fails with stale replay instead of recreating or reapplying anything,
+10. the temporary instance/asset are cleaned even when the test fails.
+
+The first slice intentionally excludes `m_Script`, arrays/elements, Model Prefabs, Apply All, component/object-wide apply, and automatic nested-Prefab target selection.
+
+Because this operation persistently modifies an existing asset and cannot safely promise generic Unity Undo/rollback, ambiguous execution or failed semantic verification must **not** trigger blind automatic retry. Refresh native Unity state before choosing a new mutationId.
+
+## 6. Real local bridge + `editor.status` verification helper
 
 With the Unity project open and the package loaded, run from the repository root:
 
@@ -93,7 +117,7 @@ Compare the printed status against the open Editor:
 
 This verifies the real Unity WebSocket/bridge path. It does not by itself prove the MCP stdio transport.
 
-## 6. Real MCP `unity_get_status` end-to-end check
+## 7. Real MCP `unity_get_status` end-to-end check
 
 With Unity still open:
 
@@ -106,7 +130,7 @@ The verifier uses the official MCP TypeScript client over stdio, launches the no
 
 PASS requires the returned Unity version/project/scene/play/compile state to match the actual Editor. A direct bridge call alone is insufficient for this gate.
 
-## 7. Reconnect / domain reload / stale-generation check
+## 8. Reconnect / domain reload / stale-generation check
 
 With Unity open:
 
@@ -121,7 +145,7 @@ When prompted, trigger a Unity script/domain reload. PASS requires:
 3. a command deliberately routed to the old generation is rejected with `routing/stale_connection`,
 4. a normal current-generation status call succeeds.
 
-## 8. Hierarchy and object-resolution checks
+## 9. Hierarchy and object-resolution checks
 
 Use the current `main`/candidate branch package source rather than old phase branch names.
 
@@ -143,7 +167,7 @@ PASS requires native resolution of the created object, `found=false` after Undo/
 
 If an operation exists in checked-out source but Unity reports it unsupported, treat stale compiled package state as a candidate first; reimport/restart and re-run before concluding the operation is absent.
 
-## 9. Phase 3 domain verification
+## 10. Phase 3 domain verification
 
 Each new write family must carry the Phase 2 reliability contract appropriate to its domain before being marked Verified:
 
@@ -151,17 +175,19 @@ Each new write family must carry the Phase 2 reliability contract appropriate to
 - stable target identity,
 - current-state preconditions where required,
 - main-thread execution,
+- explicit risk/persistence classification,
 - Undo grouping where applicable,
 - mutation identity/replay behavior,
 - native semantic readback,
-- rollback + rollback verification where applicable,
+- rollback + rollback verification where safe and applicable,
+- conservative ambiguous-outcome behavior where a persistent write cannot safely provide generic rollback,
 - deadline behavior,
 - dirty/save semantics,
 - real Unity verification in addition to simulated/Node tests.
 
 Domain-specific verifier scripts and exact evidence belong in `STATUS.md` / linked docs rather than being inferred from source presence.
 
-## 10. Evidence format
+## 11. Evidence format
 
 Every real verification entry added to `STATUS.md` should record:
 
