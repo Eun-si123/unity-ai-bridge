@@ -188,6 +188,11 @@ namespace UnityAiBridge.Editor.Testing
                 rejectDllSuffix: false);
         }
 
+        internal static int ComputeNextOffsetForVerification(int offset, int returnedCount)
+        {
+            return ComputeNextOffset(offset, returnedCount);
+        }
+
         private static TestDiscoveryPayload BuildPayload(
             ITestAdaptor root,
             string testMode,
@@ -223,6 +228,7 @@ namespace UnityAiBridge.Editor.Testing
                     .ToArray();
 
                 var page = Page(matches, offset, maxResults);
+                var nextOffset = ComputeNextOffset(offset, page.Length);
                 return new TestDiscoveryPayload
                 {
                     testMode = testMode,
@@ -233,8 +239,8 @@ namespace UnityAiBridge.Editor.Testing
                     offset = offset,
                     maxResults = maxResults,
                     returnedCount = page.Length,
-                    nextOffset = Math.Min(matches.Length, offset + page.Length),
-                    truncated = offset + page.Length < matches.Length,
+                    nextOffset = nextOffset,
+                    truncated = nextOffset < matches.Length,
                     assemblies = page,
                     tests = Array.Empty<TestCaseDiscoveryPayload>(),
                 };
@@ -270,6 +276,7 @@ namespace UnityAiBridge.Editor.Testing
                 .ToArray();
 
             var testPage = Page(testMatches, offset, maxResults);
+            var testNextOffset = ComputeNextOffset(offset, testPage.Length);
             return new TestDiscoveryPayload
             {
                 testMode = testMode,
@@ -280,8 +287,8 @@ namespace UnityAiBridge.Editor.Testing
                 offset = offset,
                 maxResults = maxResults,
                 returnedCount = testPage.Length,
-                nextOffset = Math.Min(testMatches.Length, offset + testPage.Length),
-                truncated = offset + testPage.Length < testMatches.Length,
+                nextOffset = testNextOffset,
+                truncated = testNextOffset < testMatches.Length,
                 assemblies = Array.Empty<TestAssemblyDiscoveryPayload>(),
                 tests = testPage,
             };
@@ -349,6 +356,15 @@ namespace UnityAiBridge.Editor.Testing
                 return Array.Empty<T>();
             }
             return values.Skip(offset).Take(maxResults).ToArray();
+        }
+
+        private static int ComputeNextOffset(int offset, int returnedCount)
+        {
+            if (returnedCount < 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(returnedCount));
+            }
+            return checked(offset + returnedCount);
         }
 
         private static bool MatchesContains(string value, string contains)
