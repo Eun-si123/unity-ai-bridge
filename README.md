@@ -2,7 +2,7 @@
 
 > **Status: pre-alpha / Phase 3 — Useful Unity Editing Core in progress**
 >
-> Phases 0, 1, and 2 are verified milestones. The current verified Unity surface includes status/hierarchy/diagnostics/object resolution, Transform editing, GameObject update/delete, Component inspection and bounded mutation, Asset search/inspection, Prefab inspection/instantiation, create-only Prefab Asset authoring, bounded single-property Prefab override apply, direct scene-Prefab override recording, installed-package Test Runner discovery, and bounded Script read. The latest real Unity baseline is **85 passed / 0 failed** on Unity 6000.3.21f1, plus dedicated live MCP verification for Prefab property apply and Script read. See [`STATUS.md`](STATUS.md) for exact evidence and limitations.
+> Phases 0, 1, and 2 are verified milestones. The current verified Unity surface includes status/hierarchy/diagnostics/object resolution, Transform editing, GameObject update/delete, Component inspection and bounded mutation, Asset search/inspection, Prefab inspection/instantiation, create-only Prefab Asset authoring, bounded single-property Prefab override apply, direct scene-Prefab override recording, installed-package Test Runner discovery, bounded Script read, and reload-safe CAS Script replace. The latest real Unity baseline is **89 passed / 0 failed** on Unity 6000.3.21f1, plus dedicated live MCP verification for Prefab property apply, Script read, and Script replace. See [`STATUS.md`](STATUS.md) for exact evidence and limitations.
 
 Unity AI Bridge is intended to make AI-assisted Unity Editor control easy enough that users do not need to understand MCP, ports, networking, or Unity editor scripting just to get started.
 
@@ -127,8 +127,9 @@ Verified Phase 3 slices include:
 - direct Prefab-instance override recording for direct Transform/GameObject writes
 - installed-package Test Runner discovery/bootstrap
 - bounded Script read with exact GUID/path, strict UTF-8, raw SHA-256, dependencyHash, and deterministic paging
+- reload-safe Script replace with path/GUID/SHA CAS, atomic persistence, compile/reload reconciliation, same-id replay protection, stale-content rejection, post-reload readback, and guarded recovery
 
-The latest real Unity EditMode verification is **85 passed / 0 failed** on Unity 6000.3.21f1. Script read additionally passed a live official-MCP-client gate that reconstructed the package's `BridgeProtocol.cs` across four chunks with stable GUID/dependencyHash/SHA-256 metadata and `projectMutated=false`.
+The latest real Unity EditMode verification is **89 passed / 0 failed** on Unity 6000.3.21f1. Script read additionally passed a live official-MCP-client reconstruction/identity/non-mutation gate. Script replace passed a live official-MCP-client CAS/write/compile/domain-reload/reconnect/replay/stale/restore gate and restored the exact original source SHA after verification.
 
 New write families must independently adopt and verify the relevant reliability contract before being marked Verified.
 
@@ -138,28 +139,28 @@ The package contains EditMode tests under `unity-package/Tests/Editor`.
 
 Unity normally requires non-embedded packages to be listed in the consuming project's `Packages/manifest.json` `testables` array before their package tests appear in Test Runner. Unity AI Bridge includes a development-install bootstrap that adds itself automatically for Local, LocalTarball, and Git package sources. Embedded packages need no such entry. Registry installs are not automatically modified. When Test Framework does not immediately discover the newly testable package, the bootstrap performs one guarded package reimport.
 
-This installed-package flow was reproduced on Unity 6000.3.21f1 on 2026-08-24. Historical package-suite milestones are 75/75, 80/80, 81/81, and the current **85/85** baseline.
+This installed-package flow was reproduced on Unity 6000.3.21f1 on 2026-08-24. Historical package-suite milestones are 75/75, 80/80, 81/81, 85/85, and the current **89/89** baseline.
 
 See [`unity-package/Tests/README.md`](unity-package/Tests/README.md) and [`docs/TESTING.md`](docs/TESTING.md).
 
 ## Near-term engineering direction
 
-The immediate Phase 3 target is the first **reload-safe Script replace** workflow.
+The bounded Script read/replace pair is now verified. The next Phase 3 candidates are **Play Mode control** and **Unity Test Runner control**, with diagnostics/recovery extensions added where they unlock concrete workflows.
 
-It must build on the verified `script.read` observation token rather than exposing blind file overwrite:
+The verified Script write path intentionally does not expose blind overwrite:
 
 ```text
 read current Assets/*.cs
- -> expected contentSha256
+ -> expected GUID + contentSha256
  -> compare-and-swap precondition
- -> bounded source replacement
- -> persistent byte readback
+ -> bounded complete-source replacement
+ -> atomic persistent byte verification
  -> Unity import / compile / possible domain reload
- -> reconnect + mutation reconciliation
+ -> reconnect + same-id mutation reconciliation
  -> new SHA + compile diagnostics outcome
 ```
 
-Package scripts remain read-only in the first write slice. Source-file writes are not Unity Undo, and compile failure is not the same thing as persistence failure, so both recovery and result semantics must be explicit.
+Package scripts remain read-only in the first write slice. Source-file writes are not Unity Undo, and compile failure is not the same thing as persistence failure, so recovery and result semantics remain explicit. Reload-bound operations also require enough client timeout headroom for slower machines and larger projects; timeout/disconnect ambiguity is reconciled with the same mutationId rather than retried as a fresh write.
 
 After the useful local core is strong enough, Phase 4 focuses on securely connecting cloud AI hosts to a user's local Unity Editor through remote MCP, outbound Unity connectivity, pairing/authentication, and editor routing.
 
