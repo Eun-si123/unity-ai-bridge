@@ -16,7 +16,7 @@
     "assemblies": [
       {
         "name": "EunSung.UnityAiBridge.Editor.Tests",
-        "testCaseCount": 104
+        "testCaseCount": 105
       }
     ],
     "tests": []
