@@ -1,17 +1,14 @@
 # CODEMAP
 
-This file maps what exists in the repository and what is only planned.
+This file maps the current repository at subsystem level and records what is only planned.
 
-**Rule:** a planned path is not implementation evidence. `STATUS.md` remains authoritative for implementation/verification state.
+**Rule:** a planned path is not implementation evidence. `STATUS.md` remains authoritative for implementation/verification state. This map intentionally avoids enumerating every command/test file so it does not become stale after every Phase 3 slice.
 
-## Existing source tree
+## Current top-level source tree
 
 ```text
 /
 ├─ .github/workflows/
-├─ .gitignore
-├─ .nvmrc
-├─ package.json
 ├─ README.md
 ├─ AGENTS.md
 ├─ STATUS.md
@@ -24,42 +21,30 @@ This file maps what exists in the repository and what is only planned.
 ├─ CHANGELOG.md
 ├─ llms.txt
 ├─ docs/
-│  └─ TESTING.md
 │
 ├─ unity-package/
 │  ├─ package.json
-│  └─ Editor/
-│     ├─ UnityAiBridge.Editor.asmdef
-│     ├─ Commands/
-│     │  ├─ EditorStatusCommand.cs
-│     │  ├─ HierarchyCommand.cs
-│     │  ├─ GameObjectCreateCommand.cs
-│     │  ├─ DiagnosticsCommand.cs
-│     │  └─ ObjectResolverCommand.cs
-│     ├─ Connection/
-│     │  └─ LocalBridgeConnection.cs
-│     ├─ Dispatch/
-│     │  └─ EditorMainThreadDispatcher.cs
-│     └─ Protocol/
-│        └─ BridgeProtocol.cs
+│  ├─ Editor/
+│  │  ├─ AssemblyInfo.cs
+│  │  ├─ UnityAiBridge.Editor.asmdef
+│  │  ├─ Commands/
+│  │  ├─ Connection/
+│  │  ├─ Dispatch/
+│  │  ├─ Execution/
+│  │  ├─ Protocol/
+│  │  └─ Testing/
+│  │     └─ PackageTestBootstrap.cs
+│  └─ Tests/
+│     ├─ README.md
+│     └─ Editor/
+│        ├─ UnityAiBridge.Editor.Tests.asmdef
+│        ├─ Fixtures/
+│        └─ *Tests.cs
 │
 ├─ bridge-protocol/
 │  ├─ README.md
 │  ├─ schemas/
-│  │  ├─ command.v0.schema.json
-│  │  ├─ hello.v0.schema.json
-│  │  └─ result.v0.schema.json
 │  └─ fixtures/
-│     ├─ editor-status.command.v0.json
-│     ├─ editor-status.result.v0.json
-│     ├─ hierarchy.command.v0.json
-│     ├─ hierarchy.result.v0.json
-│     ├─ gameobject-create.command.v0.json
-│     ├─ gameobject-create.result.v0.json
-│     ├─ diagnostics.command.v0.json
-│     ├─ diagnostics.result.v0.json
-│     ├─ object-resolve.command.v0.json
-│     └─ object-resolve.result.v0.json
 │
 └─ mcp-server/
    ├─ package.json
@@ -67,27 +52,16 @@ This file maps what exists in the repository and what is only planned.
    ├─ tsconfig.json
    ├─ src/
    │  ├─ index.ts
+   │  ├─ agent/
    │  ├─ bridge/
-   │  │  └─ local-bridge-server.ts
    │  ├─ protocol/
-   │  │  └─ bridge.ts
-   │  └─ dev/
-   │     ├─ verify-unity.ts
-   │     ├─ verify-mcp-unity.ts
-   │     ├─ verify-reconnect-unity.ts
-   │     ├─ verify-hierarchy-unity.ts
-   │     ├─ verify-gameobject-create-unity.ts
-   │     ├─ verify-diagnostics-unity.ts
-   │     └─ verify-object-resolver-unity.ts
+   │  ├─ dev/
+   │  ├─ asset-tools.ts
+   │  ├─ component-tools.ts
+   │  ├─ gameobject-edit-tools.ts
+   │  └─ additional domain/tool modules
    └─ tests/
-      ├─ bridge-protocol.test.ts
-      ├─ local-bridge.test.ts
-      ├─ gameobject-create.test.ts
-      ├─ diagnostics.test.ts
-      └─ object-resolver.test.ts
 ```
-
-`STATUS.md` distinguishes implemented source from runtime-verified behavior.
 
 ## Documentation responsibilities
 
@@ -99,86 +73,84 @@ This file maps what exists in the repository and what is only planned.
 - `AGENTS.md` — mandatory AI/contributor rules
 - `REFERENCES.md` — external research references; not proof of code reuse
 - `CHANGELOG.md` — notable project changes
-- `docs/TESTING.md` — repeatable automated/manual verification procedures
+- `docs/TESTING.md` and package test docs — repeatable verification procedures
 - `llms.txt` — compact AI entrypoint
 
 ## Current source ownership
 
 ### `unity-package/`
 
-Current implementation:
+Home of the Unity Editor-side implementation:
 
-- UPM package manifest and Editor-only assembly,
-- outbound local `ClientWebSocket` connection/reconnect loop,
-- protocol v0 hello/command/result handling,
-- explicit editor connection generations and stale-generation rejection,
-- Unity main-thread dispatcher,
-- `editor.status` read handler,
-- bounded `scene.hierarchy` read handler,
-- bounded `gameObject.create` write handler,
-- create-specific validation, Undo registration, dirty-state handling, `GlobalObjectId` result capture, and same-session mutation replay via `SessionState`,
-- `editor.diagnostics` read handler,
-- recent log capture through `Application.logMessageReceivedThreaded`,
-- compiler warning/error capture through `CompilationPipeline.assemblyCompilationFinished`,
-- latest compilation snapshot persistence through domain reload using `SessionState`,
-- current Console count reads without relying on internal `UnityEditor.LogEntries`,
-- Phase 2 `object.resolve` handler using `GlobalObjectId` native re-resolution,
-- Phase 2 native readback and stale replay validation for the bounded GameObject-create path.
+- Editor-only UPM assembly,
+- outbound local WebSocket connection/reconnect lifecycle,
+- versioned bridge hello/command/result handling,
+- explicit connection generations and stale-generation rejection,
+- main-thread dispatch,
+- state epoch/revision tracking and stale-state protection,
+- mutation lifecycle/replay protection,
+- common mutation transaction behavior,
+- Undo/dirty-state handling,
+- semantic native readback and rollback verification where applicable,
+- Editor status/hierarchy/diagnostics/object resolution,
+- Phase 3 Transform, GameObject, Component, Asset, and Prefab handlers,
+- EditMode tests and live/manual verifiers,
+- development-install bootstrap for making non-embedded package tests visible in Unity Test Runner.
 
-All Phase 1 minimum slices are runtime-verified on Windows / Unity 6000.3.21f1 as recorded in `STATUS.md`. The first Phase 2 stable resolver/native readback/stale-replay slice is also runtime-verified on the same Unity target.
+`STATUS.md` records which slices are Verified and which later changes are only Implemented.
 
 ### `bridge-protocol/`
 
-Current implementation:
+The Unity-facing transport-independent contract:
 
-- protocol v0 command, hello, and result JSON Schemas,
-- editor-status, hierarchy, GameObject-create, diagnostics, and object-resolve request/result fixtures,
-- protocol documentation.
+- protocol-versioned command/hello/result JSON Schemas,
+- operation fixtures,
+- bridge protocol documentation.
 
-The contract remains separate from MCP so Unity-facing command semantics do not depend on a particular AI provider or MCP transport.
+MCP-facing tool contracts and Unity-facing bridge commands remain separate on purpose. Unity command semantics must not depend on a particular LLM vendor, MCP host, or WebSocket-specific detail.
 
 ### `mcp-server/`
 
-Current implementation:
+The provider-neutral MCP/tool layer:
 
-- pinned Node/TypeScript/MCP dependency graph and lockfile,
-- MCP v2 stdio server,
+- official MCP TypeScript SDK v2 server,
+- local stdio MCP bootstrap,
 - local loopback WebSocket bridge,
 - request/result correlation and route-generation handling,
-- `unity_get_status`,
-- `unity_get_hierarchy`,
-- `unity_create_game_object`,
-- `unity_get_diagnostics`,
-- `unity_resolve_object`,
-- write-risk routing and mutation-id validation for the create slice,
-- bounded diagnostics and resolver validation,
-- simulated local-bridge tests,
-- real-Unity verification helpers including the verified Phase 2 resolver/Undo/stale-replay verifier.
+- capability preflight,
+- tool schemas/descriptions,
+- typed bridge adapters for current Unity domains,
+- structured MCP results/errors,
+- simulated bridge tests and real-Unity verification helpers.
 
-Remote Streamable HTTP, hosted auth/pairing, multi-user routing, and managed-service policy are not implemented here yet.
+Current MCP tools cover the verified Phase 3 surface summarized in `STATUS.md`; exact tool names live in source rather than being duplicated exhaustively here.
+
+Remote Streamable HTTP, hosted authentication/pairing, multi-user/editor routing, and managed-service policy remain later-phase work.
 
 ### Root build/configuration
 
 - `.nvmrc` pins the initial Node runtime.
-- root `package.json` delegates build/test to `mcp-server`.
+- root `package.json` delegates Node build/test work to `mcp-server`.
 - `mcp-server/package-lock.json` pins the generated dependency graph.
-- GitHub Actions runs Node verification and local-bridge verification.
-- `.gitignore` excludes Node/TypeScript outputs and common generated Unity project data.
+- GitHub Actions provides Node/protocol/bridge verification where configured.
+- Unity runtime/EditMode evidence is recorded separately because GitHub Actions does not by itself prove Unity Editor behavior unless a Unity job actually ran.
 
-## Planned top-level areas
+## Planned integration/distribution areas
 
-These paths remain planned and must not be treated as existing merely because the architecture mentions them:
+Do not create empty vendor directories merely to mirror an architecture diagram. Add concrete integration files only when a host requires them.
+
+Likely future public layout:
 
 ```text
 integrations/
-├─ chatgpt/
-├─ claude/
+├─ portable/        # Agent Plugins / shared packaging metadata if adopted
+├─ openai/          # only host-specific metadata/adapters that are genuinely required
+├─ anthropic/
+├─ google/
 └─ other/
-
-additional test areas as needed for future remote/provider E2E coverage
 ```
 
-Add directories when real implementation/tests need them rather than creating empty architectural placeholders.
+The canonical product logic remains in the shared MCP/core layers. Provider directories must not become duplicate Unity implementations.
 
 ## Private hosted infrastructure
 
@@ -191,7 +163,7 @@ It should consume/deploy the public core rather than duplicate the core implemen
 When a meaningful subsystem is added or moved:
 
 1. inspect actual repository paths,
-2. update this map,
-3. update `STATUS.md` if implementation state changed,
+2. update this subsystem-level map if ownership/boundaries changed,
+3. update `STATUS.md` if implementation or verification state changed,
 4. update `DESIGN.md`/`DECISIONS.md` only if responsibilities/contracts changed,
-5. never list a fictional path as existing merely because it appears in a plan.
+5. do not enumerate every leaf file unless that detail is genuinely stable and useful.
