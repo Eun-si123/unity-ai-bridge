@@ -70,7 +70,7 @@ test("Test discovery lists bounded assemblies from Unity native test tree", asyn
         nextOffset: 1,
         truncated: false,
         assemblies: [
-          { name: "EunSung.UnityAiBridge.Editor.Tests", testCaseCount: 100 },
+          { name: "EunSung.UnityAiBridge.Editor.Tests", testCaseCount: 105 },
         ],
         tests: [],
       })));
@@ -84,7 +84,7 @@ test("Test discovery lists bounded assemblies from Unity native test tree", asyn
     assert.equal(result.scope, "assemblies");
     assert.equal(result.returnedCount, 1);
     assert.equal(result.assemblies[0]?.name, "EunSung.UnityAiBridge.Editor.Tests");
-    assert.equal(result.assemblies[0]?.testCaseCount, 100);
+    assert.equal(result.assemblies[0]?.testCaseCount, 105);
   } finally {
     await bridge.stop();
     if (client.readyState !== WebSocket.CLOSED) client.terminate();
@@ -162,7 +162,7 @@ test("Test discovery lists exact leaf full names with deterministic paging metad
   }
 });
 
-test("Test discovery rejects malformed bounds before Unity delivery", async () => {
+test("Test discovery accepts an empty page beyond the end without rewinding the cursor", async () => {
   const bridge = new PrefabPropertyBridgeServer("127.0.0.1", 0);
   const port = await bridge.start();
   const client = new WebSocket(`ws://127.0.0.1:${port}`);
@@ -170,6 +170,54 @@ test("Test discovery rejects malformed bounds before Unity delivery", async () =
   try {
     await waitForOpen(client);
     client.send(JSON.stringify(hello(903)));
+    await bridge.waitForEditor();
+
+    client.on("message", (data) => {
+      const command = JSON.parse(data.toString()) as {
+        requestId: string;
+        operation: string;
+        arguments: Record<string, unknown>;
+      };
+      assert.equal(command.operation, "test.list");
+      assert.equal(command.arguments.offset, 500);
+      client.send(JSON.stringify(envelope(command.requestId, {
+        testMode: "edit",
+        scope: "assemblies",
+        assemblyName: "",
+        nameContains: "",
+        totalMatches: 1,
+        offset: 500,
+        maxResults: 20,
+        returnedCount: 0,
+        nextOffset: 500,
+        truncated: false,
+        assemblies: [],
+        tests: [],
+      })));
+    });
+
+    const result = await requestListTests(bridge, {
+      testMode: "edit",
+      offset: 500,
+      maxResults: 20,
+    });
+    assert.equal(result.returnedCount, 0);
+    assert.equal(result.nextOffset, 500);
+    assert.equal(result.truncated, false);
+  } finally {
+    await bridge.stop();
+    if (client.readyState !== WebSocket.CLOSED) client.terminate();
+  }
+});
+
+test("Test discovery rejects malformed bounds before Unity delivery", async () => {
+  const bridge = new PrefabPropertyBridgeServer("127.0.0.1", 0);
+  const port = await bridge.start();
+  const client = new WebSocket(`ws://127.0.0.1:${port}`);
+
+  try {
+    await waitForOpen(client);
+    client.send(JSON.stringify(hello(904)));
     await bridge.waitForEditor();
     let observed = false;
     client.on("message", () => { observed = true; });
