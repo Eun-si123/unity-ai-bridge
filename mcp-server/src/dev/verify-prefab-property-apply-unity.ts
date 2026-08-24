@@ -5,9 +5,9 @@ import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 
 const timeoutMs = 120_000;
 const pollIntervalMs = 300;
+const requestedTriggerValue = true;
 const verificationRunId = `${Date.now()}_${randomUUID().replaceAll("-", "")}`;
 const prefabPath = `Assets/UnityAiBridge_Prefab_Property_Apply_Verify_${verificationRunId}.prefab`;
-const requestedTriggerValue = true;
 
 const client = new Client({
   name: "unity-ai-bridge-prefab-property-apply-verifier",
@@ -22,7 +22,6 @@ let sourceGlobalObjectId = "";
 let primaryInstanceGlobalObjectId = "";
 let readbackInstanceGlobalObjectId = "";
 let componentGlobalObjectId = "";
-let applyMutationId = "";
 let completed = false;
 
 try {
@@ -51,16 +50,22 @@ try {
 
   console.log("[Unity AI Bridge] Waiting for the required Unity capabilities...");
   const connectedStatus = await waitForUnityReady();
+  const activeScene = readString(connectedStatus, "activeScene");
+  if (!activeScene.startsWith("Assets/") || !activeScene.toLowerCase().endsWith(".unity")) {
+    throw new Error(
+      `This verifier requires a saved active Scene under Assets so scene-object GlobalObjectIds are durable. ` +
+        `Current activeScene=${activeScene}. Save the Scene and run the verifier again.`,
+    );
+  }
   console.log(
-    `[Unity AI Bridge] Unity connection ready: ${readString(connectedStatus, "unityVersion")} / ${readString(connectedStatus, "activeScene")}`,
+    `[Unity AI Bridge] Unity connection ready: ${readString(connectedStatus, "unityVersion")} / ${activeScene}`,
   );
   console.log(`[Unity AI Bridge] Verification Prefab: ${prefabPath}`);
 
   await requireAssetAbsent(prefabPath);
 
-  const sourceName = `MCP_Prefab_Property_Apply_Source_${Date.now()}`;
   const sourceCreate = await callStructured("unity_create_game_object", {
-    name: sourceName,
+    name: `MCP_Prefab_Property_Apply_Source_${Date.now()}`,
     mutationId: `verify-prefab-property-source-create-${randomUUID()}`,
   });
   sourceGlobalObjectId = readString(sourceCreate, "globalObjectId");
@@ -78,19 +83,24 @@ try {
   }
 
   sourceInspect = await inspectComponents(sourceGlobalObjectId);
-  const sourceCollider = findComponent(sourceInspect, "UnityEngine.BoxCollider");
-  assertBooleanProperty(sourceCollider, "m_IsTrigger", false, "temporary source BoxCollider");
+  assertBooleanProperty(
+    findComponent(sourceInspect, "UnityEngine.BoxCollider"),
+    "m_IsTrigger",
+    false,
+    "temporary source BoxCollider",
+  );
 
-  const prefabCreateMutationId = `verify-prefab-property-asset-create-${randomUUID()}`;
   const createdPrefab = await callStructured("unity_create_prefab_asset", {
     sourceGlobalObjectId,
     destinationPath: prefabPath,
-    mutationId: prefabCreateMutationId,
+    mutationId: `verify-prefab-property-asset-create-${randomUUID()}`,
     expectedStateEpoch: readString(sourceInspect, "stateEpoch"),
     expectedStateRevision: readPositiveInteger(sourceInspect, "stateRevision"),
   });
   if (createdPrefab.created !== true || createdPrefab.replayed !== false) {
-    throw new Error(`Temporary Prefab creation did not report created=true/replayed=false: ${JSON.stringify(createdPrefab)}`);
+    throw new Error(
+      `Temporary Prefab creation did not report created=true/replayed=false: ${JSON.stringify(createdPrefab)}`,
+    );
   }
 
   const initialPrefab = await inspectPrefab(prefabPath);
@@ -102,18 +112,18 @@ try {
   if (readString(createdPrefab, "dependencyHash") !== dependencyHashBefore) {
     throw new Error("Prefab create/inspect dependencyHash readback disagreed.");
   }
-  const rootComponents = readArray(readRecord(readArray(initialPrefab, "nodes")[0], "Prefab root node"), "componentTypeNames");
-  if (!rootComponents.includes("UnityEngine.BoxCollider")) {
-    throw new Error(`Temporary Prefab root did not contain UnityEngine.BoxCollider: ${JSON.stringify(rootComponents)}`);
+  const prefabRoot = readRecord(readArray(initialPrefab, "nodes")[0], "Prefab root node");
+  if (!readArray(prefabRoot, "componentTypeNames").includes("UnityEngine.BoxCollider")) {
+    throw new Error("Temporary Prefab root did not contain UnityEngine.BoxCollider.");
   }
 
-  const beforeInstantiate = await getStatus();
+  const beforePrimaryInstantiate = await getStatus();
   const primaryInstantiate = await callStructured("unity_instantiate_prefab", {
     prefabPath,
     expectedPrefabDependencyHash: dependencyHashBefore,
     mutationId: `verify-prefab-property-instance-${randomUUID()}`,
-    expectedStateEpoch: readString(beforeInstantiate, "stateEpoch"),
-    expectedStateRevision: readPositiveInteger(beforeInstantiate, "stateRevision"),
+    expectedStateEpoch: readString(beforePrimaryInstantiate, "stateEpoch"),
+    expectedStateRevision: readPositiveInteger(beforePrimaryInstantiate, "stateRevision"),
   });
   primaryInstanceGlobalObjectId = readString(primaryInstantiate, "globalObjectId");
 
@@ -122,18 +132,19 @@ try {
   componentGlobalObjectId = readString(primaryCollider, "globalObjectId");
   assertBooleanProperty(primaryCollider, "m_IsTrigger", false, "fresh Prefab instance BoxCollider");
 
-  const propertyMutationId = `verify-prefab-property-set-${randomUUID()}`;
   const propertySet = await callStructured("unity_set_component_property", {
     componentGlobalObjectId,
     propertyPath: "m_IsTrigger",
     valueKind: "boolean",
     boolValue: requestedTriggerValue,
-    mutationId: propertyMutationId,
+    mutationId: `verify-prefab-property-set-${randomUUID()}`,
     expectedStateEpoch: readString(primaryInspect, "stateEpoch"),
     expectedStateRevision: readPositiveInteger(primaryInspect, "stateRevision"),
   });
   if (propertySet.replayed !== false || propertySet.changed !== true) {
-    throw new Error(`Prefab instance property write did not report a fresh change: ${JSON.stringify(propertySet)}`);
+    throw new Error(
+      `Prefab instance property write did not report a fresh change: ${JSON.stringify(propertySet)}`,
+    );
   }
 
   primaryInspect = await inspectComponents(primaryInstanceGlobalObjectId);
@@ -155,41 +166,45 @@ try {
     );
   }
 
-  applyMutationId = `verify-prefab-property-apply-${randomUUID()}`;
+  const applyMutationId = `verify-prefab-property-apply-${randomUUID()}`;
+  const applyExpectedStateEpoch = readString(primaryInspect, "stateEpoch");
+  const applyExpectedStateRevision = readPositiveInteger(primaryInspect, "stateRevision");
   const applied = await callStructured("unity_apply_prefab_property_override", {
     componentGlobalObjectId,
     propertyPath: "m_IsTrigger",
     prefabPath,
     expectedPrefabDependencyHash: dependencyHashBefore,
     mutationId: applyMutationId,
-    expectedStateEpoch: readString(primaryInspect, "stateEpoch"),
-    expectedStateRevision: readPositiveInteger(primaryInspect, "stateRevision"),
+    expectedStateEpoch: applyExpectedStateEpoch,
+    expectedStateRevision: applyExpectedStateRevision,
   });
 
   if (applied.applied !== true || applied.replayed !== false) {
-    throw new Error(`First Prefab property apply did not report applied=true/replayed=false: ${JSON.stringify(applied)}`);
+    throw new Error(
+      `First Prefab property apply did not report applied=true/replayed=false: ${JSON.stringify(applied)}`,
+    );
   }
-  if (readString(applied, "componentGlobalObjectId") !== componentGlobalObjectId) {
-    throw new Error("Prefab property apply returned a different Component identity.");
-  }
-  if (readString(applied, "componentTypeName") !== "UnityEngine.BoxCollider") {
-    throw new Error(`Prefab property apply returned the wrong Component type: ${JSON.stringify(applied)}`);
-  }
-  if (readString(applied, "propertyPath") !== "m_IsTrigger" || readString(applied, "prefabPath") !== prefabPath) {
-    throw new Error(`Prefab property apply returned the wrong property/asset target: ${JSON.stringify(applied)}`);
-  }
-  if (readString(applied, "prefabGuid") !== prefabGuid) {
-    throw new Error("Prefab GUID changed across property apply.");
+  if (
+    readString(applied, "componentGlobalObjectId") !== componentGlobalObjectId ||
+    readString(applied, "componentTypeName") !== "UnityEngine.BoxCollider" ||
+    readString(applied, "propertyPath") !== "m_IsTrigger" ||
+    readString(applied, "prefabPath") !== prefabPath ||
+    readString(applied, "prefabGuid") !== prefabGuid
+  ) {
+    throw new Error(`Prefab property apply returned the wrong target metadata: ${JSON.stringify(applied)}`);
   }
   if (
     readString(applied, "expectedPrefabDependencyHash") !== dependencyHashBefore ||
-    readString(applied, "dependencyHashBefore") !== dependencyHashBefore
+    readString(applied, "dependencyHashBefore") !== dependencyHashBefore ||
+    readString(applied, "expectedStateEpoch") !== applyExpectedStateEpoch ||
+    readPositiveInteger(applied, "expectedStateRevision") !== applyExpectedStateRevision
   ) {
-    throw new Error(`Prefab property apply did not preserve its dependencyHash precondition: ${JSON.stringify(applied)}`);
+    throw new Error(`Prefab property apply did not preserve its preconditions: ${JSON.stringify(applied)}`);
   }
+
   const dependencyHashAfter = readString(applied, "dependencyHashAfter");
   if (dependencyHashAfter === dependencyHashBefore) {
-    throw new Error("Prefab dependencyHash did not change after applying a false -> true BoxCollider property.");
+    throw new Error("Prefab dependencyHash did not change after applying BoxCollider.m_IsTrigger false -> true.");
   }
 
   const afterApplyInspection = await inspectPrefab(prefabPath);
@@ -208,35 +223,15 @@ try {
     "primary instance after apply",
   );
 
-  const immediateReplay = await callStructured("unity_apply_prefab_property_override", {
+  const replay = await callStructured("unity_apply_prefab_property_override", {
     componentGlobalObjectId,
     propertyPath: "m_IsTrigger",
     prefabPath,
     expectedPrefabDependencyHash: dependencyHashBefore,
     mutationId: applyMutationId,
-    expectedStateEpoch: readString(overriddenColliderState(primaryInspect), "stateEpoch"),
-    expectedStateRevision: readPositiveInteger(overriddenColliderState(primaryInspect), "stateRevision"),
-  }, {
-    // The operation-specific replay identity includes the original state expectation. If Unity rejects
-    // a newly observed state as a different intent, retry below with the exact original expectation.
-    allowError: true,
+    expectedStateEpoch: applyExpectedStateEpoch,
+    expectedStateRevision: applyExpectedStateRevision,
   });
-
-  let replay = immediateReplay;
-  if (immediateReplay.__toolError === true && String(immediateReplay.__toolText).includes("different")) {
-    replay = await callStructured("unity_apply_prefab_property_override", {
-      componentGlobalObjectId,
-      propertyPath: "m_IsTrigger",
-      prefabPath,
-      expectedPrefabDependencyHash: dependencyHashBefore,
-      mutationId: applyMutationId,
-      expectedStateEpoch: readString(applied, "expectedStateEpoch"),
-      expectedStateRevision: readPositiveInteger(applied, "expectedStateRevision"),
-    });
-  } else if (immediateReplay.__toolError === true) {
-    throw new Error(`Prefab property apply immediate replay failed: ${String(immediateReplay.__toolText)}`);
-  }
-
   if (replay.replayed !== true || replay.applied !== true) {
     throw new Error(`Same-id Prefab property apply did not replay read-only: ${JSON.stringify(replay)}`);
   }
@@ -268,7 +263,7 @@ try {
 
   console.log("[Unity AI Bridge] Prefab property apply + fresh-instance native readback + same-id replay PASS.");
   console.log(
-    `[Unity AI Bridge] NOW delete '${prefabPath}' ONCE in Unity's Project window, then return here. ` +
+    `[Unity AI Bridge] NOW delete '${prefabPath}' ONCE in Unity's Project window. ` +
       "Keep the primary scene instance until the verifier finishes the stale-replay check.",
   );
   await waitForAssetAbsent(prefabPath);
@@ -281,8 +276,8 @@ try {
       prefabPath,
       expectedPrefabDependencyHash: dependencyHashBefore,
       mutationId: applyMutationId,
-      expectedStateEpoch: readString(applied, "expectedStateEpoch"),
-      expectedStateRevision: readPositiveInteger(applied, "expectedStateRevision"),
+      expectedStateEpoch: applyExpectedStateEpoch,
+      expectedStateRevision: applyExpectedStateRevision,
     },
   });
   if (!staleReplayResult.isError) {
@@ -322,9 +317,6 @@ try {
   console.error(`[Unity AI Bridge] Prefab property apply MCP verification FAILED:\n${message}`);
   process.exitCode = 1;
 } finally {
-  // Best-effort scene cleanup is intentionally attempted even after a verifier failure. Persistent
-  // assets cannot be removed through the current bounded public tool surface, so the unique path is
-  // always printed below when a failed run may have created it.
   for (const [id, label] of [
     [readbackInstanceGlobalObjectId, "readback instance"],
     [primaryInstanceGlobalObjectId, "primary instance"],
@@ -347,13 +339,11 @@ try {
         arguments: { path: prefabPath, maxDependencies: 0 },
       });
       if (!assetResult.isError) {
-        console.error(
-          `[Unity AI Bridge] CLEANUP REQUIRED: delete '${prefabPath}' from Unity's Project window.`,
-        );
+        console.error(`[Unity AI Bridge] CLEANUP REQUIRED: delete '${prefabPath}' from Unity's Project window.`);
       }
     } catch {
-      // The MCP/Unity connection may already be unavailable; the unique path above is still enough
-      // for deterministic manual cleanup.
+      // The bridge can already be unavailable after a failure; the unique path printed above remains
+      // sufficient for deterministic manual cleanup.
     }
   }
 
@@ -419,7 +409,7 @@ async function requireAssetAbsent(path: string): Promise<void> {
     throw new Error(`Unique verification asset unexpectedly already exists at '${path}'.`);
   }
   const text = readToolText(result);
-  if (!text.includes("asset_unavailable")) {
+  if (!text.includes("stale_target/asset_unavailable")) {
     throw new Error(`Could not prove verification asset is absent: ${text}`);
   }
 }
@@ -431,7 +421,7 @@ async function waitForAssetAbsent(path: string): Promise<void> {
       name: "unity_inspect_asset",
       arguments: { path, maxDependencies: 0 },
     });
-    if (result.isError && readToolText(result).includes("asset_unavailable")) return;
+    if (result.isError && readToolText(result).includes("stale_target/asset_unavailable")) return;
     await delay(pollIntervalMs);
   }
   throw new Error(`Timed out waiting for '${path}' to be deleted in Unity's Project window.`);
@@ -481,33 +471,16 @@ function assertBooleanProperty(
     throw new Error(`${label}: serialized property ${path} was not returned.`);
   }
   if (property.valueKind !== "boolean" || property.boolValue !== expected) {
-    throw new Error(
-      `${label}: ${path} expected boolean ${expected}, got ${JSON.stringify(property)}.`,
-    );
+    throw new Error(`${label}: ${path} expected boolean ${expected}, got ${JSON.stringify(property)}.`);
   }
 }
-
-function overriddenColliderState(inspection: Record<string, unknown>): Record<string, unknown> {
-  // State tokens belong to the inspection snapshot, not to an individual Component. This helper
-  // makes the immediate-replay branch below explicit while keeping the generic record helpers small.
-  return inspection;
-}
-
-type CallOptions = { allowError?: boolean };
 
 async function callStructured(
   name: string,
   args: Record<string, unknown>,
-  options: CallOptions = {},
 ): Promise<Record<string, unknown>> {
   const result = await client.callTool({ name, arguments: args });
   if (result.isError || !isRecord(result.structuredContent)) {
-    if (options.allowError && result.isError) {
-      return {
-        __toolError: true,
-        __toolText: readToolText(result),
-      };
-    }
     throw new Error(`${name} failed: ${readToolText(result)}`);
   }
   return result.structuredContent;
