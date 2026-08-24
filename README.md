@@ -2,7 +2,7 @@
 
 > **Status: pre-alpha / Phase 3 — Useful Unity Editing Core in progress**
 >
-> Phases 0, 1, and 2 are verified milestones. The current verified Unity surface includes status/hierarchy/diagnostics/object resolution, Transform editing, GameObject update/delete, Component inspection and bounded mutation, Asset search/inspection, Prefab inspection/instantiation, create-only Prefab Asset authoring, bounded single-property Prefab override apply, direct scene-Prefab override recording, installed-package Test Runner discovery, bounded Script read, reload-safe CAS Script replace, reload-aware Play Mode control, and bounded asynchronous EditMode + PlayMode Test Runner control. The latest real Unity baseline is **100 passed / 0 failed EditMode** plus **1 passed / 0 failed PlayMode** on Unity 6000.3.21f1, with dedicated live MCP verification for Prefab property apply, Script read, Script replace, Play Mode control, EditMode Test Runner control, and PlayMode Test Runner control. See [`STATUS.md`](STATUS.md) for exact evidence and limitations.
+> Phases 0, 1, and 2 are verified milestones. The current verified Unity surface includes status/hierarchy/diagnostics/object resolution, Transform editing, GameObject update/delete, Component inspection and bounded mutation, Asset search/inspection, Prefab inspection/instantiation, create-only Prefab Asset authoring, bounded single-property Prefab override apply, direct scene-Prefab override recording, installed-package Test Runner bootstrap, bounded Script read, reload-safe CAS Script replace, reload-aware Play Mode control, bounded asynchronous EditMode + PlayMode Test Runner control, and bounded native Test Framework discovery. The latest real Unity baseline is **105 passed / 0 failed EditMode** on Unity 6000.3.21f1; the previously verified dedicated PlayMode assembly remains **1 passed / 0 failed**. Dedicated live MCP gates cover Prefab property apply, Script read, Script replace, Play Mode control, EditMode Test Runner control, PlayMode Test Runner control, and Test Framework discovery. See [`STATUS.md`](STATUS.md) for exact evidence and limitations.
 
 Unity AI Bridge is intended to make AI-assisted Unity Editor control easy enough that users do not need to understand MCP, ports, networking, or Unity editor scripting just to get started.
 
@@ -36,6 +36,7 @@ The long-term product direction remains a public/self-hostable core plus an opti
 - [`REFERENCES.md`](REFERENCES.md) — external research references; not incorporated code
 - [`CHANGELOG.md`](CHANGELOG.md) — notable project changes
 - [`docs/TESTING.md`](docs/TESTING.md) — repeatable verification gates
+- [`docs/TEST_DISCOVERY_TESTING.md`](docs/TEST_DISCOVERY_TESTING.md) — verified real-Unity Test Framework discovery gate
 - [`docs/OPEN_WEIGHT_MODEL_COMPATIBILITY.md`](docs/OPEN_WEIGHT_MODEL_COMPATIBILITY.md) — deferred compatibility direction for local/open-weight agents
 - [`LICENSE`](LICENSE) — Apache License 2.0 terms
 - [`llms.txt`](llms.txt) — compact AI-agent entrypoint
@@ -109,6 +110,7 @@ Current direction:
 - persistent asset/file writes: explicit preconditions/readback and conservative retry/recovery behavior when generic Unity Undo cannot be promised
 - Editor lifecycle mutations: stable native preconditions/targets, mutation identity, bounded waits, optional reload/reconnect observation, and same-id reconciliation rather than blind repeat requests
 - asynchronous Editor jobs such as tests: explicit mode/selection, immediate run identity, current-session journal, bounded polling/results, lifecycle/reconnect tolerance where needed, and same-id no-duplicate scheduling
+- Test Framework discovery: native discovered assembly/leaf selectors are preferred over source-text inference and are returned through bounded read-only paging
 - client integrations: reuse the common MCP core; vendor-specific adapters/metadata should remain thin
 - portable packaging: Agent Plugins 1.0 is a candidate distribution layer to evaluate, not a replacement for MCP and not a core runtime dependency
 - open-weight/local models: later compatibility target through MCP-capable agent runtimes; the Unity core will not become an inference server/model manager
@@ -133,10 +135,11 @@ Verified Phase 3 slices include:
 - reload-aware Play Mode control with four-state lifecycle observation, stable-mode preconditions, same-id reconciliation, optional reload tracking, stale-mode rejection, and user setting preservation
 - bounded asynchronous EditMode Test Runner control with exact assembly/test selection, Unity run GUIDs, SessionState result journals, compact failure details, same-id replay, and conflict rejection
 - bounded asynchronous PlayMode Test Runner control with exact runtime-capable assembly/test selection, Test Framework-owned Edit -> Play -> Edit lifecycle, reconnect-safe same-mutation reconciliation, stable run GUID replay, and final Edit Mode/settings preservation
+- bounded native Test Framework discovery with exact EditMode/PlayMode assembly names, exact leaf `fullName` selectors, deterministic paging, substring filtering, unknown-assembly rejection, and read-only state preservation
 
-The latest real Unity EditMode verification is **100 passed / 0 failed** on Unity 6000.3.21f1, and the dedicated package PlayMode verifier assembly passed **1/1**. Script read additionally passed a live official-MCP-client reconstruction/identity/non-mutation gate. Script replace passed a live official-MCP-client CAS/write/compile/domain-reload/reconnect/replay/stale/restore gate and restored the exact original source SHA after verification. Play Mode control passed a live official-MCP-client `edit -> play -> edit` lifecycle gate with same-id replay, stale-precondition rejection, user Enter Play Mode setting preservation, and exact final stable Edit Mode restoration. EditMode Test Runner control passed a live official-MCP-client schedule/poll/completion/replay/conflict gate for one exact filtered test. PlayMode Test Runner control passed a live official-MCP-client lifecycle gate proving one exact `[UnityTest]` executed with `Application.isPlaying` across a frame, stable `runGuid` replay, conflicting same-id rejection, final Edit Mode restoration, and unchanged Enter Play Mode settings.
+The latest real Unity EditMode verification is **105 passed / 0 failed** on Unity 6000.3.21f1. The dedicated package PlayMode verifier assembly previously passed **1/1** and was not modified by the read-only discovery slice. Script read passed a live official-MCP-client reconstruction/identity/non-mutation gate. Script replace passed a live official-MCP-client CAS/write/compile/domain-reload/reconnect/replay/stale/restore gate and restored the exact original source SHA after verification. Play Mode control passed a live official-MCP-client `edit -> play -> edit` lifecycle gate with same-id replay, stale-precondition rejection, user Enter Play Mode setting preservation, and exact final stable Edit Mode restoration. EditMode Test Runner control passed a live official-MCP-client schedule/poll/completion/replay/conflict gate for one exact filtered test. PlayMode Test Runner control passed a live official-MCP-client lifecycle gate proving one exact `[UnityTest]` executed with `Application.isPlaying` across a frame, stable `runGuid` replay, conflicting same-id rejection, final Edit Mode restoration, and unchanged Enter Play Mode settings. Test Framework discovery passed a live official-MCP-client gate proving native EditMode/PlayMode assembly discovery, five exact discovery-contract leaves, deterministic and past-end paging behavior, the exact already-verified PlayMode selector, unknown-assembly fail-closed behavior, unchanged state epoch/revision, and `projectMutated=false`.
 
-New write/lifecycle/job families must independently adopt and verify the relevant reliability contract before being marked Verified.
+New write/lifecycle/job/read families must independently adopt and verify the relevant reliability contract before being marked Verified.
 
 ## Package tests and Test Runner
 
@@ -144,13 +147,18 @@ The package contains EditMode tests under `unity-package/Tests/Editor` and a ded
 
 Unity normally requires non-embedded packages to be listed in the consuming project's `Packages/manifest.json` `testables` array before their package tests appear in Test Runner. Unity AI Bridge includes a development-install bootstrap that adds itself automatically for Local, LocalTarball, and Git package sources. Embedded packages need no such entry. Registry installs are not automatically modified. When Test Framework does not immediately discover the newly testable package, the bootstrap performs one guarded package reimport.
 
-This installed-package flow was reproduced on Unity 6000.3.21f1 on 2026-08-24. Historical EditMode package-suite milestones are 75/75, 80/80, 81/81, 85/85, 89/89, 93/93, 97/97 during the first Test Runner-control candidate, 98/98 after the terminal selected-count regression fix, and the current **100/100** verified baseline after PlayMode Test Runner contract coverage. The dedicated PlayMode verifier assembly is independently **1/1**.
+This installed-package flow was reproduced on Unity 6000.3.21f1 on 2026-08-24. Historical EditMode package-suite milestones are 75/75, 80/80, 81/81, 85/85, 89/89, 93/93, 97/97 during the first Test Runner-control candidate, 98/98 after the terminal selected-count regression fix, 100/100 after PlayMode Test Runner contract coverage, and the current **105/105** baseline after bounded Test Framework discovery coverage. The dedicated PlayMode verifier assembly remains independently verified **1/1**.
 
-See [`unity-package/Tests/README.md`](unity-package/Tests/README.md), [`docs/TESTING.md`](docs/TESTING.md), and [`docs/PLAYMODE_TEST_RUNNER_TESTING.md`](docs/PLAYMODE_TEST_RUNNER_TESTING.md).
+The names are intentionally distinct:
+
+- **installed-package Test Runner discovery/bootstrap** means making package tests visible through `manifest.json` `testables` + guarded reimport,
+- **Test Framework discovery** means `unity_list_tests` reading the native Test Framework tree to return exact runnable assembly/test selectors.
+
+See [`unity-package/Tests/README.md`](unity-package/Tests/README.md), [`docs/TESTING.md`](docs/TESTING.md), [`docs/PLAYMODE_TEST_RUNNER_TESTING.md`](docs/PLAYMODE_TEST_RUNNER_TESTING.md), and [`docs/TEST_DISCOVERY_TESTING.md`](docs/TEST_DISCOVERY_TESTING.md).
 
 ## Near-term engineering direction
 
-The bounded Script read/replace pair, reload-aware Play Mode control, and bounded asynchronous EditMode + PlayMode Test Runner control are now verified. Near-term Phase 3 work should strengthen the **test-fix-debug loop** with diagnostics/recovery extensions where they unlock concrete workflows, explicit recovery/Undo controls where useful, and broader schema/result compatibility tests as the surface grows.
+The bounded Script read/replace pair, reload-aware Play Mode control, bounded asynchronous EditMode + PlayMode Test Runner control, and native Test Framework discovery are now verified. No additional Phase 3 slice is started by the PR #49 closeout; the next work should be selected deliberately from remaining evidence-backed gaps rather than automatically expanding tool count.
 
 The verified Script write path intentionally does not expose blind overwrite:
 
@@ -170,6 +178,8 @@ Package scripts remain read-only in the first write slice. Source-file writes ar
 Play Mode control similarly treats reload/reconnect as an observed lifecycle detail rather than proof of success. The terminal native `edit`/`play` state is authoritative, and the user's Enter Play Mode settings are not modified.
 
 Test Runner control similarly avoids long synchronous MCP requests. `unity_start_editmode_tests` and `unity_start_playmode_tests` create bounded asynchronous run handles, while `unity_get_test_run` reads the current/terminal result journal. Selection remains explicit and small, PlayMode lifecycle disconnects preserve the same mutation identity, and only one bridge-owned unfinished run is allowed at a time.
+
+Test discovery is a separate read-only layer: `unity_list_tests` returns the selectors Unity Test Framework actually sees, so clients can discover before they execute rather than infer names from source text. It is bounded to stable Edit Mode, deterministic paging, and at most 200 results per page.
 
 After the useful local core is strong enough, Phase 4 focuses on securely connecting cloud AI hosts to a user's local Unity Editor through remote MCP, outbound Unity connectivity, pairing/authentication, and editor routing.
 
