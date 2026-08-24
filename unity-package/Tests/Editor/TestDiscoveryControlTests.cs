@@ -59,5 +59,12 @@ namespace UnityAiBridge.Tests.Editor
             Assert.Throws<ArgumentOutOfRangeException>(() =>
                 TestDiscoveryControl.ValidateMaxResultsForVerification(TestDiscoveryControl.MaximumResults + 1));
         }
+
+        [Test]
+        public void NextOffset_RemainsMonotonicForEmptyPagePastEnd()
+        {
+            Assert.AreEqual(2, TestDiscoveryControl.ComputeNextOffsetForVerification(0, 2));
+            Assert.AreEqual(500, TestDiscoveryControl.ComputeNextOffsetForVerification(500, 0));
+        }
     }
 }
