@@ -21,7 +21,7 @@ namespace UnityAiBridge.Editor.Connection
         {
             if (!string.Equals(command.operation, "editor.playMode.set", StringComparison.Ordinal))
             {
-                return false;
+                return await TryHandleTestRunnerCommandAsync(current, command, rawJson, cancellationToken);
             }
 
             await HandlePlayModeSetAsync(current, command, rawJson, cancellationToken);
