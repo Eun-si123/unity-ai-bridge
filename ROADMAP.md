@@ -99,9 +99,10 @@ Verified slices:
 - ✅ bounded Script read — `unity_read_script` / `script.read`; real Unity **85/85** plus live MCP reconstruction/identity/non-mutation PASS through PR #44
 - ✅ reload-safe Script replace/write — `unity_replace_script` / `script.replace`; real Unity **89/89** plus live MCP CAS/write/compile/reload/replay/stale/restore PASS through PR #45
 - ✅ reload-aware Play Mode control — `unity_set_play_mode` / `editor.playMode.set`; real Unity **93/93** plus live MCP edit/play/replay/stale/final-restore PASS through PR #46
-- ⬜ Unity Test Runner control
+- ✅ bounded asynchronous EditMode Test Runner control — `unity_start_editmode_tests` + `unity_get_test_run`; real Unity **98/98** plus live MCP schedule/poll/replay/result/conflict PASS through PR #47
 - ⬜ diagnostics extensions where they unlock concrete workflows
 - ⬜ explicit Undo/recovery tools where useful to clients
+- ⬜ PlayMode Test Runner execution as a separately bounded lifecycle extension
 
 ### Verified Play Mode strategy
 
@@ -132,6 +133,37 @@ Verified first-slice properties:
 - no automatic scene save and no Unity Undo claim,
 - explicit 180-second bounded lifecycle timeout for slow/project-heavy cases,
 - live verifier proves edit -> play -> edit, replay, stale-precondition rejection, settings preservation, and exact final stable Edit Mode.
+
+### Verified Test Runner strategy
+
+Long Unity test suites are jobs, not one long MCP request. The first Test Runner slice therefore uses an asynchronous start/get handle model and only supports explicitly bounded EditMode selections.
+
+Verified lifecycle:
+
+```text
+stable Edit Mode + not compiling
+ -> exact test assembly + optional exact full test names
+ -> mutationId journal
+ -> TestRunnerApi.Execute
+ -> Unity runGuid + immediate scheduled/running result
+ -> public Test Framework callbacks
+ -> SessionState run/result journal
+ -> unity_get_test_run polling
+ -> completed/error terminal result
+ -> same-id replay preserves runGuid and never schedules twice
+```
+
+Verified first-slice properties:
+
+- one explicit test assembly is mandatory; no implicit whole-project run,
+- exact test names are optional and bounded to 64,
+- one bridge-owned unfinished run at a time,
+- same-id same-intent replay is read-only and stable across scheduled/completed states,
+- same-id different selection fails closed,
+- terminal aggregate counts and bounded non-passed leaf details are structured for AI clients,
+- terminal `selectedTestCaseCount` is based on actual test outcomes rather than the full loaded tree reported by `RunStarted`,
+- Test Framework callback registration is restored after script-domain reload while current-process run state is held in `SessionState`,
+- arbitrary selected tests may mutate project state, so no generic Undo/cleanup promise is made.
 
 ### Verified Script strategy
 
@@ -208,6 +240,7 @@ Supporting work:
 - ✅ bounded Script read + raw SHA-256 observation token (PR #44, **85/85 + live MCP PASS**)
 - ✅ reload-safe Script replace/CAS contract (PR #45, **89/89 + live MCP PASS**)
 - ✅ reload-aware Play Mode lifecycle control (PR #46, **93/93 + live MCP PASS**)
+- ✅ bounded asynchronous EditMode Test Runner control (PR #47, **98/98 + live MCP PASS**)
 - 🟨 consistent risk classification as new operations are added
 - ⬜ broader tool-schema compatibility tests as the surface grows
 - ⬜ better structured error explanations for AI clients
@@ -229,7 +262,7 @@ Reliability requirements inherited from Phase 2:
 
 ### Immediate next gate
 
-**Unity Test Runner control** is the next bounded Phase 3 workflow. It should support a deliberate run request, bounded selection/filtering, asynchronous progress/completion, exact result counts/details, lifecycle/reload-safe observation, and conservative retry semantics before it is marked Verified.
+The next bounded Phase 3 work should strengthen the **test-fix-debug loop** rather than simply add tool count: diagnostics/recovery extensions where they unlock concrete workflows, followed by separately bounded PlayMode Test Runner execution or explicit recovery controls as evidence justifies them.
 
 ### Exit gate
 
