@@ -37,18 +37,46 @@ Broader Unity/OS compatibility is not implied.
 
 ## Latest real Unity verification
 
-On **2026-08-24**, the expanded installed-package EditMode suite for **PR #45** completed:
+On **2026-08-24**, PR #46 head `d3c4ab9260199a6fd973f0ca7d55c36b55de678a` completed the expanded installed-package EditMode suite:
 
 ```text
 Windows
 Unity 6000.3.21f1
-89 Passed
+93 Passed
 0 Failed
 ```
 
-This supersedes the 85/85 Script-read baseline while preserving the earlier milestones below.
+This supersedes the 89/89 Script-replace baseline while preserving the earlier milestones below.
 
-The dedicated live MCP `verify:script-replace` gate also passed on Unity 6000.3.21f1 after verifier timeout hardening. Observed evidence:
+The dedicated live MCP `verify:play-mode` gate also passed on Unity 6000.3.21f1. Observed evidence:
+
+```text
+initialMode: edit
+finalMode: edit
+enterChanged: true
+enterReplayReadOnly: true
+enterReconciled: true
+enterReloadObserved: true
+enterInitialConnectionGeneration: 1787569109635
+enterFinalConnectionGeneration: 1787569158803
+staleExpectedModeRejected: true
+staleAttemptLeftPlayModeUnchanged: true
+exitChanged: true
+exitReplayReadOnly: true
+exitReconciled: true
+exitReloadObserved: false
+exitInitialConnectionGeneration: 1787569158803
+exitFinalConnectionGeneration: 1787569158803
+enterPlayModeOptionsEnabled: false
+disableDomainReload: false
+disableSceneReload: false
+userEnterPlayModeSettingsPreserved: true
+exactFinalEditStateRestored: true
+```
+
+A connection-generation change is an observed lifecycle outcome, not a mandatory success condition. The verified gate intentionally accepts stable native completion whether or not a particular Enter/Exit transition reloads the scripting domain; this is necessary because Unity Enter Play Mode settings and lifecycle details can change reload behavior.
+
+The dedicated live MCP `verify:script-replace` gate previously passed on Unity 6000.3.21f1 after verifier timeout hardening. Observed evidence:
 
 ```text
 scriptPath: Assets/UnityAiBridge_ScriptReplaceVerify.cs
@@ -68,7 +96,7 @@ finalContentSha256: 7c224abcea8bc199f94ac1f15d28e3a881ae67e67c8da28585fc9137d48a
 recoveryCopyRemovedAfterSuccess: true
 ```
 
-The first live run on a slower machine exposed a verifier-layer timeout mismatch: the MCP SDK's default 60-second request timeout could expire while Unity legitimately performed import, compilation, domain reload, and reconnect. The verifier was hardened to use explicit longer tool-call timeouts, wait for Script capabilities before guarded recovery, precompute the intended modified SHA, and preserve an exact pre-mutation recovery copy until exact restoration succeeds. This was a verifier/orchestration issue, not evidence of a failed Unity write contract.
+The first Script-replace live run on a slower machine exposed a verifier-layer timeout mismatch: the MCP SDK's default 60-second request timeout could expire while Unity legitimately performed import, compilation, domain reload, and reconnect. The verifier was hardened to use explicit longer tool-call timeouts, wait for Script capabilities before guarded recovery, precompute the intended modified SHA, and preserve an exact pre-mutation recovery copy until exact restoration succeeds. This was a verifier/orchestration issue, not evidence of a failed Unity write contract.
 
 The dedicated live MCP `verify:script-read` gate previously passed on the same Unity version. Observed evidence:
 
@@ -99,7 +127,8 @@ Separately, the dedicated PR #42 live MCP `verify:prefab-property-apply` gate pa
 | Area | Status | Evidence / notes |
 |---|---|---|
 | Unity package + local bridge | Verified | Real compile/load, WebSocket connect/reconnect, main-thread dispatch, stale-route protection, deadlines, and capability preflight exercised on Unity 6000.3.21f1. |
-| `editor.status` / `unity_get_status` | Verified | Live Editor/project/scene/play/compile state, Agent capabilities, and scene state token. |
+| `editor.status` / `unity_get_status` | **Verified** | Live Editor/project/scene/compile state plus four-state Play Mode lifecycle (`edit`, `entering_play`, `play`, `exiting_play`), pause state, effective Domain/Scene Reload policy, Agent capabilities, and scene state token. |
+| Play Mode control | **Verified** | PR #46; `editor.playMode.set` / `unity_set_play_mode`; exact stable-state preconditions, mutation journal, same-id reconciliation, optional reload/reconnect observation, stale expected-mode rejection, user Enter Play Mode settings preserved, no automatic scene save/Undo claim. Real Unity **93/93** plus live `edit -> play -> edit` MCP gate PASS. |
 | `scene.hierarchy` / `unity_get_hierarchy` | Verified | Bounded hierarchy with `GlobalObjectId` and truncation metadata. |
 | `object.resolve` / `unity_resolve_object` | Verified | Native `GlobalObjectId` re-resolution; missing/Undone targets return `found=false`. |
 | `editor.diagnostics` / `unity_get_diagnostics` | Verified | Bounded Console/compiler diagnostics with source-location metadata where Unity supplies it. |
@@ -115,12 +144,13 @@ Separately, the dedicated PR #42 live MCP `verify:prefab-property-apply` gate pa
 | Component property edit | Verified | PR #26; visible Boolean/Integer/Float/String/Vector3 serialized-property writes with semantic readback and Undo/replay protection. |
 | Asset search/inspect | Verified | PR #27; bounded `AssetDatabase` search and exact GUID/type/importer/dependency inspection. |
 | Script read | **Verified** | PR #44; `script.read` / `unity_read_script`; exact `.cs` Unity assets under Assets/Packages, canonical GUID/path + MonoScript validation, Package Manager resolution, strict UTF-8/BOM handling, raw SHA-256, dependencyHash, bounded paging and 4 MiB source-size cap. Real Unity **85/85** plus live MCP reconstruction/identity/non-mutation gate PASS. |
-| Script replace/write | **Verified** | PR #45 candidate; `script.replace` / `unity_replace_script`; existing `Assets/*.cs` only, mandatory path + GUID + raw SHA-256 CAS, bounded complete-source replacement, editability checks, prepared/written journal, atomic replacement, compile outcome separation, reload/reconnect reconciliation, same-id read-only replay, stale-content rejection, post-reload readback, guarded recovery. Real Unity **89/89** plus live MCP CAS/write/reload/replay/stale/restore gate PASS. |
+| Script replace/write | **Verified** | PR #45; `script.replace` / `unity_replace_script`; existing `Assets/*.cs` only, mandatory path + GUID + raw SHA-256 CAS, bounded complete-source replacement, editability checks, prepared/written journal, atomic replacement, compile outcome separation, reload/reconnect reconciliation, same-id read-only replay, stale-content rejection, post-reload readback, guarded recovery. Real Unity **89/89** plus live MCP CAS/write/reload/replay/stale/restore gate PASS. |
 | Prefab inspect/instantiate | Verified | PR #28; bounded Prefab Asset hierarchy inspect, dependency-hash precondition, linked `PrefabUtility.InstantiatePrefab`, native linkage readback, same-id replay, Undo, stale-replay rejection. |
 | Prefab Asset creation | Verified | PR #29; create-only `SaveAsPrefabAsset`, source unchanged, GUID/dependencyHash/root readback, same-id replay, manual asset removal followed by stale-replay rejection. |
-| Package Test Runner discovery bootstrap | **Verified** | Development Local/LocalTarball/Git installs self-add `com.eunsung.unity-ai-bridge` to project `testables`; guarded package reimport handles Test Framework refresh. Latest expanded suite completed **89/89**. |
+| Package Test Runner discovery bootstrap | **Verified** | Development Local/LocalTarball/Git installs self-add `com.eunsung.unity-ai-bridge` to project `testables`; guarded package reimport handles Test Framework refresh. Latest expanded suite completed **93/93**. |
 | Prefab single-property override apply | **Verified** | PR #36 + harness hardening #37–#40; 80/80 real Unity integration and dedicated PR #42 live MCP E2E PASS. |
 | Direct `Undo.RecordObject` Prefab-instance writes | **Verified** | #41 / PR #43. `PrefabUtility.RecordPrefabInstancePropertyModifications` is guarded to non-asset scene Prefab instances. Real integration verifies `m_LocalScale` and `m_IsActive` overrides persist after scene save; historical milestone **81/81**. |
+| Unity Test Runner control | Planned | Next bounded Phase 3 lifecycle workflow. |
 | Remote gateway / Easy Connect | Planned | Not implemented. |
 | Pairing/authentication | Planned | Not implemented. |
 | Multi-user/editor routing | Planned | Current local bridge supports one active editor. |
@@ -192,6 +222,37 @@ Current objective: provide a small but genuinely useful Unity editing/inspection
 11. **Direct scene-Prefab override recording — #41 / PR #43** — **81/81**, verified 2026-08-24
 12. **Bounded Script read — PR #44** — **85/85** plus live MCP `verify:script-read` PASS, verified 2026-08-24
 13. **Reload-safe Script replace — PR #45** — **89/89** plus live MCP `verify:script-replace` CAS/write/compile/reload/replay/stale/restore PASS, verified 2026-08-24
+14. **Reload-aware Play Mode control — PR #46** — **93/93** plus live MCP `verify:play-mode` edit/play/replay/stale/restore PASS, verified 2026-08-24
+
+### Verified Play Mode control contract
+
+`editor.playMode.set` / `unity_set_play_mode` treats Play Mode as an asynchronous Editor lifecycle rather than a Boolean write.
+
+```text
+editor.status observation
+ -> exact stable expected mode: edit | play
+ -> target mode: edit | play
+ -> validate mutationId + lifecycle precondition
+ -> record retry journal before transition request
+ -> Unity EnterPlaymode / ExitPlaymode request
+ -> tolerate optional domain reload / bridge disconnect
+ -> same-editor reconnect/reconciliation
+ -> wait for stable native target mode
+ -> same-id replay remains readback-only
+ -> stale expected mode fails closed
+```
+
+Verified first-slice behavior:
+
+- `editor.status` distinguishes `edit`, `entering_play`, `play`, and `exiting_play`.
+- Pause state and effective Enter Play Mode Domain/Scene Reload policy are observable.
+- The tool never changes the user's Enter Play Mode settings.
+- Only stable `edit`/`play` states are accepted as target and expected precondition values.
+- Same-id retries reconcile native state and never blindly request Enter/Exit twice.
+- A connection-generation change is reported but is not required for success.
+- The tool does not automatically save scenes and does not claim Unity Undo.
+- The live gate restores exact final stable Edit Mode.
+- Long bounded timeouts are used because lifecycle/reload duration varies by machine and project.
 
 ### Verified Script read contract
 
@@ -241,7 +302,7 @@ Verified first-slice constraints and behavior:
 
 ### Current next candidates
 
-1. Play Mode and Test Runner controls,
+1. Unity Test Runner control,
 2. diagnostics extensions where they unlock real workflows,
 3. explicit Undo/recovery tools where useful to clients,
 4. broader tool-schema compatibility tests as the surface grows,
@@ -253,6 +314,8 @@ No arbitrary C# execution fallback is planned.
 
 - Exact `GlobalObjectId` behavior for every unsaved/new-scene/unusual object case is not exhaustively characterized; live verifiers that require durable scene-object IDs should use a saved active Scene.
 - `SessionState` mutation lifecycle does not survive a full Unity Editor restart.
+- Play Mode control currently covers stable Edit/Play transitions and observation only; pause/step control, Play Mode settings mutation, standalone-player control, and full Editor-restart recovery are not implemented.
+- A Play Mode transition may or may not change the bridge connection generation. Callers must use the terminal native lifecycle state rather than infer success from reconnect behavior alone.
 - Clean-scene dirty metadata restoration after Undo rollback is not implemented.
 - An already-started Unity API call is not force-cancelled when its deadline later expires.
 - Component property edit supports only the explicitly bounded first-slice value kinds; complex serialized forms remain future work.
