@@ -6,6 +6,32 @@ The project is pre-alpha. Internal package version `0.0.1` does not represent a 
 
 ## Unreleased
 
+### Phase 3 — Native Test Framework Discovery — Verified slice
+
+#### Added
+
+- Unity `test.list` read operation and MCP `unity_list_tests` for the Test Framework tree Unity actually discovers.
+- EditMode/PlayMode assembly discovery and exact leaf `fullName` selectors without source-text inference.
+- Optional bounded case-insensitive `nameContains` filtering.
+- Deterministic ordinal paging with `offset` / `maxResults`, a 200-result maximum, and monotonic past-end cursor semantics.
+- `selectableByBridge` compatibility reporting for the current 512-character exact-run selector bound.
+- Protocol fixtures, Node bridge coverage, five EditMode contract tests, and the `verify:test-discovery` live MCP verifier.
+
+#### Verification
+
+- Product head `736103567e863eb27f1035c431f6dc6aec023bb7`: Node Verification **PASS** and Phase 1 Local Bridge Verification **PASS**.
+- Real Windows + Unity 6000.3.21f1 installed-package EditMode suite: **105 Passed / 0 Failed**.
+- Live `verify:test-discovery`: **PASS**.
+- Native discovery exposed `EunSung.UnityAiBridge.Editor.Tests` with `testCaseCount=105` and exactly five discovery-contract leaves.
+- Deterministic first/second-page ordering and past-end cursor behavior were verified.
+- PlayMode discovery exposed `EunSung.UnityAiBridge.PlayMode.Tests` with one exact selector matching the previously verified one-frame PlayMode test.
+- Unknown exact assembly rejection, stable final Edit Mode, unchanged scene state epoch/revision, and `projectMutated=false` were verified.
+
+#### Clarified
+
+- Installed-package Test Runner **visibility/bootstrap** (`testables` + guarded reimport) is distinct from Test Framework **native selector discovery** (`unity_list_tests`).
+- Native discovery is read-only and does not run tests or enter Play Mode.
+
 ### Governance
 
 - Adopted the **Apache License 2.0** for the public `unity-ai-bridge` repository.

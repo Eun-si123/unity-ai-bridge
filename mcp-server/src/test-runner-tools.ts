@@ -9,6 +9,52 @@ import {
   requestStartPlayModeTests,
   requestTestRunAnyMode,
 } from "./bridge/playmode-test-runner-bridge.js";
+import {
+  requestListTests,
+  type TestDiscoveryOptions,
+} from "./bridge/test-discovery-bridge.js";
+
+const listTestsInputSchema = fromJsonSchema({
+  type: "object",
+  required: ["testMode"],
+  properties: {
+    testMode: {
+      type: "string",
+      enum: ["edit", "play"],
+      description:
+        "Unity Test Framework mode to inspect. Discovery itself always runs from stable Edit Mode and does not enter Play Mode.",
+    },
+    assemblyName: {
+      type: "string",
+      minLength: 1,
+      maxLength: 256,
+      description:
+        "Optional exact discovered test assembly name without .dll. Omit to list assemblies for the selected mode; provide it to list leaf tests inside that assembly.",
+    },
+    nameContains: {
+      type: "string",
+      minLength: 1,
+      maxLength: 256,
+      description:
+        "Optional case-insensitive substring filter. For assembly scope it filters assembly names; for test scope it filters exact test full names.",
+    },
+    offset: {
+      type: "integer",
+      minimum: 0,
+      maximum: 2147483647,
+      default: 0,
+      description: "Zero-based offset into the deterministic name-sorted matching result set.",
+    },
+    maxResults: {
+      type: "integer",
+      minimum: 1,
+      maximum: 200,
+      default: 100,
+      description: "Maximum assemblies or leaf tests to return in this page.",
+    },
+  },
+  additionalProperties: false,
+});
 
 const commonTestNamesProperty = {
   type: "array",
@@ -86,6 +132,44 @@ export function registerTestRunnerTools(
   server: McpServer,
   bridge: PrefabPropertyBridgeServer,
 ): void {
+  server.registerTool(
+    "unity_list_tests",
+    {
+      description:
+        "Read the Unity Test Framework's actually discovered EditMode or PlayMode test tree without running tests. Omit assemblyName to list discovered assemblies; provide an exact assemblyName to list deterministic leaf-test full names that can be passed to unity_start_editmode_tests or unity_start_playmode_tests. Results are paged and bounded, and discovery requires stable Edit Mode.",
+      inputSchema: listTestsInputSchema,
+    },
+    async (args) => {
+      try {
+        const input = args as {
+          testMode: "edit" | "play";
+          assemblyName?: string;
+          nameContains?: string;
+          offset?: number;
+          maxResults?: number;
+        };
+        const options: TestDiscoveryOptions = {
+          testMode: input.testMode,
+          offset: input.offset ?? 0,
+          maxResults: input.maxResults ?? 100,
+        };
+        if (input.assemblyName !== undefined) options.assemblyName = input.assemblyName;
+        if (input.nameContains !== undefined) options.nameContains = input.nameContains;
+
+        const status = await bridge.requestEditorStatus();
+        requireAgentCapability(status, "test.list");
+
+        const result = await requestListTests(bridge, options);
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify(result) }],
+          structuredContent: result,
+        };
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
   server.registerTool(
     "unity_start_editmode_tests",
     {

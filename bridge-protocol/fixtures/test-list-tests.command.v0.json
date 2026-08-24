@@ -1,0 +1,18 @@
+{
+  "protocolVersion": "0",
+  "requestId": "fixture-test-list-tests",
+  "operation": "test.list",
+  "arguments": {
+    "testMode": "play",
+    "assemblyName": "EunSung.UnityAiBridge.PlayMode.Tests",
+    "nameContains": "RunsOneFrame",
+    "offset": 0,
+    "maxResults": 20
+  },
+  "risk": "read",
+  "route": {
+    "editorId": "fixture-editor",
+    "connectionGeneration": 1
+  },
+  "deadlineUnixMs": 4102444800000
+}

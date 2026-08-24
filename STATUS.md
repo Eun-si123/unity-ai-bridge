@@ -23,7 +23,7 @@ Completed milestones:
 - **Phase 1 — Minimal Local End-to-End:** Verified, completed 2026-08-23.
 - **Phase 2 — Reliability Core:** Verified milestone, completed 2026-08-23 for the surface that existed at exit.
 
-Phase 2 exit evidence and non-goals are recorded in [`docs/PHASE2_EXIT_GATE.md`](docs/PHASE2_EXIT_GATE.md). Each new Phase 3 write family must adopt and verify the reliability contract independently.
+Phase 2 exit evidence and non-goals are recorded in [`docs/PHASE2_EXIT_GATE.md`](docs/PHASE2_EXIT_GATE.md). Each new Phase 3 family must adopt and verify the reliability contract independently.
 
 ## Current verified environment
 
@@ -37,16 +37,41 @@ Broader Unity/OS compatibility is not implied.
 
 ## Latest real Unity verification
 
-On **2026-08-24**, PR #48 product head `00fc44fb0b9e4fac855c5853d2aeb3fe1d7d125c` completed the expanded installed-package EditMode suite:
+On **2026-08-24**, PR #49 product head `736103567e863eb27f1035c431f6dc6aec023bb7` completed the expanded installed-package EditMode suite:
 
 ```text
 Windows
 Unity 6000.3.21f1
-100 Passed
+105 Passed
 0 Failed
 ```
 
-The dedicated runtime-capable PlayMode verifier assembly also completed:
+The dedicated live MCP `verify:test-discovery` gate also passed on Unity 6000.3.21f1. Observed evidence:
+
+```text
+editAssembly: EunSung.UnityAiBridge.Editor.Tests
+editAssemblyTestCaseCount: 105
+discoveryContractTestCount: 5
+deterministicDiscoveryOrder: true
+pagingVerified: true
+pastEndCursorMonotonic: true
+firstPageFullName: UnityAiBridge.Editor.Tests.AssetCommandTests.InspectValidateArguments_AcceptsDocumentedDependencyBounds
+secondPageFullName: UnityAiBridge.Editor.Tests.AssetCommandTests.ProjectPathValidation_RejectsOutsideAssetsAndPackages
+playAssembly: EunSung.UnityAiBridge.PlayMode.Tests
+playAssemblyTestCaseCount: 1
+exactPlayModeSelector: UnityAiBridge.PlayMode.Tests.PlayModeVerifierTests.RunsOneFrameInsidePlayMode
+exactPlayModeSelectorSelectable: true
+unknownAssemblyRejected: true
+finalPlayModeState: edit
+stateEpoch: cdba6362ce6c44ed89bf271a12fe0150
+stateRevision: 121
+readOnlyStateTokenUnchanged: true
+projectMutated: false
+```
+
+This gate proves `test.list` / MCP `unity_list_tests` reads the Test Framework tree Unity actually discovered rather than inferring selectors from source text. It verified EditMode and PlayMode assembly discovery, five exact discovery-contract leaves, deterministic one-result paging, monotonic past-end cursor behavior, exact compatibility with the already-verified PlayMode selector, fail-closed unknown assembly handling, stable final Edit Mode, unchanged scene state token, and no claimed project mutation.
+
+The dedicated runtime-capable PlayMode verifier assembly from PR #48 remains independently verified:
 
 ```text
 EunSung.UnityAiBridge.PlayMode.Tests
@@ -54,7 +79,9 @@ EunSung.UnityAiBridge.PlayMode.Tests
 0 Failed
 ```
 
-The dedicated live MCP `verify:playmode-tests` gate passed on Unity 6000.3.21f1. Observed evidence:
+PR #49 did not modify the PlayMode verifier assembly or execute a PlayMode test as part of the read-only discovery gate; it discovered that assembly and exact leaf selector through the native Test Framework tree.
+
+The previous dedicated live MCP `verify:playmode-tests` gate passed on Unity 6000.3.21f1. Observed evidence:
 
 ```text
 assemblyName: EunSung.UnityAiBridge.PlayMode.Tests
@@ -211,11 +238,12 @@ Separately, the dedicated PR #42 live MCP `verify:prefab-property-apply` gate pa
 | Script replace/write | **Verified** | PR #45; `script.replace` / `unity_replace_script`; existing `Assets/*.cs` only, mandatory path + GUID + raw SHA-256 CAS, bounded complete-source replacement, editability checks, prepared/written journal, atomic replacement, compile outcome separation, reload/reconnect reconciliation, same-id read-only replay, stale-content rejection, post-reload readback, guarded recovery. Real Unity **89/89** plus live MCP CAS/write/reload/replay/stale/restore gate PASS. |
 | Prefab inspect/instantiate | Verified | PR #28; bounded Prefab Asset hierarchy inspect, dependency-hash precondition, linked `PrefabUtility.InstantiatePrefab`, native linkage readback, same-id replay, Undo, stale-replay rejection. |
 | Prefab Asset creation | Verified | PR #29; create-only `SaveAsPrefabAsset`, source unchanged, GUID/dependencyHash/root readback, same-id replay, manual asset removal followed by stale-replay rejection. |
-| Package Test Runner discovery bootstrap | **Verified** | Development Local/LocalTarball/Git installs self-add `com.eunsung.unity-ai-bridge` to project `testables`; guarded package reimport handles Test Framework refresh. Latest expanded EditMode suite completed **100/100**. |
+| Package Test Runner visibility/bootstrap | **Verified** | Development Local/LocalTarball/Git installs self-add `com.eunsung.unity-ai-bridge` to project `testables`; guarded package reimport handles Test Framework refresh. Latest expanded EditMode suite completed **105/105**. |
 | Prefab single-property override apply | **Verified** | PR #36 + harness hardening #37–#40; 80/80 real Unity integration and dedicated PR #42 live MCP E2E PASS. |
 | Direct `Undo.RecordObject` Prefab-instance writes | **Verified** | #41 / PR #43. `PrefabUtility.RecordPrefabInstancePropertyModifications` is guarded to non-asset scene Prefab instances. Real integration verifies `m_LocalScale` and `m_IsActive` overrides persist after scene save; historical milestone **81/81**. |
 | EditMode Test Runner control | **Verified** | PR #47; `test.run.editMode.start` / `test.run.get`, MCP `unity_start_editmode_tests` / `unity_get_test_run`; exact assembly + optional exact test names, asynchronous run handle, SessionState result journal, bounded result details, same-id replay without duplicate scheduling, conflict rejection, and stable Edit-mode precondition. Historical real Unity **98/98** plus live one-test schedule/poll/replay/result gate PASS. |
 | PlayMode Test Runner control | **Verified** | PR #48; `test.run.playMode.start`, MCP `unity_start_playmode_tests`, shared `unity_get_test_run`; Unity Test Framework owns Edit -> Play -> Edit, same-session journal/replay survives lifecycle reconnects, exact runtime-capable assembly selection, one-frame `Application.isPlaying` proof, conflict rejection, final Edit Mode/settings preservation. Real Unity **100/100 EditMode + 1/1 PlayMode** plus live MCP gate PASS. |
+| Test Framework discovery | **Verified** | PR #49; `test.list` / MCP `unity_list_tests`; native EditMode/PlayMode assembly discovery, exact leaf `fullName` selectors, bounded substring filtering, deterministic paging, monotonic past-end cursor, selector compatibility flag, fail-closed unknown assembly, stable Edit Mode/read-only state token. Real Unity **105/105** plus live MCP discovery gate PASS. |
 | Remote gateway / Easy Connect | Planned | Not implemented. |
 | Pairing/authentication | Planned | Not implemented. |
 | Multi-user/editor routing | Planned | Current local bridge supports one active editor. |
@@ -282,7 +310,7 @@ Current objective: provide a small but genuinely useful Unity editing/inspection
 6. **Asset search/inspect — PR #27** — **50/50** milestone
 7. **Prefab inspect/instantiate — PR #28** — **56/56** milestone
 8. **Prefab Asset creation — PR #29** — **62/62** milestone
-9. **Installed-package Test Runner discovery — PRs #31–#35** — **75/75**, verified 2026-08-24
+9. **Installed-package Test Runner visibility/bootstrap — PRs #31–#35** — **75/75**, verified 2026-08-24
 10. **Bounded Prefab property override apply — PR #36 + #37–#40** — **80/80**, plus PR #42 live MCP E2E PASS
 11. **Direct scene-Prefab override recording — #41 / PR #43** — **81/81**, verified 2026-08-24
 12. **Bounded Script read — PR #44** — **85/85** plus live MCP `verify:script-read` PASS, verified 2026-08-24
@@ -290,6 +318,7 @@ Current objective: provide a small but genuinely useful Unity editing/inspection
 14. **Reload-aware Play Mode control — PR #46** — **93/93** plus live MCP `verify:play-mode` edit/play/replay/stale/restore PASS, verified 2026-08-24
 15. **Bounded EditMode Test Runner control — PR #47** — **98/98** plus live MCP `verify:test-runner` schedule/poll/replay/result/conflict PASS, verified 2026-08-24
 16. **Bounded PlayMode Test Runner control — PR #48** — **100/100 EditMode + 1/1 PlayMode** plus live MCP `verify:playmode-tests` lifecycle/replay/result/conflict/final-restore PASS, verified 2026-08-24
+17. **Bounded native Test Framework discovery — PR #49** — **105/105** plus live MCP `verify:test-discovery` EditMode/PlayMode assembly discovery, exact selectors, deterministic/past-end paging, unknown-assembly rejection, and read-only state-token PASS, verified 2026-08-24
 
 ### Verified Play Mode control contract
 
@@ -381,6 +410,36 @@ Verified first-slice behavior:
 - Final native Editor state returned to stable Edit Mode and the user's Enter Play Mode settings were unchanged.
 - This slice is Editor-hosted PlayMode only; standalone Player execution is not implied.
 
+### Verified Test Framework discovery contract
+
+`test.list` / MCP `unity_list_tests` is the read-only selector-discovery layer for the verified Test Runner controls.
+
+```text
+stable Edit Mode + not compiling
+ -> RetrieveTestList(EditMode | PlayMode)
+ -> no assemblyName: exact discovered assembly list
+ -> exact assemblyName: exact leaf test fullName list
+ -> optional bounded nameContains filter
+ -> deterministic ordinal ordering
+ -> bounded offset/maxResults paging
+ -> exact fullName selector feeds unity_start_*_tests
+```
+
+Verified first-slice behavior:
+
+- Unity Test Framework is the discovery source of truth; source files are not parsed to infer test selectors.
+- The operation is read-only and never starts tests or enters Play Mode.
+- Discovery itself requires stable Edit Mode and no active compilation.
+- Both EditMode and PlayMode Test Framework trees can be queried from stable Edit Mode.
+- `assemblyName` omitted means assembly scope; a supplied assembly must exactly match a discovered assembly and `.dll` suffixes are rejected.
+- `nameContains` is optional, case-insensitive, and bounded.
+- Results are sorted ordinally before paging; `maxResults` is bounded to 200.
+- Paging invariant is `nextOffset = offset + returnedCount`; past-end pages are empty and do not rewind the requested cursor.
+- Exact leaf `fullName` is deliberately not truncated; `selectableByBridge` reports whether it fits the current exact-run 512-character selector bound.
+- Unknown exact assemblies fail closed with `test_assembly_unavailable`.
+- The live gate discovered the exact PR #48 PlayMode verifier selector already proven runnable.
+- The live gate preserved stable Edit Mode and an unchanged scene state epoch/revision and reported `projectMutated=false`.
+
 ### Verified Script read contract
 
 - `script.read` / `unity_read_script`
@@ -429,11 +488,7 @@ Verified first-slice constraints and behavior:
 
 ### Current next candidates
 
-1. diagnostics extensions where they unlock real workflows,
-2. explicit Undo/recovery tools where useful to clients,
-3. broader tool-schema compatibility tests as the surface grows,
-4. bounded Test Runner selection/cancellation extensions only when their contracts are clear,
-5. only then consider broader Prefab apply/revert slices when bounded contracts are clear.
+No new Phase 3 slice is started as part of PR #49 closeout. Remaining candidates include diagnostics extensions where they unlock real workflows, explicit Undo/recovery tools, broader tool-schema/result compatibility tests, bounded Test Runner selection/cancellation extensions, and later broader Prefab apply/revert contracts.
 
 No arbitrary C# execution fallback is planned.
 
@@ -445,7 +500,8 @@ No arbitrary C# execution fallback is planned.
 - A Play Mode transition may or may not change the bridge connection generation. Callers must use the terminal native lifecycle state rather than infer success from reconnect behavior alone.
 - Test Runner control requires one exact assembly and bounded exact test names, stores run journals only for the current Editor process, and allows only one bridge-owned unfinished run at a time across EditMode and PlayMode.
 - Public Test Framework callbacks do not include the Unity run GUID. The current slices correlate callbacks using the single active bridge journal plus exact mode/assembly/test selection; an externally started indistinguishable run for the same selection can therefore remain ambiguous without relying on private Test Framework internals.
-- Regex/category/group filters, arbitrary target-platform/standalone Player runs, cancellation, and full Editor-restart Test Runner recovery are not implemented.
+- Test Framework discovery is stable-Edit-mode only, uses the public 1.4-compatible tree API, returns at most 200 results per page, exposes only exact assembly/leaf discovery plus bounded substring filtering, and does not discover standalone Player tests.
+- Regex/category/group execution filters, arbitrary target-platform/standalone Player runs, cancellation, and full Editor-restart Test Runner recovery are not implemented.
 - Clean-scene dirty metadata restoration after Undo rollback is not implemented.
 - An already-started Unity API call is not force-cancelled when its deadline later expires.
 - Component property edit supports only the explicitly bounded first-slice value kinds; complex serialized forms remain future work.
