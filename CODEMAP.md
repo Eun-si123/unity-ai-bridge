@@ -96,7 +96,7 @@ This file maps the current repository at subsystem level and records what is onl
 - `CHANGELOG.md` — notable project changes
 - `docs/TESTING.md` and package test docs — repeatable verification procedures
 - `docs/PLAYMODE_TEST_RUNNER_TESTING.md` — dedicated real-Unity PlayMode Test Runner gate and evidence
-- `docs/TEST_DISCOVERY_TESTING.md` — candidate real-Unity gate for bounded Test Framework discovery
+- `docs/TEST_DISCOVERY_TESTING.md` — verified real-Unity gate and evidence for bounded Test Framework discovery
 - `docs/OPEN_WEIGHT_MODEL_COMPATIBILITY.md` — deferred local/open-weight compatibility boundary and future Adaptive Router direction
 - `bridge-protocol/SCRIPT_READ.md` — bounded Script source observation contract and file-content CAS boundary
 - `bridge-protocol/TEST_RUNNER_CONTROL.md` — bounded asynchronous EditMode/PlayMode Test Runner start/get contract, retry identity, current-session journaling, lifecycle behavior, and result bounds
@@ -137,7 +137,7 @@ The Unity-facing transport-independent contract:
 - protocol-versioned command/hello/result JSON Schemas,
 - operation fixtures,
 - bridge protocol documentation,
-- operation-specific contracts such as bounded Prefab property apply, Script source read, asynchronous EditMode/PlayMode Test Runner control, and bounded Test discovery.
+- operation-specific contracts such as bounded Prefab property apply, Script source read, asynchronous EditMode/PlayMode Test Runner control, and bounded Test Framework discovery.
 
 MCP-facing tool contracts and Unity-facing bridge commands remain separate on purpose. Unity command semantics must not depend on a particular LLM vendor, MCP host, or WebSocket-specific detail.
 
