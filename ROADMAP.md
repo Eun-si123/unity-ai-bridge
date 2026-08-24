@@ -96,7 +96,7 @@ Verified slices:
 - ✅ installed-package Test Runner discovery/bootstrap — first **75/75** real Unity baseline
 - ✅ bounded single-property Prefab override apply — `unity_apply_prefab_property_override`; real Unity **80/80** plus dedicated live MCP E2E PASS
 - ✅ direct `Undo.RecordObject` scene-Prefab override recording — Transform/GameObject direct writes; real Unity **81/81** through PR #43
-- 🟨 bounded Script read — `unity_read_script` / `script.read`, implemented in PR #44 and awaiting expanded real-Unity + live MCP verification
+- ✅ bounded Script read — `unity_read_script` / `script.read`; real Unity **85/85** plus live MCP reconstruction/identity/non-mutation PASS through PR #44
 - ⬜ Script replace/write workflow
 - ⬜ Play Mode control
 - ⬜ Unity Test Runner control
@@ -107,20 +107,51 @@ Verified slices:
 
 Script authoring crosses a different reliability boundary from scene mutations: changing a `.cs` file can cause AssetDatabase import, script compilation, assembly reload, and domain reload. The project therefore separates observation from mutation.
 
-First slice:
+Verified observation slice:
 
 ```text
 exact Assets/*.cs or Packages/*.cs Unity asset
  -> canonical GUID/path + MonoScript validation
- -> bounded UTF-8 read
+ -> bounded strict UTF-8 read
  -> raw-file SHA-256
  -> dependencyHash + source metadata
  -> deterministic offset paging
+ -> exact multi-chunk reconstruction
 ```
 
-`script.read` is read-only and currently limits a source file to 4 MiB and each returned chunk to 100,000 UTF-16 code units. It reports BOM/encoding, byte/character/line counts, `nextOffset`, and truncation metadata. Package source resolution uses Unity Package Manager metadata rather than guessing package-cache paths.
+`script.read` is read-only and limits a source file to 4 MiB and each returned chunk to 100,000 UTF-16 code units. It reports BOM/encoding, byte/character/line counts, `nextOffset`, truncation metadata, and raw `contentSha256`. Package source resolution uses Unity Package Manager metadata rather than guessing package-cache paths.
 
-The next write slice must not be a blind whole-file overwrite. It should use the observed raw `contentSha256` as an exact compare-and-swap precondition, write only under `Assets/`, use mutation/replay identity, define file encoding/newline behavior, deliberately trigger/observe Unity import + compilation, and survive or fail closed across assembly/domain reload before being called reliable.
+### Next Script slice: reload-safe replace
+
+The first write slice must not be a blind whole-file overwrite. Its intended contract is:
+
+```text
+script.read observation
+ -> exact writable Assets/*.cs path
+ -> expected raw contentSha256
+ -> validate replacement content/encoding/bounds
+ -> mutationId + reload-safe lifecycle record
+ -> compare current bytes to expected SHA
+ -> persist new bytes
+ -> import / compilation observation
+ -> survive reconnect/domain reload
+ -> reconcile from native file + Unity state
+ -> verify new SHA / GUID / path
+ -> report compile outcome + diagnostics
+```
+
+Required first-slice properties:
+
+- exact `Assets/*.cs` target only; Packages remain read-only,
+- current raw `contentSha256` is mandatory CAS state,
+- stale content fails before write,
+- replacement content is bounded and encoding behavior is explicit,
+- mutationId replay never blindly rewrites an already-started mutation,
+- file persistence and compile success are separate outcomes,
+- compilation errors are reported rather than misclassified as file-write failure,
+- no claim of Unity Undo for source-file writes,
+- recovery/rollback behavior is explicit and verified rather than assumed,
+- reconnect/domain reload is part of the normal success path.
 
 ### Prefab strategy
 
@@ -145,7 +176,7 @@ Supporting work:
 - ✅ installed-package Test Runner discovery bootstrap
 - ✅ bounded existing-Prefab property-write contract + live MCP verifier
 - ✅ direct scene-Prefab write override recording audit/fix (#41 / PR #43)
-- 🟨 bounded Script read + raw SHA-256 observation token (PR #44)
+- ✅ bounded Script read + raw SHA-256 observation token (PR #44, **85/85 + live MCP PASS**)
 - 🟨 consistent risk classification as new operations are added
 - ⬜ reload-safe Script replace/CAS contract
 - ⬜ broader tool-schema compatibility tests as the surface grows
@@ -168,14 +199,15 @@ Reliability requirements inherited from Phase 2:
 
 ### Immediate next gate
 
-Verify PR #44 against Unity 6000.3.21f1:
+Design and implement the first reload-safe Script replace/CAS slice, then prove at minimum:
 
-1. run the expanded installed-package EditMode suite (81 previous tests + 4 new Script-read tests = expected **85 tests**),
-2. run `npm --prefix mcp-server run verify:script-read`,
-3. require the live MCP verifier to reconstruct `BridgeProtocol.cs` from multiple chunks while GUID, dependencyHash, raw SHA-256, byte/character/line metadata remain stable,
-4. confirm the verifier performs no project mutation.
-
-Only after both real-Unity gates pass should `script.read` become Verified and the project move to the reload-safe Script replace/write slice.
+1. exact current SHA allows one intended write,
+2. stale SHA prevents any write,
+3. successful persistence produces the exact new raw SHA,
+4. the same mutationId does not perform a second write after transport ambiguity or domain reload,
+5. Unity import/compilation and any domain reload are reconciled rather than treated as lost execution,
+6. compile errors are surfaced distinctly from persistence errors,
+7. the verifier restores or cleans its temporary script deterministically without hiding ambiguous outcomes.
 
 ### Exit gate
 
@@ -199,17 +231,7 @@ Install Unity package
  -> connected
 ```
 
-Targets include:
-
-- remote Streamable HTTP MCP endpoint,
-- secure outbound Unity connection,
-- short-lived pairing,
-- scoped credentials,
-- account/workspace/editor routing,
-- multi-editor isolation,
-- rate limits and abuse controls,
-- disconnect/presence state,
-- self-hosted deployment path.
+Targets include remote Streamable HTTP MCP, secure outbound Unity connectivity, short-lived pairing, scoped credentials, account/workspace/editor routing, multi-editor isolation, rate limits/abuse controls, disconnect/presence state, and a self-hosted deployment path.
 
 ### Exit gate
 
