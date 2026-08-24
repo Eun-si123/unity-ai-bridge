@@ -21,7 +21,9 @@
     "baselineCompilationSequence": 12,
     "writeCompletedUnixMs": 1787550000000,
     "importRequested": true,
-    "importRequestedUnixMs": 1787550000001
+    "importRequestedUnixMs": 1787550000001,
+    "importCallReturned": false,
+    "importError": ""
   },
   "warnings": [],
   "dirtyState": "unchanged",
