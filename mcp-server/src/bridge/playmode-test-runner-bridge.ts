@@ -22,134 +22,38 @@ export type AnyTestRunPayload = Omit<TestRunPayload, "testMode"> & {
   testMode: "edit" | "play";
 };
 
-/**
- * This accessor subclass deliberately reuses the existing protected bridge request pipeline
- * without widening LocalBridgeServer into a generic public arbitrary-operation sender.
- * It is never instantiated: its methods are bound to the already-running bridge instance.
- */
+interface EditorIdentity {
+  editorId: string;
+  connectionGeneration: number;
+}
+
 class TestRunnerBridgeAccess extends PrefabPropertyBridgeServer {
-  public async startPlayModeTests(
-    options: TestRunStartOptions,
-    timeoutMs = 180_000,
-  ): Promise<AnyTestRunPayload> {
-    const initialEditor = this.connectedEditor;
-    if (initialEditor === undefined) {
-      throw new Error("No Unity Editor is connected to the local bridge.");
-    }
-
-    validateTestAssemblyName(options.assemblyName);
-    const testNames = normalizeTestNames(options.testNames);
-    const mutationId = options.mutationId ?? randomUUID();
-    validateMutationId(mutationId);
-    const deadlineUnixMs = Date.now() + timeoutMs;
-    const args = { assemblyName: options.assemblyName, testNames, mutationId };
-
-    try {
-      return await this.deliverPlayModeStart(
-        args,
-        Math.min(DELIVERY_TIMEOUT_MS, Math.max(1, remainingMs(deadlineUnixMs))),
-      );
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (!isAmbiguousDeliveryError(message)) {
-        throw new Error(`${message} mutationId=${mutationId}`);
-      }
-
-      await this.waitForSameEditorForTestRun(initialEditor.editorId, deadlineUnixMs);
-      const remaining = remainingMs(deadlineUnixMs);
-      if (remaining <= 0) {
-        throw new Error(
-          `test.run.playMode.start became ambiguous and the same Editor did not become available for reconciliation before timeout. mutationId=${mutationId}`,
-        );
-      }
-
-      return await this.deliverPlayModeStart(args, Math.min(DELIVERY_TIMEOUT_MS, remaining));
-    }
+  public connectedEditorAccess(): EditorIdentity | undefined {
+    const current = this.connectedEditor;
+    return current === undefined
+      ? undefined
+      : {
+          editorId: current.editorId,
+          connectionGeneration: current.connectionGeneration,
+        };
   }
 
-  public async readTestRunAnyMode(
-    mutationId: string,
-    timeoutMs = 5_000,
-  ): Promise<AnyTestRunPayload> {
-    const editor = this.connectedEditor;
-    if (editor === undefined) {
-      throw new Error("No Unity Editor is connected to the local bridge.");
-    }
-    validateMutationId(mutationId);
-
-    const result = await this.requestOperation(
-      "test.run.get",
-      { mutationId },
-      {
-        editorId: editor.editorId,
-        connectionGeneration: editor.connectionGeneration,
-      },
-      timeoutMs,
-      "read",
-    );
-    if (!isAnyTestRunPayload(result)) {
-      throw new Error("Unity returned an invalid test.run.get payload.");
-    }
-    return result;
-  }
-
-  private async deliverPlayModeStart(
-    args: { assemblyName: string; testNames: string[]; mutationId: string },
+  public requestOperationAccess(
+    operation: string,
+    args: Record<string, unknown>,
+    route: EditorIdentity,
     timeoutMs: number,
-  ): Promise<AnyTestRunPayload> {
-    const editor = this.connectedEditor;
-    if (editor === undefined) {
-      throw new Error("No Unity Editor is connected to the local bridge.");
-    }
-
-    const result = await this.requestOperation(
-      "test.run.playMode.start",
-      args,
-      {
-        editorId: editor.editorId,
-        connectionGeneration: editor.connectionGeneration,
-      },
-      timeoutMs,
-      "write",
-    );
-    if (!isAnyTestRunPayload(result) || result.testMode !== "play") {
-      throw new Error("Unity returned an invalid test.run.playMode.start payload.");
-    }
-    return result;
+    risk: "read" | "write",
+  ): Promise<unknown> {
+    return this.requestOperation(operation, args, route, timeoutMs, risk);
   }
 
-  private async waitForSameEditorForTestRun(
-    editorId: string,
-    deadlineUnixMs: number,
-  ): Promise<void> {
-    while (remainingMs(deadlineUnixMs) > 0) {
-      const current = this.connectedEditor;
-      if (current !== undefined) {
-        if (current.editorId !== editorId) {
-          throw new Error(
-            `A different Unity Editor connected during PlayMode test-run reconciliation. expectedEditorId=${editorId} observedEditorId=${current.editorId}`,
-          );
-        }
-        return;
-      }
-
-      try {
-        const hello = await this.waitForEditor(
-          Math.min(2_000, Math.max(1, remainingMs(deadlineUnixMs))),
-        );
-        if (hello.editorId !== editorId) {
-          throw new Error(
-            `A different Unity Editor connected during PlayMode test-run reconciliation. expectedEditorId=${editorId} observedEditorId=${hello.editorId}`,
-          );
-        }
-        return;
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        if (message.includes("different Unity Editor")) throw error;
-      }
-
-      await delay(Math.min(RECONNECT_POLL_MS, Math.max(1, remainingMs(deadlineUnixMs))));
-    }
+  public async waitForEditorAccess(timeoutMs: number): Promise<EditorIdentity> {
+    const hello = await this.waitForEditor(timeoutMs);
+    return {
+      editorId: hello.editorId,
+      connectionGeneration: hello.connectionGeneration,
+    };
   }
 }
 
@@ -158,11 +62,44 @@ export async function requestStartPlayModeTests(
   options: TestRunStartOptions,
   timeoutMs = 180_000,
 ): Promise<AnyTestRunPayload> {
-  return await TestRunnerBridgeAccess.prototype.startPlayModeTests.call(
-    bridge as unknown as TestRunnerBridgeAccess,
-    options,
-    timeoutMs,
-  );
+  const initialEditor = connectedEditor(bridge);
+  if (initialEditor === undefined) {
+    throw new Error("No Unity Editor is connected to the local bridge.");
+  }
+
+  validateTestAssemblyName(options.assemblyName);
+  const testNames = normalizeTestNames(options.testNames);
+  const mutationId = options.mutationId ?? randomUUID();
+  validateMutationId(mutationId);
+  const deadlineUnixMs = Date.now() + timeoutMs;
+  const args = { assemblyName: options.assemblyName, testNames, mutationId };
+
+  try {
+    return await deliverPlayModeStart(
+      bridge,
+      args,
+      Math.min(DELIVERY_TIMEOUT_MS, Math.max(1, remainingMs(deadlineUnixMs))),
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!isAmbiguousDeliveryError(message)) {
+      throw new Error(`${message} mutationId=${mutationId}`);
+    }
+
+    await waitForSameEditor(bridge, initialEditor.editorId, deadlineUnixMs);
+    const remaining = remainingMs(deadlineUnixMs);
+    if (remaining <= 0) {
+      throw new Error(
+        `test.run.playMode.start became ambiguous and the same Editor did not become available for reconciliation before timeout. mutationId=${mutationId}`,
+      );
+    }
+
+    return await deliverPlayModeStart(
+      bridge,
+      args,
+      Math.min(DELIVERY_TIMEOUT_MS, remaining),
+    );
+  }
 }
 
 export async function requestTestRunAnyMode(
@@ -170,11 +107,117 @@ export async function requestTestRunAnyMode(
   mutationId: string,
   timeoutMs = 5_000,
 ): Promise<AnyTestRunPayload> {
-  return await TestRunnerBridgeAccess.prototype.readTestRunAnyMode.call(
-    bridge as unknown as TestRunnerBridgeAccess,
-    mutationId,
+  const editor = connectedEditor(bridge);
+  if (editor === undefined) {
+    throw new Error("No Unity Editor is connected to the local bridge.");
+  }
+  validateMutationId(mutationId);
+
+  const result = await requestOperation(
+    bridge,
+    "test.run.get",
+    { mutationId },
+    editor,
     timeoutMs,
+    "read",
   );
+  if (!isAnyTestRunPayload(result)) {
+    throw new Error("Unity returned an invalid test.run.get payload.");
+  }
+  return result;
+}
+
+async function deliverPlayModeStart(
+  bridge: PrefabPropertyBridgeServer,
+  args: { assemblyName: string; testNames: string[]; mutationId: string },
+  timeoutMs: number,
+): Promise<AnyTestRunPayload> {
+  const editor = connectedEditor(bridge);
+  if (editor === undefined) {
+    throw new Error("No Unity Editor is connected to the local bridge.");
+  }
+
+  const result = await requestOperation(
+    bridge,
+    "test.run.playMode.start",
+    args,
+    editor,
+    timeoutMs,
+    "write",
+  );
+  if (!isAnyTestRunPayload(result) || result.testMode !== "play") {
+    throw new Error("Unity returned an invalid test.run.playMode.start payload.");
+  }
+  return result;
+}
+
+async function waitForSameEditor(
+  bridge: PrefabPropertyBridgeServer,
+  editorId: string,
+  deadlineUnixMs: number,
+): Promise<void> {
+  while (remainingMs(deadlineUnixMs) > 0) {
+    const current = connectedEditor(bridge);
+    if (current !== undefined) {
+      if (current.editorId !== editorId) {
+        throw new Error(
+          `A different Unity Editor connected during PlayMode test-run reconciliation. expectedEditorId=${editorId} observedEditorId=${current.editorId}`,
+        );
+      }
+      return;
+    }
+
+    try {
+      const hello = await waitForEditor(
+        bridge,
+        Math.min(2_000, Math.max(1, remainingMs(deadlineUnixMs))),
+      );
+      if (hello.editorId !== editorId) {
+        throw new Error(
+          `A different Unity Editor connected during PlayMode test-run reconciliation. expectedEditorId=${editorId} observedEditorId=${hello.editorId}`,
+        );
+      }
+      return;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.includes("different Unity Editor")) throw error;
+    }
+
+    await delay(Math.min(RECONNECT_POLL_MS, Math.max(1, remainingMs(deadlineUnixMs))));
+  }
+}
+
+function access(bridge: PrefabPropertyBridgeServer): TestRunnerBridgeAccess {
+  return bridge as unknown as TestRunnerBridgeAccess;
+}
+
+function connectedEditor(bridge: PrefabPropertyBridgeServer): EditorIdentity | undefined {
+  return TestRunnerBridgeAccess.prototype.connectedEditorAccess.call(access(bridge));
+}
+
+function requestOperation(
+  bridge: PrefabPropertyBridgeServer,
+  operation: string,
+  args: Record<string, unknown>,
+  route: EditorIdentity,
+  timeoutMs: number,
+  risk: "read" | "write",
+): Promise<unknown> {
+  return TestRunnerBridgeAccess.prototype.requestOperationAccess.call(
+    access(bridge),
+    operation,
+    args,
+    route,
+    timeoutMs,
+    risk,
+  );
+}
+
+function waitForEditor(
+  bridge: PrefabPropertyBridgeServer,
+  timeoutMs: number,
+): Promise<EditorIdentity> {
+  return TestRunnerBridgeAccess.prototype.waitForEditorAccess.call(access(bridge), timeoutMs);
 }
 
 function isAnyTestRunPayload(value: unknown): value is AnyTestRunPayload {
