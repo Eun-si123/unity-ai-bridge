@@ -2,7 +2,7 @@
 
 > **Status: pre-alpha / Phase 3 — Useful Unity Editing Core in progress**
 >
-> Phases 0, 1, and 2 are verified milestones. The current verified Unity surface includes status/hierarchy/diagnostics/object resolution, Transform editing, GameObject update/delete, Component inspection and bounded mutation, Asset search/inspection, Prefab inspection/instantiation, create-only Prefab Asset authoring, and installed-package Test Runner discovery. The latest real Unity baseline is **75 passed / 0 failed** on Unity 6000.3.21f1. A bounded single-property Prefab override apply workflow is implemented in PR #36 and awaits its expanded real-Unity verification. See [`STATUS.md`](STATUS.md) for exact evidence and limitations.
+> Phases 0, 1, and 2 are verified milestones. The current verified Unity surface includes status/hierarchy/diagnostics/object resolution, Transform editing, GameObject update/delete, Component inspection and bounded mutation, Asset search/inspection, Prefab inspection/instantiation, create-only Prefab Asset authoring, bounded single-property Prefab override apply, direct scene-Prefab override recording, installed-package Test Runner discovery, and bounded Script read. The latest real Unity baseline is **85 passed / 0 failed** on Unity 6000.3.21f1, plus dedicated live MCP verification for Prefab property apply and Script read. See [`STATUS.md`](STATUS.md) for exact evidence and limitations.
 
 Unity AI Bridge is intended to make AI-assisted Unity Editor control easy enough that users do not need to understand MCP, ports, networking, or Unity editor scripting just to get started.
 
@@ -21,9 +21,7 @@ The control layer is deliberately **provider-neutral**. The same Unity-side impl
 
 The public `unity-ai-bridge` repository is licensed under the **Apache License 2.0**. See [`LICENSE`](LICENSE).
 
-Apache-2.0 permits use, modification, distribution, and commercial use subject to its terms, including preservation of required notices. It also includes an explicit patent license and does not grant permission to use project trademarks beyond the license's limited terms.
-
-This license applies to this public repository. The separate private `unity-ai-mcp-infra` repository is managed-service infrastructure and is not automatically licensed under this repository's Apache-2.0 license.
+This public core may be used, modified, distributed, and commercially used under Apache-2.0 terms. The separate private `unity-ai-mcp-infra` repository is managed-service infrastructure and is not automatically licensed under this repository's license.
 
 The long-term product direction remains a public/self-hostable core plus an optional managed hosted service.
 
@@ -37,9 +35,10 @@ The long-term product direction remains a public/self-hostable core plus an opti
 - [`AGENTS.md`](AGENTS.md) — mandatory AI/contributor rules
 - [`REFERENCES.md`](REFERENCES.md) — external research references; not incorporated code
 - [`CHANGELOG.md`](CHANGELOG.md) — notable project changes
-- [`LICENSE`](LICENSE) — Apache License 2.0 terms for this public repository
-- [`llms.txt`](llms.txt) — compact AI-agent entrypoint
+- [`docs/TESTING.md`](docs/TESTING.md) — repeatable verification gates
 - [`docs/OPEN_WEIGHT_MODEL_COMPATIBILITY.md`](docs/OPEN_WEIGHT_MODEL_COMPATIBILITY.md) — deferred compatibility direction for local/open-weight agents
+- [`LICENSE`](LICENSE) — Apache License 2.0 terms
+- [`llms.txt`](llms.txt) — compact AI-agent entrypoint
 
 [`ARCHITECTURE.md`](ARCHITECTURE.md) is the concise high-level architecture summary. `DESIGN.md` is the detailed design authority.
 
@@ -69,7 +68,7 @@ The exact implementation/verification state moves faster than this overview; `ST
 - **MCP-native:** MCP is the canonical AI-client/tool boundary; vendor/model integrations stay thin.
 - **Reliable before broad:** prefer a small set of dependable, composable tool families over hundreds of fragile tools.
 - **Safe by default:** remote editor control, destructive actions, credentials, and arbitrary execution need explicit boundaries.
-- **Recoverable:** use Unity Undo where practical and report dirty/unsaved state; persistent asset writes that cannot honestly promise Undo are classified separately.
+- **Recoverable:** use Unity Undo where practical and report dirty/unsaved state; persistent asset/file writes that cannot honestly promise Undo are classified separately.
 - **Reconnect-aware:** compilation/domain reload, editor restart, and network interruption are normal lifecycle events.
 - **Retry-safe:** ambiguous retries must not silently repeat Unity mutations.
 - **Verifiable:** transport success is not proof that the requested Unity state change happened.
@@ -106,8 +105,8 @@ Current direction:
 - Unity bridge: transport-independent protocol, WebSocket first
 - conflicting writes: serialized by default
 - target identity: not dependent on Unity `InstanceID` alone
-- mutations: request identity/retry protection, optimistic state preconditions, Undo where practical, semantic readback, rollback/rollback verification where applicable, dirty-state reporting
-- persistent asset writes: destructive-risk classification, explicit preconditions/readback, and conservative retry behavior when safe generic rollback/Undo cannot be promised
+- scene mutations: request identity/retry protection, optimistic state preconditions, Undo where practical, semantic readback, rollback/rollback verification where applicable
+- persistent asset/file writes: explicit preconditions/readback and conservative retry/recovery behavior when generic Unity Undo cannot be promised
 - client integrations: reuse the common MCP core; vendor-specific adapters/metadata should remain thin
 - portable packaging: Agent Plugins 1.0 is a candidate distribution layer to evaluate, not a replacement for MCP and not a core runtime dependency
 - open-weight/local models: later compatibility target through MCP-capable agent runtimes; the Unity core will not become an inference server/model manager
@@ -124,13 +123,14 @@ Verified Phase 3 slices include:
 - Asset search/inspection
 - Prefab inspection and linked instantiation
 - create-only Prefab Asset creation
+- bounded single-property Prefab override apply
+- direct Prefab-instance override recording for direct Transform/GameObject writes
 - installed-package Test Runner discovery/bootstrap
+- bounded Script read with exact GUID/path, strict UTF-8, raw SHA-256, dependencyHash, and deterministic paging
 
-The latest real Unity EditMode verification is **75 passed / 0 failed** on Unity 6000.3.21f1. New write families must independently adopt and verify the relevant Phase 2 reliability contract before being marked Verified.
+The latest real Unity EditMode verification is **85 passed / 0 failed** on Unity 6000.3.21f1. Script read additionally passed a live official-MCP-client gate that reconstructed the package's `BridgeProtocol.cs` across four chunks with stable GUID/dependencyHash/SHA-256 metadata and `projectMutated=false`.
 
-Implemented after that baseline:
-
-- bounded single-property Prefab override apply — `prefab.property.apply` / `unity_apply_prefab_property_override` — explicit Prefab Asset target, exact dependencyHash + scene-state preconditions, no arrays/Apply All, native `SerializedProperty.DataEquals` readback, persistent-destructive classification; real Unity verification pending for PR #36.
+New write families must independently adopt and verify the relevant reliability contract before being marked Verified.
 
 ## Package tests and Test Runner
 
@@ -138,9 +138,32 @@ The package contains EditMode tests under `unity-package/Tests/Editor`.
 
 Unity normally requires non-embedded packages to be listed in the consuming project's `Packages/manifest.json` `testables` array before their package tests appear in Test Runner. Unity AI Bridge includes a development-install bootstrap that adds itself automatically for Local, LocalTarball, and Git package sources. Embedded packages need no such entry. Registry installs are not automatically modified. When Test Framework does not immediately discover the newly testable package, the bootstrap performs one guarded package reimport.
 
-This installed-package flow was reproduced on Unity 6000.3.21f1 on 2026-08-24; the package appeared automatically in EditMode Test Runner and completed **75/75** tests.
+This installed-package flow was reproduced on Unity 6000.3.21f1 on 2026-08-24. Historical package-suite milestones are 75/75, 80/80, 81/81, and the current **85/85** baseline.
 
-See [`unity-package/Tests/README.md`](unity-package/Tests/README.md) for the exact behavior and manual fallback.
+See [`unity-package/Tests/README.md`](unity-package/Tests/README.md) and [`docs/TESTING.md`](docs/TESTING.md).
+
+## Near-term engineering direction
+
+The immediate Phase 3 target is the first **reload-safe Script replace** workflow.
+
+It must build on the verified `script.read` observation token rather than exposing blind file overwrite:
+
+```text
+read current Assets/*.cs
+ -> expected contentSha256
+ -> compare-and-swap precondition
+ -> bounded source replacement
+ -> persistent byte readback
+ -> Unity import / compile / possible domain reload
+ -> reconnect + mutation reconciliation
+ -> new SHA + compile diagnostics outcome
+```
+
+Package scripts remain read-only in the first write slice. Source-file writes are not Unity Undo, and compile failure is not the same thing as persistence failure, so both recovery and result semantics must be explicit.
+
+After the useful local core is strong enough, Phase 4 focuses on securely connecting cloud AI hosts to a user's local Unity Editor through remote MCP, outbound Unity connectivity, pairing/authentication, and editor routing.
+
+Portable/plugin packaging and multi-provider/model compatibility come after the core and remote path are trustworthy.
 
 ## Repository split
 
@@ -157,17 +180,9 @@ unity-ai-mcp-infra     (PRIVATE)
 
 The private repository should compose/deploy the public core instead of becoming a second private implementation of the same Unity/MCP logic.
 
-## Near-term engineering direction
-
-Phase 3 continues expanding a small, useful Unity editing surface while carrying forward the verified reliability contract. The current Prefab work deliberately starts with one explicit property override rather than exposing broad Apply All semantics before the narrower contract is trustworthy.
-
-After the useful local core is strong enough, Phase 4 focuses on the difficult product boundary that local MCP clients do not solve by themselves: securely connecting cloud AI hosts to a user's local Unity Editor through remote MCP, outbound Unity connectivity, pairing/authentication, and editor routing.
-
-Portable/plugin packaging and multi-provider/model compatibility come after the core and remote path are trustworthy.
-
 ## Why not start with 300 tools?
 
-The hard parts are not the tool count. They are safe Unity main-thread execution, object identity, retries, Undo, persistent asset writes, compilation/domain reload, reconnection, permission boundaries, semantic verification, rollback behavior, and multi-editor routing.
+The hard parts are not the tool count. They are safe Unity main-thread execution, object identity, retries, Undo, persistent asset/file writes, compilation/domain reload, reconnection, permission boundaries, semantic verification, rollback/recovery behavior, and multi-editor routing.
 
 The project prefers stable domain tools/tool families over a giant surface whose behavior cannot be trusted.
 
