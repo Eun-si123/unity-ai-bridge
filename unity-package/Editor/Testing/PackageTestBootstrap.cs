@@ -12,7 +12,10 @@ namespace UnityAiBridge.Editor.Testing
     internal static class PackageTestBootstrap
     {
         internal const string PackageName = "com.eunsung.unity-ai-bridge";
+        internal const string TestAssemblyName = "EunSung.UnityAiBridge.Editor.Tests";
+
         private const string MenuPath = "Tools/Unity AI Bridge/Enable Package Tests";
+        private const string ReimportSessionKey = "UnityAiBridge.PackageTests.ReimportAttempted";
         private const int StartupRetryBudget = 8;
 
         private static int _remainingStartupRetries = StartupRetryBudget;
@@ -20,13 +23,8 @@ namespace UnityAiBridge.Editor.Testing
 
         static PackageTestBootstrap()
         {
-            // Unity raises this after package registration has been applied and after the
-            // package-triggered compile/domain reload. Register from InitializeOnLoad so
-            // first-install registration cannot race a one-shot delayCall.
             Events.registeredPackages -= OnRegisteredPackages;
             Events.registeredPackages += OnRegisteredPackages;
-
-            // Also cover an already-installed Local/Git package after a git pull or Editor restart.
             ScheduleAttempt();
         }
 
@@ -35,13 +33,19 @@ namespace UnityAiBridge.Editor.Testing
         {
             try
             {
-                EnsurePackageTestsEnabled(logSuccess: true);
+                var packageInfo = UnityEditor.PackageManager.PackageInfo.FindForPackageName(PackageName);
+                if (packageInfo == null)
+                {
+                    throw new InvalidOperationException("Unity Package Manager could not resolve the Unity AI Bridge package.");
+                }
+
+                EnsurePackageTestsEnabled(packageInfo.assetPath, logSuccess: true);
             }
             catch (Exception exception)
             {
                 Debug.LogError(
                     "[Unity AI Bridge] Could not enable package tests. Add '" + PackageName +
-                    "' to Packages/manifest.json -> testables manually. " + exception);
+                    "' to Packages/manifest.json -> testables manually, then Reimport the package. " + exception);
             }
         }
 
@@ -103,8 +107,6 @@ namespace UnityAiBridge.Editor.Testing
 
                 if (packageInfo.source == PackageSource.Embedded)
                 {
-                    // Unity treats embedded packages as development packages and exposes
-                    // their tests without a project-manifest testables entry.
                     return;
                 }
 
@@ -113,14 +115,14 @@ namespace UnityAiBridge.Editor.Testing
                     return;
                 }
 
-                EnsurePackageTestsEnabled(logSuccess: true);
+                EnsurePackageTestsEnabled(packageInfo.assetPath, logSuccess: true);
             }
             catch (Exception exception)
             {
                 Debug.LogWarning(
                     "[Unity AI Bridge] Could not automatically enable package tests. " +
                     "Use Tools > Unity AI Bridge > Enable Package Tests or add '" + PackageName +
-                    "' to Packages/manifest.json -> testables manually. " + exception.Message);
+                    "' to Packages/manifest.json -> testables manually, then Reimport the package. " + exception.Message);
             }
         }
 
@@ -131,7 +133,7 @@ namespace UnityAiBridge.Editor.Testing
                    source == PackageSource.Git;
         }
 
-        private static void EnsurePackageTestsEnabled(bool logSuccess)
+        private static void EnsurePackageTestsEnabled(string packageAssetPath, bool logSuccess)
         {
             var projectRoot = Directory.GetParent(Application.dataPath);
             if (projectRoot == null)
@@ -151,39 +153,88 @@ namespace UnityAiBridge.Editor.Testing
                 PackageName,
                 out var changed);
 
-            if (!changed)
+            if (changed)
+            {
+                var tempPath = manifestPath + ".unity-ai-bridge.tmp";
+                try
+                {
+                    File.WriteAllText(tempPath, updated, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+                    File.Copy(tempPath, manifestPath, overwrite: true);
+                }
+                finally
+                {
+                    if (File.Exists(tempPath))
+                    {
+                        File.Delete(tempPath);
+                    }
+                }
+
+                if (logSuccess)
+                {
+                    Debug.Log("[Unity AI Bridge] Added the package to Packages/manifest.json -> testables.");
+                }
+            }
+            else if (logSuccess && IsTestAssemblyLoaded())
+            {
+                Debug.Log("[Unity AI Bridge] Package tests are already enabled and the EditMode test assembly is loaded.");
+            }
+
+            EnsureTestAssemblyDiscovery(packageAssetPath, logSuccess);
+        }
+
+        private static void EnsureTestAssemblyDiscovery(string packageAssetPath, bool logSuccess)
+        {
+            if (IsTestAssemblyLoaded())
+            {
+                return;
+            }
+
+            if (SessionState.GetBool(ReimportSessionKey, false))
             {
                 if (logSuccess)
                 {
-                    Debug.Log("[Unity AI Bridge] Package tests are already enabled for this project.");
+                    Debug.LogWarning(
+                        "[Unity AI Bridge] Package tests are enabled but the test assembly is still not loaded after a reimport attempt. " +
+                        "If Test Runner is still empty, right-click Unity AI Bridge under Project > Packages and choose Reimport, or restart the Editor.");
                 }
                 return;
             }
 
-            var tempPath = manifestPath + ".unity-ai-bridge.tmp";
-            try
+            if (string.IsNullOrWhiteSpace(packageAssetPath) || !AssetDatabase.IsValidFolder(packageAssetPath))
             {
-                File.WriteAllText(tempPath, updated, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-                File.Copy(tempPath, manifestPath, overwrite: true);
-            }
-            finally
-            {
-                if (File.Exists(tempPath))
-                {
-                    File.Delete(tempPath);
-                }
+                throw new InvalidOperationException(
+                    "Could not resolve the package AssetDatabase path required for Test Runner reimport: '" +
+                    packageAssetPath + "'.");
             }
 
-            // Do not call Client.Resolve() here. This code often runs immediately after a package
-            // registration operation, and starting another Package Manager client operation can race
-            // the operation that just installed/updated the package. Unity observes project-manifest
-            // changes and runs its normal package registration/refresh cycle.
+            SessionState.SetBool(ReimportSessionKey, true);
+
             if (logSuccess)
             {
                 Debug.Log(
-                    "[Unity AI Bridge] Added the package to Packages/manifest.json -> testables. " +
-                    "Let Unity finish the package refresh/recompile; EditMode tests should then appear in Test Runner.");
+                    "[Unity AI Bridge] Package tests are enabled but the test assembly is not loaded yet. " +
+                    "Reimporting the package once so Unity Test Framework can discover it.");
             }
+
+            AssetDatabase.ImportAsset(
+                packageAssetPath,
+                ImportAssetOptions.ForceUpdate | ImportAssetOptions.ImportRecursive);
+        }
+
+        private static bool IsTestAssemblyLoaded()
+        {
+            foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                if (string.Equals(
+                        assembly.GetName().Name,
+                        TestAssemblyName,
+                        StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
     }
 }
