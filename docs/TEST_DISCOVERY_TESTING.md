@@ -23,11 +23,11 @@ PASS requires:
 - full EditMode package suite:
 
 ```text
-104 Passed
+105 Passed
 0 Failed
 ```
 
-The four new EditMode tests validate discovery string/bounds behavior only. They do not recursively invoke Test Framework discovery inside the ordinary suite.
+The five new EditMode tests validate discovery string/bounds/cursor behavior only. They do not recursively invoke Test Framework discovery inside the ordinary suite.
 
 The dedicated PlayMode verifier assembly itself is unchanged from PR #48; a new manual 1/1 PlayMode rerun is not required solely for this read-only discovery slice unless the live gate exposes a PlayMode-discovery problem.
 
@@ -44,15 +44,16 @@ The verifier uses the official MCP TypeScript client and must prove:
 
 1. `unity_list_tests` is advertised and live `test.list` capability is present,
 2. EditMode assembly discovery includes `EunSung.UnityAiBridge.Editor.Tests`,
-3. its native Test Framework test-case count is at least the 104-test candidate baseline,
-4. filtering `TestDiscoveryControlTests` returns exactly four deterministic leaf full names,
+3. its native Test Framework test-case count is at least the 105-test candidate baseline,
+4. filtering `TestDiscoveryControlTests` returns exactly five deterministic leaf full names,
 5. those full names are directly selectable by the current exact-run contract,
 6. one-result paging returns distinct, ordinally increasing first/second leaf names with correct `nextOffset`/`truncated` metadata,
-7. PlayMode assembly discovery includes `EunSung.UnityAiBridge.PlayMode.Tests` with exactly one test,
-8. PlayMode leaf discovery returns exact full name `UnityAiBridge.PlayMode.Tests.PlayModeVerifierTests.RunsOneFrameInsidePlayMode`,
-9. an unknown exact assembly fails with `test_assembly_unavailable`,
-10. final Editor state remains stable Edit Mode,
-11. the scene state epoch/revision token is unchanged across discovery reads.
+7. a page requested beyond the result end returns no entries without rewinding `nextOffset`,
+8. PlayMode assembly discovery includes `EunSung.UnityAiBridge.PlayMode.Tests` with exactly one test,
+9. PlayMode leaf discovery returns exact full name `UnityAiBridge.PlayMode.Tests.PlayModeVerifierTests.RunsOneFrameInsidePlayMode`,
+10. an unknown exact assembly fails with `test_assembly_unavailable`,
+11. final Editor state remains stable Edit Mode,
+12. the scene state epoch/revision token is unchanged across discovery reads.
 
 No sentinel asset, test execution, Play Mode transition, or project cleanup should be needed.
 
@@ -65,10 +66,11 @@ The verifier prints a final JSON block similar to:
 {
   "unityVersion": "6000.3.21f1",
   "editAssembly": "EunSung.UnityAiBridge.Editor.Tests",
-  "editAssemblyTestCaseCount": 104,
-  "discoveryContractTestCount": 4,
+  "editAssemblyTestCaseCount": 105,
+  "discoveryContractTestCount": 5,
   "deterministicDiscoveryOrder": true,
   "pagingVerified": true,
+  "pastEndCursorMonotonic": true,
   "playAssembly": "EunSung.UnityAiBridge.PlayMode.Tests",
   "playAssemblyTestCaseCount": 1,
   "exactPlayModeSelector": "UnityAiBridge.PlayMode.Tests.PlayModeVerifierTests.RunsOneFrameInsidePlayMode",
@@ -85,7 +87,7 @@ The verifier prints a final JSON block similar to:
 PR #49 may be marked Verified only after:
 
 ```text
-EditMode regression: 104/104
+EditMode regression: 105/105
 Live MCP verify:test-discovery: PASS
 ```
 
