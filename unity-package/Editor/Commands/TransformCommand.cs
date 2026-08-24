@@ -451,6 +451,10 @@ namespace UnityAiBridge.Editor.Commands
             transform.localPosition = localPosition.ToVector3();
             transform.localRotation = Quaternion.Euler(localEulerAngles.ToVector3());
             transform.localScale = localScale.ToVector3();
+            if (PrefabUtility.IsPartOfNonAssetPrefabInstance(transform))
+            {
+                PrefabUtility.RecordPrefabInstancePropertyModifications(transform);
+            }
             EditorSceneManager.MarkSceneDirty(context.activeScene);
 
             return new TransformMutationState
