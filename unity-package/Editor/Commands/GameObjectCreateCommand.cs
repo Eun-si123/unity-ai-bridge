@@ -65,6 +65,14 @@ namespace UnityAiBridge.Editor.Commands
         }
     }
 
+    internal sealed class GameObjectCreateUnsavedSceneException : InvalidOperationException
+    {
+        public GameObjectCreateUnsavedSceneException(string message)
+            : base(message)
+        {
+        }
+    }
+
     internal static class GameObjectCreateCommand
     {
         public const int MaximumNameLength = 128;
@@ -108,6 +116,8 @@ namespace UnityAiBridge.Editor.Commands
                 throw new GameObjectCreateCompilingException(
                     "Unity is compiling; gameObject.create was not executed.");
             }
+
+            EnsureActiveSceneSupportsDurableIdentity();
 
             var normalizedExpectedEpoch = expectedStateEpoch ?? string.Empty;
             var sessionKey = SessionKeyPrefix + mutationId;
@@ -214,6 +224,22 @@ namespace UnityAiBridge.Editor.Commands
         {
             var epoch = expectedStateEpoch ?? string.Empty;
             return $"name:{name.Length}:{name}|epoch:{epoch.Length}:{epoch}|revision:{expectedStateRevision}";
+        }
+
+        internal static void EnsureActiveSceneSupportsDurableIdentity()
+        {
+            var scene = SceneManager.GetActiveScene();
+            if (!scene.IsValid() || !scene.isLoaded)
+            {
+                return;
+            }
+
+            if (string.IsNullOrEmpty(scene.path))
+            {
+                throw new GameObjectCreateUnsavedSceneException(
+                    "gameObject.create requires the active scene to be saved to an asset before mutation. " +
+                    "Unity GlobalObjectId cannot provide the durable scene-object identity required by retry, verification, and recovery semantics for an unsaved temporary scene. Save or reopen a persistent scene and retry with a new mutationId.");
+            }
         }
 
         private static CreateMutationState CreateNativeObject(
