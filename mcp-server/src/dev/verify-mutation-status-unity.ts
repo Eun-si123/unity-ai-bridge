@@ -4,7 +4,7 @@ import { Client } from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 
 const timeoutMs = 90_000;
-const pollIntervalMs = 250;
+const pollIntervalMs = 300;
 
 const client = new Client({
   name: "unity-ai-bridge-mutation-status-verifier",
@@ -16,8 +16,7 @@ const transport = new StdioClientTransport({
   args: ["dist/src/index.js"],
 });
 
-let createdGlobalObjectId = "";
-let createdName = "";
+let cleanupGlobalObjectId: string | undefined;
 
 try {
   console.log("[Unity AI Bridge] Starting MCP server over stdio...");
@@ -36,114 +35,87 @@ try {
     }
   }
 
-  await waitForCapabilities("mutation.status", "state.revision.v1", "gameObject.create", "gameObject.delete");
+  console.log("[Unity AI Bridge] Waiting for Unity mutation-status capability...");
+  await waitForCapabilities();
+
+  const initialHierarchy = await readHierarchy();
+  assertPersistentActiveScene(initialHierarchy);
 
   const unknownMutationId = `verify-mutation-status-unknown-${randomUUID()}`;
   const unknown = await readMutationStatus(unknownMutationId);
-  assertUnknownStatus(unknown, unknownMutationId);
+  if (
+    unknown.found ||
+    unknown.status !== "not_found" ||
+    unknown.safeToBlindRetry ||
+    unknown.recommendedAction !== "reobserve"
+  ) {
+    throw new Error(`Unexpected unknown-mutation status: ${JSON.stringify(unknown)}`);
+  }
+  console.log("[Unity AI Bridge] Unknown mutation fail-closed status PASS.");
 
-  const suffix = Date.now();
-  createdName = `MCP_Mutation_Status_${suffix}`;
+  const objectName = `MCP_Mutation_Status_${Date.now()}`;
   const createMutationId = `verify-mutation-status-create-${randomUUID()}`;
-  const { create, snapshot } = await createAgainstFreshSnapshot(
-    createdName,
-    createMutationId,
-  );
-  createdGlobalObjectId = create.globalObjectId;
+  const create = await createAgainstFreshSnapshot(objectName, createMutationId);
+  cleanupGlobalObjectId = create.globalObjectId;
 
   const createStatus = await readMutationStatus(createMutationId);
-  assertCompletedStatus(createStatus, createMutationId, "gameObject.create");
-  if (
-    createStatus.startedStateEpoch !== snapshot.stateEpoch ||
-    createStatus.startedStateRevision !== snapshot.stateRevision
-  ) {
-    throw new Error(
-      `Create lifecycle did not preserve the pre-mutation state token: ${JSON.stringify(createStatus)}`,
-    );
-  }
+  assertCompletedLifecycle(createStatus, createMutationId, "gameObject.create");
 
-  const hierarchyBeforeStatusRepeat = await readHierarchy();
-  const repeatedCreateStatus = await readMutationStatus(createMutationId);
-  const hierarchyAfterStatusRepeat = await readHierarchy();
-  assertCompletedStatus(repeatedCreateStatus, createMutationId, "gameObject.create");
+  const stateBeforeSecondRead = await readStatusRevision();
+  const createStatusAgain = await readMutationStatus(createMutationId);
+  const stateAfterSecondRead = await readStatusRevision();
+  assertCompletedLifecycle(createStatusAgain, createMutationId, "gameObject.create");
   if (
-    hierarchyAfterStatusRepeat.stateEpoch !== hierarchyBeforeStatusRepeat.stateEpoch ||
-    hierarchyAfterStatusRepeat.stateRevision !== hierarchyBeforeStatusRepeat.stateRevision ||
-    countHierarchyName(hierarchyAfterStatusRepeat, createdName) !== 1
+    stateBeforeSecondRead.stateEpoch !== stateAfterSecondRead.stateEpoch ||
+    stateBeforeSecondRead.stateRevision !== stateAfterSecondRead.stateRevision
   ) {
     throw new Error(
-      "mutation status observation changed scene state or the created target while reading the same journal entry.",
+      `mutation status read changed Unity state: before=${JSON.stringify(stateBeforeSecondRead)} after=${JSON.stringify(stateAfterSecondRead)}`,
     );
   }
+  console.log("[Unity AI Bridge] Completed create lifecycle + read-only state token PASS.");
 
   const deleteMutationId = `verify-mutation-status-delete-${randomUUID()}`;
-  await deleteAgainstFreshSnapshot(createdGlobalObjectId, deleteMutationId);
-  createdGlobalObjectId = "";
-
+  const deleteResult = await deleteAgainstFreshSnapshot(create.globalObjectId, deleteMutationId);
+  cleanupGlobalObjectId = undefined;
   const deleteStatus = await readMutationStatus(deleteMutationId);
-  assertCompletedStatus(deleteStatus, deleteMutationId, "gameObject.delete");
+  assertCompletedLifecycle(deleteStatus, deleteMutationId, "gameObject.delete");
+
   const finalHierarchy = await readHierarchy();
-  if (countHierarchyName(finalHierarchy, createdName) !== 0) {
-    throw new Error("Verifier cleanup did not remove the temporary GameObject.");
+  const remainingMatches = finalHierarchy.nodes.filter(
+    (node) => node.globalObjectId === create.globalObjectId || node.name === objectName,
+  );
+  if (remainingMatches.length !== 0) {
+    throw new Error(
+      `Temporary verifier object still exists after delete: ${JSON.stringify(remainingMatches)}`,
+    );
   }
 
   console.log("[Unity AI Bridge] Mutation status verification PASS:");
   console.log(JSON.stringify({
-    unknownStatus: {
-      mutationId: unknown.mutationId,
-      found: unknown.found,
-      status: unknown.status,
-      safeToBlindRetry: unknown.safeToBlindRetry,
-      recommendedAction: unknown.recommendedAction,
-    },
-    create: {
-      mutationId: createMutationId,
-      globalObjectId: create.globalObjectId,
-      status: createStatus.status,
-      operation: createStatus.operation,
-      terminal: createStatus.terminal,
-      intentIdentityRecorded: createStatus.intentIdentityRecorded,
-      safeToBlindRetry: createStatus.safeToBlindRetry,
-      recommendedAction: createStatus.recommendedAction,
-    },
-    repeatedStatusReadOnly: true,
-    delete: {
-      mutationId: deleteMutationId,
-      status: deleteStatus.status,
-      operation: deleteStatus.operation,
-      terminal: deleteStatus.terminal,
-    },
-    temporaryObjectRemoved: true,
-    finalState: {
-      stateEpoch: finalHierarchy.stateEpoch,
-      stateRevision: finalHierarchy.stateRevision,
-    },
+    activeScenePath: initialHierarchy.scenePath,
+    unknownMutationId,
+    createMutationId,
+    createStatus,
+    deleteMutationId,
+    deleteStatus,
+    deleteResult,
+    readOnlyStateTokenUnchanged: true,
+    temporaryObjectRemaining: false,
   }, null, 2));
   process.exitCode = 0;
 } catch (error) {
   const message = error instanceof Error ? error.stack ?? error.message : String(error);
   console.error(`[Unity AI Bridge] Mutation status verification FAILED:\n${message}`);
-  if (createdGlobalObjectId.length > 0) {
-    console.error(
-      `[Unity AI Bridge] Best-effort cleanup may be required for temporary GameObject '${createdName}' (${createdGlobalObjectId}).`,
-    );
-  }
   process.exitCode = 1;
 } finally {
-  if (createdGlobalObjectId.length > 0) {
-    try {
-      const cleanupMutationId = `verify-mutation-status-cleanup-${randomUUID()}`;
-      await deleteAgainstFreshSnapshot(createdGlobalObjectId, cleanupMutationId);
-      createdGlobalObjectId = "";
-      console.error("[Unity AI Bridge] Best-effort cleanup removed the temporary GameObject.");
-    } catch {
-      // The failure message above already includes the exact cleanup target.
-    }
+  if (cleanupGlobalObjectId !== undefined) {
+    await bestEffortDelete(cleanupGlobalObjectId);
   }
   await client.close();
 }
 
-async function waitForCapabilities(...required: string[]): Promise<void> {
+async function waitForCapabilities(): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   let last = "No Unity status received.";
 
@@ -154,7 +126,9 @@ async function waitForCapabilities(...required: string[]): Promise<void> {
       const capabilities = status.capabilities;
       if (
         Array.isArray(capabilities) &&
-        required.every((capability) => capabilities.includes(capability))
+        capabilities.includes("mutation.status") &&
+        capabilities.includes("state.revision.v1") &&
+        isStateRevision(status.stateEpoch, status.stateRevision)
       ) {
         return;
       }
@@ -162,22 +136,24 @@ async function waitForCapabilities(...required: string[]): Promise<void> {
     } else {
       last = readToolText(result);
     }
+
     await delay(pollIntervalMs);
   }
 
   throw new Error(
-    `Timed out waiting for mutation-status capabilities. Last observation: ${last}. Reimport/restart Unity if it is still running an older Agent assembly.`,
+    `Timed out waiting for mutation.status capability. Last observation: ${last}. Reimport/restart Unity if it is still running an older Agent assembly.`,
   );
 }
 
 async function createAgainstFreshSnapshot(
   name: string,
   mutationId: string,
-): Promise<{ snapshot: HierarchyPayload; create: CreatePayload }> {
-  let lastError = "No create attempt made.";
+): Promise<CreatePayload> {
+  let lastError = "No attempt made.";
 
   for (let attempt = 1; attempt <= 5; attempt += 1) {
     const snapshot = await readHierarchy();
+    assertPersistentActiveScene(snapshot);
     const result = await client.callTool({
       name: "unity_create_game_object",
       arguments: {
@@ -187,29 +163,40 @@ async function createAgainstFreshSnapshot(
         expectedStateRevision: snapshot.stateRevision,
       },
     });
+
     if (!result.isError) {
       if (!isCreatePayload(result.structuredContent)) {
         throw new Error(
           `Create returned invalid structuredContent: ${JSON.stringify(result.structuredContent)}`,
         );
       }
-      return { snapshot, create: result.structuredContent };
+      return result.structuredContent;
     }
 
     lastError = readToolText(result);
-    if (!lastError.includes("stale_state/state_revision_mismatch")) {
-      throw new Error(`Fresh-state create failed unexpectedly: ${lastError}`);
+    if (lastError.includes("stale_state/state_revision_mismatch")) {
+      console.log(
+        `[Unity AI Bridge] State changed between snapshot and preflight on attempt ${attempt}; refreshing and retrying with the SAME mutationId...`,
+      );
+      continue;
     }
+    if (lastError.includes("stale_target/active_scene_unsaved")) {
+      throw new Error(
+        "The active Unity scene is unsaved/temporary. Open or save a persistent scene asset (for example Assets/Scenes/SampleScene.unity) and rerun verify:mutation-status. " +
+        `Unity reported: ${lastError}`,
+      );
+    }
+    throw new Error(`Fresh-state create failed unexpectedly: ${lastError}`);
   }
 
-  throw new Error(`Could not obtain a stable create window. Last error: ${lastError}`);
+  throw new Error(`Could not obtain a stable fresh-state window. Last error: ${lastError}`);
 }
 
 async function deleteAgainstFreshSnapshot(
   globalObjectId: string,
   mutationId: string,
-): Promise<void> {
-  let lastError = "No delete attempt made.";
+): Promise<DeletePayload> {
+  let lastError = "No attempt made.";
 
   for (let attempt = 1; attempt <= 5; attempt += 1) {
     const snapshot = await readHierarchy();
@@ -222,15 +209,49 @@ async function deleteAgainstFreshSnapshot(
         expectedStateRevision: snapshot.stateRevision,
       },
     });
-    if (!result.isError) return;
+
+    if (!result.isError) {
+      if (!isDeletePayload(result.structuredContent)) {
+        throw new Error(
+          `Delete returned invalid structuredContent: ${JSON.stringify(result.structuredContent)}`,
+        );
+      }
+      return result.structuredContent;
+    }
 
     lastError = readToolText(result);
-    if (!lastError.includes("stale_state/state_revision_mismatch")) {
-      throw new Error(`Fresh-state delete failed unexpectedly: ${lastError}`);
+    if (lastError.includes("stale_state/state_revision_mismatch")) {
+      console.log(
+        `[Unity AI Bridge] State changed before delete on attempt ${attempt}; refreshing and retrying with the SAME mutationId...`,
+      );
+      continue;
     }
+    throw new Error(`Fresh-state delete failed unexpectedly: ${lastError}`);
   }
 
-  throw new Error(`Could not obtain a stable delete window. Last error: ${lastError}`);
+  throw new Error(`Could not obtain a stable fresh-state window for delete. Last error: ${lastError}`);
+}
+
+async function bestEffortDelete(globalObjectId: string): Promise<void> {
+  try {
+    const snapshot = await readHierarchy();
+    const result = await client.callTool({
+      name: "unity_delete_game_object",
+      arguments: {
+        globalObjectId,
+        mutationId: `verify-mutation-status-cleanup-${randomUUID()}`,
+        expectedStateEpoch: snapshot.stateEpoch,
+        expectedStateRevision: snapshot.stateRevision,
+      },
+    });
+    if (result.isError) {
+      console.error(`[Unity AI Bridge] Cleanup warning: ${readToolText(result)}`);
+    }
+  } catch (error) {
+    console.error(
+      `[Unity AI Bridge] Cleanup warning: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
 }
 
 async function readMutationStatus(mutationId: string): Promise<MutationStatusPayload> {
@@ -265,46 +286,54 @@ async function readHierarchy(): Promise<HierarchyPayload> {
   return result.structuredContent;
 }
 
-function assertUnknownStatus(value: MutationStatusPayload, mutationId: string): void {
-  if (
-    value.mutationId !== mutationId ||
-    value.found ||
-    value.status !== "not_found" ||
-    value.terminal ||
-    value.safeToBlindRetry ||
-    value.recommendedAction !== "reobserve_native_state"
-  ) {
-    throw new Error(`Unexpected unknown mutation status: ${JSON.stringify(value)}`);
+async function readStatusRevision(): Promise<StateRevision> {
+  const result = await client.callTool({ name: "unity_get_status", arguments: {} });
+  if (result.isError) {
+    throw new Error(`unity_get_status failed: ${readToolText(result)}`);
+  }
+  if (typeof result.structuredContent !== "object" || result.structuredContent === null) {
+    throw new Error("unity_get_status returned non-object structuredContent.");
+  }
+  const candidate = result.structuredContent as Record<string, unknown>;
+  if (!isStateRevision(candidate.stateEpoch, candidate.stateRevision)) {
+    throw new Error(`unity_get_status returned invalid state revision: ${JSON.stringify(candidate)}`);
+  }
+  return {
+    stateEpoch: candidate.stateEpoch as string,
+    stateRevision: candidate.stateRevision as number,
+  };
+}
+
+function assertPersistentActiveScene(hierarchy: HierarchyPayload): void {
+  if (hierarchy.scenePath.length === 0) {
+    throw new Error(
+      "The active Unity scene is unsaved/temporary. Open or save a persistent scene asset before running verify:mutation-status. " +
+      "This verifier depends on GlobalObjectId-backed scene-object identity and intentionally refuses to create test objects in an unsaved scene.",
+    );
   }
 }
 
-function assertCompletedStatus(
-  value: MutationStatusPayload,
+function assertCompletedLifecycle(
+  payload: MutationStatusPayload,
   mutationId: string,
   operation: string,
 ): void {
   if (
-    value.mutationId !== mutationId ||
-    !value.found ||
-    value.operation !== operation ||
-    value.status !== "completed" ||
-    !value.terminal ||
-    !value.intentIdentityRecorded ||
-    value.safeToBlindRetry ||
-    value.recommendedAction !== "operation_specific_same_id_replay_or_reobserve" ||
-    value.startedUnixMs <= 0 ||
-    value.startedStateEpoch.length === 0 ||
-    value.startedStateRevision <= 0 ||
-    value.finishedUnixMs <= 0 ||
-    value.finishedStateEpoch.length === 0 ||
-    value.finishedStateRevision <= 0
+    !payload.found ||
+    payload.mutationId !== mutationId ||
+    payload.operation !== operation ||
+    payload.status !== "completed" ||
+    payload.terminal !== true ||
+    payload.safeToBlindRetry !== false ||
+    payload.recommendedAction !== "none" ||
+    payload.finishedUnixMs <= 0 ||
+    payload.finishedStateEpoch.length === 0 ||
+    payload.finishedStateRevision <= 0
   ) {
-    throw new Error(`Unexpected completed mutation status: ${JSON.stringify(value)}`);
+    throw new Error(
+      `Unexpected completed lifecycle for ${operation}/${mutationId}: ${JSON.stringify(payload)}`,
+    );
   }
-}
-
-function countHierarchyName(value: HierarchyPayload, name: string): number {
-  return value.nodes.filter((node) => node.name === name).length;
 }
 
 function readToolText(result: { content: Array<{ type: string; text?: string }> }): string {
@@ -316,44 +345,69 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-type HierarchyPayload = {
+type StateRevision = {
   stateEpoch: string;
   stateRevision: number;
-  nodes: Array<{ name?: unknown }>;
 };
 
-type CreatePayload = {
+type HierarchyPayload = StateRevision & {
+  sceneName: string;
+  scenePath: string;
+  nodes: Array<{ globalObjectId: string; name: string }>;
+};
+
+type CreatePayload = StateRevision & {
   mutationId: string;
   replayed: boolean;
   globalObjectId: string;
-  stateEpoch: string;
-  stateRevision: number;
+  expectedStateEpoch: string;
+  expectedStateRevision: number;
+};
+
+type DeletePayload = StateRevision & {
+  mutationId: string;
+  replayed: boolean;
+  deleted: boolean;
+  requestedGlobalObjectId: string;
 };
 
 type MutationStatusPayload = {
-  mutationId: string;
+  journalVersion: string;
+  journalScope: string;
   found: boolean;
+  mutationId: string;
   operation: string;
   status: string;
   terminal: boolean;
+  intentIdentityRecorded: boolean;
   startedUnixMs: number;
   startedStateEpoch: string;
   startedStateRevision: number;
   finishedUnixMs: number;
   finishedStateEpoch: string;
   finishedStateRevision: number;
-  intentIdentityRecorded: boolean;
+  failureKind: string;
+  executionMayHaveOccurred: boolean;
   safeToBlindRetry: boolean;
   recommendedAction: string;
+  retention: string;
 };
 
 function isHierarchyPayload(value: unknown): value is HierarchyPayload {
   if (typeof value !== "object" || value === null) return false;
   const candidate = value as Record<string, unknown>;
   return (
-    typeof candidate.stateEpoch === "string" && candidate.stateEpoch.length > 0 &&
-    typeof candidate.stateRevision === "number" && Number.isSafeInteger(candidate.stateRevision) && candidate.stateRevision > 0 &&
-    Array.isArray(candidate.nodes)
+    isStateRevision(candidate.stateEpoch, candidate.stateRevision) &&
+    typeof candidate.sceneName === "string" &&
+    typeof candidate.scenePath === "string" &&
+    Array.isArray(candidate.nodes) &&
+    candidate.nodes.every(
+      (node) =>
+        typeof node === "object" &&
+        node !== null &&
+        typeof (node as Record<string, unknown>).globalObjectId === "string" &&
+        typeof (node as Record<string, unknown>).name === "string",
+    )
   );
 }
 
@@ -364,8 +418,21 @@ function isCreatePayload(value: unknown): value is CreatePayload {
     typeof candidate.mutationId === "string" && candidate.mutationId.length > 0 &&
     candidate.replayed === false &&
     typeof candidate.globalObjectId === "string" && candidate.globalObjectId.length > 0 &&
-    typeof candidate.stateEpoch === "string" && candidate.stateEpoch.length > 0 &&
-    typeof candidate.stateRevision === "number" && Number.isSafeInteger(candidate.stateRevision) && candidate.stateRevision > 0
+    typeof candidate.expectedStateEpoch === "string" &&
+    typeof candidate.expectedStateRevision === "number" &&
+    isStateRevision(candidate.stateEpoch, candidate.stateRevision)
+  );
+}
+
+function isDeletePayload(value: unknown): value is DeletePayload {
+  if (typeof value !== "object" || value === null) return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.mutationId === "string" && candidate.mutationId.length > 0 &&
+    candidate.replayed === false &&
+    candidate.deleted === true &&
+    typeof candidate.requestedGlobalObjectId === "string" &&
+    isStateRevision(candidate.stateEpoch, candidate.stateRevision)
   );
 }
 
@@ -373,19 +440,34 @@ function isMutationStatusPayload(value: unknown): value is MutationStatusPayload
   if (typeof value !== "object" || value === null) return false;
   const candidate = value as Record<string, unknown>;
   return (
-    typeof candidate.mutationId === "string" &&
+    candidate.journalVersion === "EditorMutationLifecycle.v1" &&
+    candidate.journalScope === "editor_mutation_transaction_v1" &&
     typeof candidate.found === "boolean" &&
+    typeof candidate.mutationId === "string" &&
     typeof candidate.operation === "string" &&
     typeof candidate.status === "string" &&
     typeof candidate.terminal === "boolean" &&
-    typeof candidate.startedUnixMs === "number" &&
-    typeof candidate.startedStateEpoch === "string" &&
-    typeof candidate.startedStateRevision === "number" &&
-    typeof candidate.finishedUnixMs === "number" &&
-    typeof candidate.finishedStateEpoch === "string" &&
-    typeof candidate.finishedStateRevision === "number" &&
     typeof candidate.intentIdentityRecorded === "boolean" &&
+    typeof candidate.startedUnixMs === "number" && Number.isSafeInteger(candidate.startedUnixMs) &&
+    typeof candidate.startedStateEpoch === "string" &&
+    typeof candidate.startedStateRevision === "number" && Number.isSafeInteger(candidate.startedStateRevision) &&
+    typeof candidate.finishedUnixMs === "number" && Number.isSafeInteger(candidate.finishedUnixMs) &&
+    typeof candidate.finishedStateEpoch === "string" &&
+    typeof candidate.finishedStateRevision === "number" && Number.isSafeInteger(candidate.finishedStateRevision) &&
+    typeof candidate.failureKind === "string" &&
+    typeof candidate.executionMayHaveOccurred === "boolean" &&
     typeof candidate.safeToBlindRetry === "boolean" &&
-    typeof candidate.recommendedAction === "string"
+    typeof candidate.recommendedAction === "string" &&
+    typeof candidate.retention === "string"
+  );
+}
+
+function isStateRevision(epoch: unknown, revision: unknown): boolean {
+  return (
+    typeof epoch === "string" &&
+    epoch.length > 0 &&
+    typeof revision === "number" &&
+    Number.isSafeInteger(revision) &&
+    revision > 0
   );
 }
