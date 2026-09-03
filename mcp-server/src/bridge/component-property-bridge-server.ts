@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto";
 
-import {
-  EditingBridgeServer,
-  type ComponentPropertyPayload,
-  type ComponentSnapshotPayload,
+import type {
+  ComponentPropertyPayload,
+  ComponentSnapshotPayload,
 } from "./editing-bridge-server.js";
 import type { Vector3Payload } from "./local-bridge-server.js";
+import { ReconciledEditingBridgeServer } from "./reconciled-editing-bridge-server.js";
 
 export type ComponentPropertyValue =
   | { kind: "boolean"; boolValue: boolean }
@@ -43,7 +43,7 @@ const MAX_MUTATION_ID_LENGTH = 128;
 const MAX_STATE_EPOCH_LENGTH = 128;
 const MUTATION_ID_PATTERN = /^[A-Za-z0-9._:-]+$/;
 
-export class ComponentPropertyBridgeServer extends EditingBridgeServer {
+export class ComponentPropertyBridgeServer extends ReconciledEditingBridgeServer {
   public async requestSetComponentProperty(
     options: ComponentPropertySetOptions,
     timeoutMs = 5000,
