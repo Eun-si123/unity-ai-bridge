@@ -5,6 +5,7 @@ import {
   PrefabPropertyBridgeServer,
   type PrefabPropertyApplyOptions,
 } from "./bridge/prefab-property-bridge-server.js";
+import { registerMutationTools } from "./mutation-tools.js";
 import { registerPlayModeTools } from "./play-mode-tools.js";
 import { registerTestRunnerTools } from "./test-runner-tools.js";
 
@@ -75,6 +76,7 @@ export function registerPrefabPropertyTools(
   server: McpServer,
   bridge: PrefabPropertyBridgeServer,
 ): void {
+  registerMutationTools(server, bridge);
   registerPlayModeTools(server, bridge);
   registerTestRunnerTools(server, bridge);
 

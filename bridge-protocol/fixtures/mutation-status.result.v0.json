@@ -1,0 +1,28 @@
+{
+  "protocolVersion": "0",
+  "requestId": "fixture-mutation-status",
+  "ok": true,
+  "result": {
+    "mutationId": "fixture-transform-mutation-1",
+    "found": true,
+    "journalKind": "editor_mutation_lifecycle_v1",
+    "sessionScope": "current_editor_session",
+    "coverage": "editor_mutation_transaction_v1",
+    "operation": "transform.set",
+    "status": "completed",
+    "terminal": true,
+    "startedUnixMs": 1788420000000,
+    "startedStateEpoch": "fixture-state-epoch",
+    "startedStateRevision": 10,
+    "finishedUnixMs": 1788420000100,
+    "finishedStateEpoch": "fixture-state-epoch",
+    "finishedStateRevision": 11,
+    "failureKind": "",
+    "intentIdentityRecorded": true,
+    "safeToBlindRetry": false,
+    "recommendedAction": "operation_specific_same_id_replay_or_reobserve"
+  },
+  "warnings": [],
+  "dirtyState": "unchanged",
+  "compileState": "idle"
+}

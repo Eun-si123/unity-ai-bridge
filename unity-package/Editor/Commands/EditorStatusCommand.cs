@@ -33,6 +33,7 @@ namespace UnityAiBridge.Editor.Commands
         private static readonly string[] Capabilities =
         {
             "editor.status",
+            "mutation.status",
             "editor.playMode.set",
             "test.list",
             "test.run.editMode.start",

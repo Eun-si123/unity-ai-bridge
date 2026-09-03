@@ -6,6 +6,42 @@ The project is pre-alpha. Internal package version `0.0.1` does not represent a 
 
 ## Unreleased
 
+### Phase 3 — Bounded Common Mutation Lifecycle Status — Verified slice
+
+#### Added
+
+- Unity `mutation.status` read operation and MCP `unity_get_mutation_status`.
+- Read-only external access to the existing `EditorMutationLifecycle` records used by `EditorMutationTransaction`; no second transaction system was introduced.
+- Explicit journal metadata: `editor_mutation_lifecycle_v1`, `current_editor_session`, and `editor_mutation_transaction_v1` coverage.
+- Conservative lifecycle statuses and recommended next actions for unknown, started, completed, clean-failure, rollback-failure, and rollback-verification-failure states.
+- Privacy boundary that reports only whether immutable intent identity was recorded and never exposes the raw internal intent fingerprint.
+- `safeToBlindRetry=false` for every result in this first slice.
+- Protocol fixtures, Node validation/routing coverage, Unity EditMode contract tests, and the live `verify:mutation-status` MCP verifier.
+- Fail-closed `gameObject.create` preflight for unsaved/temporary active scenes that cannot support durable `GlobalObjectId` scene-object identity.
+
+#### Verification
+
+- PR #52 head `0ee75f40d5fab8b16163015f76820879ac61104a`: Node Verification **PASS** and Phase 1 Local Bridge Verification **PASS**.
+- Real Windows + Unity 6000.3.21f1 installed-package EditMode suite: **111 Passed / 0 Failed**.
+- Live `verify:mutation-status`: **PASS** with saved active scene `Assets/SampleScene.unity`.
+- Unique unknown mutation ID returned `found=false`, `status=not_found`, `safeToBlindRetry=false`, and `recommendedAction=reobserve_native_state`.
+- Temporary `gameObject.create` completed and the lifecycle journal observed state revision **60 -> 61**.
+- Repeating the mutation-status read did not advance the Unity scene state token.
+- Temporary `gameObject.delete` completed and the lifecycle journal observed state revision **61 -> 62**.
+- Final hierarchy verification reported no temporary verifier object remaining.
+
+#### Fixed during verification
+
+- The first added unsaved-scene regression test incorrectly assumed an additive temporary scene could always be created; Unity rejects that setup when the current active untitled scene is already unsaved. The fixture now reuses an already-unsaved scene when available and otherwise creates an isolated additive temporary scene without replacing the user's scene.
+- The first live verifier duplicated an obsolete mutation-status payload schema and stale recommended-action names. The verifier now imports and reuses the production mutation-status validator so contract drift cannot silently recur in that form.
+
+#### Scope / non-goals
+
+- Verified durability is the **current Unity Editor session** through `SessionState`; full Editor-restart persistence is not claimed.
+- First-slice coverage is the common `EditorMutationTransaction` journal only. Script, persistent Prefab/asset, Play Mode, and Test Runner retain operation-specific journals.
+- `not_found` never proves that no side effect occurred and never grants permission for a blind retry.
+- No generic Undo endpoint, arbitrary historical rollback, automatic retry, or cross-journal unification is introduced.
+
 ### Phase 3 — Native Test Framework Discovery — Verified slice
 
 #### Added
