@@ -570,16 +570,6 @@ namespace UnityAiBridge.Editor.Connection
                     exception.Message,
                     cancellationToken);
             }
-            catch (GameObjectCreateUnsavedSceneException exception)
-            {
-                await SendErrorAsync(
-                    current,
-                    command.requestId,
-                    "stale_target",
-                    "active_scene_unsaved",
-                    exception.Message,
-                    cancellationToken);
-            }
             catch (EditorStateStaleException exception)
             {
                 await SendErrorAsync(
@@ -644,15 +634,21 @@ namespace UnityAiBridge.Editor.Connection
                     command.requestId,
                     "validation",
                     "risk_mismatch",
-                    "scene.save requires risk='destructive'.",
+                    "scene.save requires risk='destructive' because it persists Unity state to disk and has no Undo.",
                     cancellationToken);
                 return;
             }
 
-            var expectedScenePath = command.arguments != null ? command.arguments.expectedScenePath : null;
+            var expectedScenePath = command.arguments != null
+                ? command.arguments.expectedScenePath
+                : null;
             var mutationId = command.arguments != null ? command.arguments.mutationId : null;
-            var expectedStateEpoch = command.arguments != null ? command.arguments.expectedStateEpoch : null;
-            var expectedStateRevision = command.arguments != null ? command.arguments.expectedStateRevision : 0;
+            var expectedStateEpoch = command.arguments != null
+                ? command.arguments.expectedStateEpoch
+                : null;
+            var expectedStateRevision = command.arguments != null
+                ? command.arguments.expectedStateRevision
+                : 0;
 
             try
             {
@@ -691,18 +687,7 @@ namespace UnityAiBridge.Editor.Connection
                     ok = true,
                     result = result,
                     warnings = Array.Empty<string>(),
-                    changedTargets = result.saved
-                        ? new[]
-                        {
-                            new BridgeChangedTargetDto
-                            {
-                                globalObjectId = string.Empty,
-                                instanceId = 0,
-                                name = result.sceneName,
-                            },
-                        }
-                        : Array.Empty<BridgeChangedTargetDto>(),
-                    dirtyState = "clean",
+                    dirtyState = result.isDirty ? "dirty" : "clean",
                     undo = new BridgeUndoDto
                     {
                         available = false,
@@ -733,33 +718,43 @@ namespace UnityAiBridge.Editor.Connection
                     exception.Message,
                     cancellationToken);
             }
-            catch (SceneSavePlayingException exception)
+            catch (SceneSavePlayModeException exception)
             {
                 await SendErrorAsync(
                     current,
                     command.requestId,
-                    "validation",
-                    "editor_playing",
+                    "policy",
+                    "play_mode_blocked",
                     exception.Message,
                     cancellationToken);
             }
-            catch (SceneSavePathException exception)
-            {
-                await SendErrorAsync(
-                    current,
-                    command.requestId,
-                    "validation",
-                    "scene_path",
-                    exception.Message,
-                    cancellationToken);
-            }
-            catch (SceneSaveStateMismatchException exception)
+            catch (EditorStateStaleException exception)
             {
                 await SendErrorAsync(
                     current,
                     command.requestId,
                     "stale_state",
                     "state_revision_mismatch",
+                    exception.Message,
+                    cancellationToken);
+            }
+            catch (SceneSaveSceneMismatchException exception)
+            {
+                await SendErrorAsync(
+                    current,
+                    command.requestId,
+                    "stale_state",
+                    "active_scene_mismatch",
+                    exception.Message,
+                    cancellationToken);
+            }
+            catch (SceneSaveUnavailableException exception)
+            {
+                await SendErrorAsync(
+                    current,
+                    command.requestId,
+                    "policy",
+                    "scene_save_unavailable",
                     exception.Message,
                     cancellationToken);
             }
@@ -779,7 +774,7 @@ namespace UnityAiBridge.Editor.Connection
                     current,
                     command.requestId,
                     "stale_state",
-                    "mutation_outcome_incomplete",
+                    "save_outcome_incomplete",
                     exception.Message,
                     cancellationToken);
             }
@@ -788,8 +783,28 @@ namespace UnityAiBridge.Editor.Connection
                 await SendErrorAsync(
                     current,
                     command.requestId,
-                    "stale_target",
-                    "mutation_replay_stale",
+                    "stale_state",
+                    "save_replay_stale",
+                    exception.Message,
+                    cancellationToken);
+            }
+            catch (SceneSaveVerificationException exception)
+            {
+                await SendErrorAsync(
+                    current,
+                    command.requestId,
+                    "unity_api",
+                    "scene_save_verification_failed",
+                    exception.Message,
+                    cancellationToken);
+            }
+            catch (SceneSaveFailedException exception)
+            {
+                await SendErrorAsync(
+                    current,
+                    command.requestId,
+                    "unity_api",
+                    "scene_save_failed",
                     exception.Message,
                     cancellationToken);
             }
@@ -805,25 +820,22 @@ namespace UnityAiBridge.Editor.Connection
             }
         }
 
-        private static async Task SendJsonAsync(
+        private static async Task SendHelloAsync(
             ClientWebSocket current,
-            string json,
+            EditorIdentity identity,
             CancellationToken cancellationToken)
         {
-            var bytes = Encoding.UTF8.GetBytes(json);
-            await SendGate.WaitAsync(cancellationToken);
-            try
+            var hello = new BridgeHelloDto
             {
-                await current.SendAsync(
-                    new ArraySegment<byte>(bytes),
-                    WebSocketMessageType.Text,
-                    true,
-                    cancellationToken);
-            }
-            finally
-            {
-                SendGate.Release();
-            }
+                type = "hello",
+                protocolVersion = BridgeProtocol.Version,
+                editorId = identity.editorId,
+                connectionGeneration = ConnectionGeneration,
+                unityVersion = identity.unityVersion,
+                projectName = identity.projectName,
+            };
+
+            await SendJsonAsync(current, JsonUtility.ToJson(hello), cancellationToken);
         }
 
         private static async Task SendErrorAsync(
@@ -839,33 +851,46 @@ namespace UnityAiBridge.Editor.Connection
                 protocolVersion = BridgeProtocol.Version,
                 requestId = requestId ?? string.Empty,
                 ok = false,
+                warnings = Array.Empty<string>(),
                 error = new BridgeErrorDto
                 {
                     category = category,
                     code = code,
-                    message = message ?? string.Empty,
+                    message = message,
                 },
-                warnings = Array.Empty<string>(),
-                changedTargets = Array.Empty<BridgeChangedTargetDto>(),
-                dirtyState = "unknown",
-                undo = new BridgeUndoDto
-                {
-                    available = false,
-                    groupName = string.Empty,
-                },
-                compileState = "unknown",
             };
 
             await SendJsonAsync(current, JsonUtility.ToJson(response), cancellationToken);
+        }
+
+        private static async Task SendJsonAsync(
+            ClientWebSocket current,
+            string json,
+            CancellationToken cancellationToken)
+        {
+            var payload = Encoding.UTF8.GetBytes(json);
+            await SendGate.WaitAsync(cancellationToken);
+            try
+            {
+                await current.SendAsync(
+                    new ArraySegment<byte>(payload),
+                    WebSocketMessageType.Text,
+                    true,
+                    cancellationToken);
+            }
+            finally
+            {
+                SendGate.Release();
+            }
         }
 
         private static async Task CloseSocketAsync(
             ClientWebSocket current,
             CancellationToken cancellationToken)
         {
-            if (current.State == WebSocketState.Open || current.State == WebSocketState.CloseReceived)
+            if (current.State == WebSocketState.CloseReceived)
             {
-                await current.CloseAsync(
+                await current.CloseOutputAsync(
                     WebSocketCloseStatus.NormalClosure,
                     "closing",
                     cancellationToken);
@@ -874,26 +899,28 @@ namespace UnityAiBridge.Editor.Connection
 
         private static EditorIdentity CreateIdentity()
         {
-            var projectRoot = Directory.GetParent(Application.dataPath)?.FullName ?? Application.dataPath;
-            var normalized = projectRoot.Replace('\\', '/');
+            var projectRoot = Directory.GetParent(Application.dataPath);
+            var projectName = projectRoot != null ? projectRoot.Name : string.Empty;
+            var canonicalPath = projectRoot != null ? projectRoot.FullName : Application.dataPath;
+
+            string id;
             using (var sha256 = SHA256.Create())
             {
-                var hash = sha256.ComputeHash(Encoding.UTF8.GetBytes(normalized));
-                var builder = new StringBuilder(hash.Length * 2);
-                foreach (var value in hash)
+                var digest = sha256.ComputeHash(Encoding.UTF8.GetBytes(canonicalPath));
+                var builder = new StringBuilder(digest.Length * 2);
+                foreach (var value in digest)
                 {
                     builder.Append(value.ToString("x2"));
                 }
-
-                return new EditorIdentity
-                {
-                    protocolVersion = BridgeProtocol.Version,
-                    editorId = builder.ToString(),
-                    connectionGeneration = ConnectionGeneration,
-                    unityVersion = Application.unityVersion,
-                    projectName = Path.GetFileName(projectRoot),
-                };
+                id = builder.ToString();
             }
+
+            return new EditorIdentity
+            {
+                editorId = id,
+                unityVersion = Application.unityVersion,
+                projectName = projectName,
+            };
         }
 
         private static void Shutdown()
@@ -904,18 +931,47 @@ namespace UnityAiBridge.Editor.Connection
             }
 
             var current = socket;
-            socket = null;
-            current?.Dispose();
+            if (current != null)
+            {
+                try
+                {
+                    current.Abort();
+                }
+                catch
+                {
+                    // Best-effort shutdown during domain reload.
+                }
+            }
         }
 
         [Serializable]
         private sealed class EditorIdentity
         {
-            public string protocolVersion;
             public string editorId;
-            public long connectionGeneration;
             public string unityVersion;
             public string projectName;
+        }
+
+        [Serializable]
+        private sealed class BridgeRouteDto
+        {
+            public string editorId;
+            public long connectionGeneration;
+        }
+
+        [Serializable]
+        private sealed class CommandArgumentsDto
+        {
+            public int maxDepth;
+            public int maxNodes;
+            public int maxEntries;
+            public string minimumSeverity;
+            public string globalObjectId;
+            public string name;
+            public string mutationId;
+            public string expectedScenePath;
+            public string expectedStateEpoch;
+            public long expectedStateRevision;
         }
 
         [Serializable]
@@ -924,32 +980,21 @@ namespace UnityAiBridge.Editor.Connection
             public string protocolVersion;
             public string requestId;
             public string operation;
+            public CommandArgumentsDto arguments;
             public string risk;
-            public BridgeCommandArgumentsDto arguments;
             public BridgeRouteDto route;
             public long deadlineUnixMs;
         }
 
         [Serializable]
-        private sealed class BridgeCommandArgumentsDto
+        private sealed class BridgeHelloDto
         {
-            public string name;
-            public string mutationId;
-            public string expectedScenePath;
-            public string expectedStateEpoch;
-            public long expectedStateRevision;
-            public string globalObjectId;
-            public int maxDepth;
-            public int maxNodes;
-            public int maxEntries;
-            public string minimumSeverity;
-        }
-
-        [Serializable]
-        private sealed class BridgeRouteDto
-        {
+            public string type;
+            public string protocolVersion;
             public string editorId;
             public long connectionGeneration;
+            public string unityVersion;
+            public string projectName;
         }
 
         [Serializable]
@@ -1022,32 +1067,9 @@ namespace UnityAiBridge.Editor.Connection
             public bool ok;
             public SceneSavePayload result;
             public string[] warnings;
-            public BridgeChangedTargetDto[] changedTargets;
             public string dirtyState;
             public BridgeUndoDto undo;
             public string compileState;
-        }
-
-        [Serializable]
-        private sealed class BridgeErrorResultDto
-        {
-            public string protocolVersion;
-            public string requestId;
-            public bool ok;
-            public BridgeErrorDto error;
-            public string[] warnings;
-            public BridgeChangedTargetDto[] changedTargets;
-            public string dirtyState;
-            public BridgeUndoDto undo;
-            public string compileState;
-        }
-
-        [Serializable]
-        private sealed class BridgeErrorDto
-        {
-            public string category;
-            public string code;
-            public string message;
         }
 
         [Serializable]
@@ -1063,6 +1085,24 @@ namespace UnityAiBridge.Editor.Connection
         {
             public bool available;
             public string groupName;
+        }
+
+        [Serializable]
+        private sealed class BridgeErrorResultDto
+        {
+            public string protocolVersion;
+            public string requestId;
+            public bool ok;
+            public string[] warnings;
+            public BridgeErrorDto error;
+        }
+
+        [Serializable]
+        private sealed class BridgeErrorDto
+        {
+            public string category;
+            public string code;
+            public string message;
         }
     }
 }
