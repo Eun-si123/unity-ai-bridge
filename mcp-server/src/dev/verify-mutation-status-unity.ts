@@ -3,6 +3,11 @@ import { randomUUID } from "node:crypto";
 import { Client } from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 
+import {
+  isMutationStatusPayload,
+  type MutationStatusPayload,
+} from "../bridge/mutation-status-bridge.js";
+
 const timeoutMs = 90_000;
 const pollIntervalMs = 300;
 
@@ -47,7 +52,7 @@ try {
     unknown.found ||
     unknown.status !== "not_found" ||
     unknown.safeToBlindRetry ||
-    unknown.recommendedAction !== "reobserve"
+    unknown.recommendedAction !== "reobserve_native_state"
   ) {
     throw new Error(`Unexpected unknown-mutation status: ${JSON.stringify(unknown)}`);
   }
@@ -325,7 +330,7 @@ function assertCompletedLifecycle(
     payload.status !== "completed" ||
     payload.terminal !== true ||
     payload.safeToBlindRetry !== false ||
-    payload.recommendedAction !== "none" ||
+    payload.recommendedAction !== "operation_specific_same_id_replay_or_reobserve" ||
     payload.finishedUnixMs <= 0 ||
     payload.finishedStateEpoch.length === 0 ||
     payload.finishedStateRevision <= 0
@@ -371,28 +376,6 @@ type DeletePayload = StateRevision & {
   requestedGlobalObjectId: string;
 };
 
-type MutationStatusPayload = {
-  journalVersion: string;
-  journalScope: string;
-  found: boolean;
-  mutationId: string;
-  operation: string;
-  status: string;
-  terminal: boolean;
-  intentIdentityRecorded: boolean;
-  startedUnixMs: number;
-  startedStateEpoch: string;
-  startedStateRevision: number;
-  finishedUnixMs: number;
-  finishedStateEpoch: string;
-  finishedStateRevision: number;
-  failureKind: string;
-  executionMayHaveOccurred: boolean;
-  safeToBlindRetry: boolean;
-  recommendedAction: string;
-  retention: string;
-};
-
 function isHierarchyPayload(value: unknown): value is HierarchyPayload {
   if (typeof value !== "object" || value === null) return false;
   const candidate = value as Record<string, unknown>;
@@ -433,32 +416,6 @@ function isDeletePayload(value: unknown): value is DeletePayload {
     candidate.deleted === true &&
     typeof candidate.requestedGlobalObjectId === "string" &&
     isStateRevision(candidate.stateEpoch, candidate.stateRevision)
-  );
-}
-
-function isMutationStatusPayload(value: unknown): value is MutationStatusPayload {
-  if (typeof value !== "object" || value === null) return false;
-  const candidate = value as Record<string, unknown>;
-  return (
-    candidate.journalVersion === "EditorMutationLifecycle.v1" &&
-    candidate.journalScope === "editor_mutation_transaction_v1" &&
-    typeof candidate.found === "boolean" &&
-    typeof candidate.mutationId === "string" &&
-    typeof candidate.operation === "string" &&
-    typeof candidate.status === "string" &&
-    typeof candidate.terminal === "boolean" &&
-    typeof candidate.intentIdentityRecorded === "boolean" &&
-    typeof candidate.startedUnixMs === "number" && Number.isSafeInteger(candidate.startedUnixMs) &&
-    typeof candidate.startedStateEpoch === "string" &&
-    typeof candidate.startedStateRevision === "number" && Number.isSafeInteger(candidate.startedStateRevision) &&
-    typeof candidate.finishedUnixMs === "number" && Number.isSafeInteger(candidate.finishedUnixMs) &&
-    typeof candidate.finishedStateEpoch === "string" &&
-    typeof candidate.finishedStateRevision === "number" && Number.isSafeInteger(candidate.finishedStateRevision) &&
-    typeof candidate.failureKind === "string" &&
-    typeof candidate.executionMayHaveOccurred === "boolean" &&
-    typeof candidate.safeToBlindRetry === "boolean" &&
-    typeof candidate.recommendedAction === "string" &&
-    typeof candidate.retention === "string"
   );
 }
 
