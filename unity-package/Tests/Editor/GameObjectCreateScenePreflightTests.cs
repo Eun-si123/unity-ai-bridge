@@ -1,3 +1,4 @@
+using System;
 using NUnit.Framework;
 using UnityAiBridge.Editor.Commands;
 using UnityEditor.SceneManagement;
@@ -11,16 +12,28 @@ namespace UnityAiBridge.Editor.Tests
         public void UnsavedActiveSceneIsRejectedBeforeCreate()
         {
             var originalScene = SceneManager.GetActiveScene();
-            var temporaryScene = EditorSceneManager.NewScene(
-                NewSceneSetup.EmptyScene,
-                NewSceneMode.Additive);
+            var originalSceneWasUnsaved = originalScene.IsValid() &&
+                originalScene.isLoaded &&
+                string.IsNullOrEmpty(originalScene.path);
+
+            Scene temporaryScene = default;
+            var createdTemporaryScene = false;
 
             try
             {
-                Assert.That(temporaryScene.IsValid(), Is.True);
-                Assert.That(temporaryScene.isLoaded, Is.True);
-                Assert.That(temporaryScene.path, Is.Empty);
-                Assert.That(SceneManager.SetActiveScene(temporaryScene), Is.True);
+                if (!originalSceneWasUnsaved)
+                {
+                    temporaryScene = EditorSceneManager.NewScene(
+                        NewSceneSetup.EmptyScene,
+                        NewSceneMode.Additive);
+                    createdTemporaryScene = true;
+                    SceneManager.SetActiveScene(temporaryScene);
+                }
+
+                var activeScene = SceneManager.GetActiveScene();
+                Assert.That(activeScene.IsValid(), Is.True);
+                Assert.That(activeScene.isLoaded, Is.True);
+                Assert.That(activeScene.path, Is.Empty);
 
                 var exception = Assert.Throws<GameObjectCreateUnsavedSceneException>(
                     GameObjectCreateCommand.EnsureActiveSceneSupportsDurableIdentity);
@@ -31,12 +44,13 @@ namespace UnityAiBridge.Editor.Tests
             }
             finally
             {
-                if (originalScene.IsValid() && originalScene.isLoaded)
+                if (createdTemporaryScene && temporaryScene.IsValid() && temporaryScene.isLoaded)
                 {
-                    SceneManager.SetActiveScene(originalScene);
-                }
-                if (temporaryScene.IsValid() && temporaryScene.isLoaded)
-                {
+                    if (originalScene.IsValid() && originalScene.isLoaded)
+                    {
+                        SceneManager.SetActiveScene(originalScene);
+                    }
+
                     EditorSceneManager.CloseScene(temporaryScene, true);
                 }
             }
