@@ -90,7 +90,7 @@ function createPayload(mutationId: string): GameObjectCreatePayload {
 test("timeout ambiguity uses mutation.status and same-id replay to recover gameObject.create result", async () => {
   const bridge = new ReconciledEditingBridgeServer("127.0.0.1", 0);
   const port = await bridge.start();
-  const client = await connectEditor(port, hello(100));
+  const client = await connectEditor(bridge, port, hello(100));
   const mutationId = "reconcile-create-timeout-1";
   let createDeliveries = 0;
   let statusReads = 0;
@@ -141,7 +141,7 @@ test("timeout ambiguity uses mutation.status and same-id replay to recover gameO
 test("disconnect ambiguity waits for the same Editor then recovers through completed same-id replay", async () => {
   const bridge = new ReconciledEditingBridgeServer("127.0.0.1", 0);
   const port = await bridge.start();
-  const first = await connectEditor(port, hello(200));
+  const first = await connectEditor(bridge, port, hello(200));
   const mutationId = "reconcile-create-disconnect-1";
   const firstCommandPromise = nextCommand(first);
   const resultPromise = bridge.requestCreateGameObject(
@@ -164,7 +164,7 @@ test("disconnect ambiguity waits for the same Editor then recovers through compl
     first.terminate();
     await closed;
 
-    second = await connectEditor(port, hello(201));
+    second = await connectEditor(bridge, port, hello(201));
     let statusReads = 0;
     let replayDeliveries = 0;
     second.on("message", (data) => {
@@ -199,7 +199,7 @@ test("disconnect ambiguity waits for the same Editor then recovers through compl
 test("not_found after ambiguous delivery fails closed and never replays the mutation", async () => {
   const bridge = new ReconciledEditingBridgeServer("127.0.0.1", 0);
   const port = await bridge.start();
-  const client = await connectEditor(port, hello(300));
+  const client = await connectEditor(bridge, port, hello(300));
   const mutationId = "reconcile-create-not-found-1";
   let createDeliveries = 0;
   let statusReads = 0;
@@ -242,7 +242,7 @@ test("not_found after ambiguous delivery fails closed and never replays the muta
 test("non-allowlisted GameObject update still surfaces disconnect ambiguity without automatic status replay", async () => {
   const bridge = new ReconciledEditingBridgeServer("127.0.0.1", 0);
   const port = await bridge.start();
-  const client = await connectEditor(port, hello(400));
+  const client = await connectEditor(bridge, port, hello(400));
   const mutationId = "reconcile-update-not-enabled-1";
   let deliveries = 0;
   const commandPromise = nextCommand(client);
@@ -303,10 +303,18 @@ function sendSuccess(client: WebSocket, requestId: string, result: unknown): voi
   );
 }
 
-async function connectEditor(port: number, metadata: BridgeHello): Promise<WebSocket> {
+async function connectEditor(
+  bridge: ReconciledEditingBridgeServer,
+  port: number,
+  metadata: BridgeHello,
+): Promise<WebSocket> {
   const client = new WebSocket(`ws://127.0.0.1:${port}`);
   await waitForOpen(client);
+  const connectedPromise = bridge.waitForEditor(1_000);
   client.send(JSON.stringify(metadata));
+  const connected = await connectedPromise;
+  assert.equal(connected.editorId, metadata.editorId);
+  assert.equal(connected.connectionGeneration, metadata.connectionGeneration);
   return client;
 }
 
