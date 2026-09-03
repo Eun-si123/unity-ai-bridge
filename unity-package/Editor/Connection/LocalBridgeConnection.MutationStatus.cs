@@ -58,17 +58,21 @@ namespace UnityAiBridge.Editor.Connection
 
             try
             {
-                var result = await EditorMainThreadDispatcher.InvokeAsync(
-                    () => MutationStatusCommand.Execute(mutationId));
+                var observation = await EditorMainThreadDispatcher.InvokeAsync(
+                    () => new MutationStatusExecutionObservation
+                    {
+                        result = MutationStatusCommand.Execute(mutationId),
+                        isCompiling = EditorApplication.isCompiling,
+                    });
                 var response = new BridgeMutationStatusResultDto
                 {
                     protocolVersion = BridgeProtocol.Version,
                     requestId = command.requestId,
                     ok = true,
-                    result = result,
+                    result = observation.result,
                     warnings = Array.Empty<string>(),
                     dirtyState = "unchanged",
-                    compileState = EditorApplication.isCompiling ? "compiling" : "idle",
+                    compileState = observation.isCompiling ? "compiling" : "idle",
                 };
 
                 await SendJsonAsync(current, JsonUtility.ToJson(response), cancellationToken);
@@ -85,6 +89,12 @@ namespace UnityAiBridge.Editor.Connection
             }
 
             return true;
+        }
+
+        private sealed class MutationStatusExecutionObservation
+        {
+            public MutationStatusPayload result;
+            public bool isCompiling;
         }
 
         [Serializable]
