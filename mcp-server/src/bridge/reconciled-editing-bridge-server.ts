@@ -63,7 +63,7 @@ export class ReconciledEditingBridgeServer extends EditingBridgeServer {
     let lastObservation = initialError;
 
     while (remainingMs(deadlineUnixMs) > 0) {
-      const editor = await this.waitForSameEditor(editorId, deadlineUnixMs);
+      const editor = await this.waitForMutationEditor(editorId, deadlineUnixMs);
       const route = {
         editorId: editor.editorId,
         connectionGeneration: editor.connectionGeneration,
@@ -150,7 +150,7 @@ export class ReconciledEditingBridgeServer extends EditingBridgeServer {
     );
   }
 
-  private async waitForSameEditor(
+  private async waitForMutationEditor(
     editorId: string,
     deadlineUnixMs: number,
   ): Promise<{ editorId: string; connectionGeneration: number }> {
