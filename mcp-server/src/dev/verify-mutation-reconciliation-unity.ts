@@ -84,16 +84,18 @@ class DroppedResultProxy {
     this.upstream = socket;
     const downstream = new WebSocket(`ws://127.0.0.1:${this.internalPort}`);
     this.downstream = downstream;
-    const queuedUpstreamMessages: RawData[] = [];
+    const queuedUpstreamMessages: string[] = [];
 
     socket.on("message", (data) => {
       if (this.shouldDropUnityResult(data)) {
         return;
       }
+
+      const text = data.toString();
       if (downstream.readyState === WebSocket.OPEN) {
-        downstream.send(data);
+        downstream.send(text);
       } else {
-        queuedUpstreamMessages.push(data);
+        queuedUpstreamMessages.push(text);
       }
     });
 
@@ -106,7 +108,7 @@ class DroppedResultProxy {
     downstream.on("message", (data) => {
       this.observeBridgeCommand(data);
       if (socket.readyState === WebSocket.OPEN) {
-        socket.send(data);
+        socket.send(data.toString());
       }
     });
 
