@@ -1,0 +1,14 @@
+{
+  "protocolVersion": "0",
+  "requestId": "fixture-mutation-status",
+  "operation": "mutation.status",
+  "arguments": {
+    "mutationId": "fixture-transform-mutation-1"
+  },
+  "risk": "read",
+  "route": {
+    "editorId": "fixture-editor",
+    "connectionGeneration": 1
+  },
+  "deadlineUnixMs": 4102444800000
+}
