@@ -133,7 +133,7 @@ function validateMutationId(value: string): void {
   }
 }
 
-function isMutationStatusPayload(value: unknown): value is MutationStatusPayload {
+export function isMutationStatusPayload(value: unknown): value is MutationStatusPayload {
   if (typeof value !== "object" || value === null) return false;
   const candidate = value as Record<string, unknown>;
   if (
