@@ -1,4 +1,3 @@
-using System;
 using NUnit.Framework;
 using UnityAiBridge.Editor.Commands;
 using UnityEditor.SceneManagement;
@@ -14,13 +13,14 @@ namespace UnityAiBridge.Editor.Tests
             var originalScene = SceneManager.GetActiveScene();
             var temporaryScene = EditorSceneManager.NewScene(
                 NewSceneSetup.EmptyScene,
-                NewSceneMode.Single);
+                NewSceneMode.Additive);
 
             try
             {
                 Assert.That(temporaryScene.IsValid(), Is.True);
                 Assert.That(temporaryScene.isLoaded, Is.True);
                 Assert.That(temporaryScene.path, Is.Empty);
+                Assert.That(SceneManager.SetActiveScene(temporaryScene), Is.True);
 
                 var exception = Assert.Throws<GameObjectCreateUnsavedSceneException>(
                     GameObjectCreateCommand.EnsureActiveSceneSupportsDurableIdentity);
@@ -31,13 +31,13 @@ namespace UnityAiBridge.Editor.Tests
             }
             finally
             {
-                if (originalScene.IsValid() && originalScene.isLoaded && !string.IsNullOrEmpty(originalScene.path))
+                if (originalScene.IsValid() && originalScene.isLoaded)
                 {
-                    EditorSceneManager.OpenScene(originalScene.path, OpenSceneMode.Single);
+                    SceneManager.SetActiveScene(originalScene);
                 }
-                else
+                if (temporaryScene.IsValid() && temporaryScene.isLoaded)
                 {
-                    EditorSceneManager.NewScene(NewSceneSetup.DefaultGameObjects, NewSceneMode.Single);
+                    EditorSceneManager.CloseScene(temporaryScene, true);
                 }
             }
         }
