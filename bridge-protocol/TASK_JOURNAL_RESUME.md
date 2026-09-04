@@ -1,6 +1,6 @@
 # Bounded Multi-Step Task Journal / Resume
 
-Status: **In progress** for the first-slice scope below. Real Unity 6000.3.21f1 installed-package EditMode verification is **132/132 PASS**. Dedicated live MCP task-resume verification is still required before this slice is marked Verified.
+Status: **Verified for the bounded first-slice scope below** on Unity 6000.3.21f1. Real installed-package EditMode verification reached **135/135 PASS**, and the dedicated live MCP `verify:task-resume` gate passed against `Assets/SampleScene.unity`.
 
 ## Purpose
 
@@ -124,6 +124,12 @@ Each task step remains an ordinary atomic Unity AI Bridge mutation with its exis
 
 The task journal composes these existing primitives. It does not replace them.
 
+## JsonUtility wire normalization
+
+Unity's default by-value serialization can materialize missing/null inline nested objects as empty/default objects. The task wire path therefore treats exact default zero-vector objects produced for operation-irrelevant Transform fields as serialization artifacts and normalizes them away before command validation. Non-default unexpected Transform values remain invalid and fail closed.
+
+The Node response boundary performs the corresponding conservative normalization for Unity-produced null artifacts before applying the existing strict task-payload validator. This does not broaden the semantic task contract; it only canonicalizes Unity serialization artifacts at the transport boundary.
+
 ## Fail-closed examples
 
 The first slice explicitly rejects before task step side effects begin when:
@@ -153,18 +159,36 @@ The first slice does not:
 
 ## Verification evidence
 
-Current evidence for PR #58:
+Verified on Windows + Unity **6000.3.21f1** for PR #58:
 
-1. real installed-package Unity **6000.3.21f1** EditMode suite: **132/132 PASS**;
-2. Node Verification #388 on pre-verifier head `08ac6ca5e5e27ecba94ddca516319cf86210dfb6`: **PASS**;
-3. Phase 1 Local Bridge Verification #409 on that same head: **PASS**;
-4. a dedicated `verify:task-resume` live MCP verifier has been added and must pass on the final code head before this document is promoted from In progress to Verified.
+1. real installed-package EditMode suite: **135/135 PASS**;
+2. earlier exact-code GitHub gates passed while the slice was developed, including Node Verification #388 and Phase 1 Local Bridge Verification #409;
+3. dedicated live MCP `npm --prefix mcp-server run verify:task-resume`: **PASS** on `Assets/SampleScene.unity`;
+4. exact-final-documentation-head GitHub Node / Phase 1 verification must remain green before merge.
 
-The Unity EditMode tests cover:
+The Unity EditMode suite includes direct command coverage plus JsonUtility wire-path regressions. The live verifier proved:
 
-- begin/get read-only state-token behavior;
-- same-plan task replay and conflicting-plan rejection;
-- wrong planned mutation arguments rejected before mutation;
-- out-of-order step rejection before mutation;
-- completed first step followed by external state drift blocking resume;
-- ordered two-step completion.
+- `task.begin` left the Unity state token unchanged;
+- an out-of-order reserved Transform step was rejected before mutation;
+- wrong reserved GameObject arguments were rejected before mutation;
+- the first `gameObject.update` completed and exposed the exact next boundary;
+- the second `transform.set` completed;
+- the two-step task reached `completed`;
+- unrelated Unity state drift caused a separate task to report blocked resume;
+- executing the drifted reserved step was rejected;
+- the blocked task target remained unchanged.
+
+Observed live result:
+
+```text
+unityVersion: 6000.3.21f1
+activeScenePath: Assets/SampleScene.unity
+taskBeginReadOnly: true
+outOfOrderStepRejectedBeforeMutation: true
+wrongArgumentsRejectedBeforeMutation: true
+firstStepCompletedAndNextBoundaryExposed: true
+secondStepCompleted: true
+taskReachedCompletedState: true
+externalStateDriftBlockedResume: true
+blockedTaskTargetUnchanged: true
+```
