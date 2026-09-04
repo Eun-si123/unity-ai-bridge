@@ -22,6 +22,7 @@
     "verify:state-revision": "npm run build && node dist/src/dev/verify-state-revision-unity.js",
     "verify:mutation-status": "npm run build && node dist/src/dev/verify-mutation-status-unity.js",
     "verify:mutation-reconciliation": "npm run build && node dist/src/dev/verify-mutation-reconciliation-unity.js",
+    "verify:action-undo": "npm run build && node dist/src/dev/verify-action-undo-unity.js",
     "verify:save": "npm run build && node dist/src/dev/verify-scene-save-unity.js",
     "verify:transform": "npm run build && node dist/src/dev/verify-transform-unity.js",
     "verify:gameobject-edit": "npm run build && node dist/src/dev/verify-gameobject-edit-unity.js",
