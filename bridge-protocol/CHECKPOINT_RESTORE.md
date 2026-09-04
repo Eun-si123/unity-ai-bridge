@@ -1,6 +1,8 @@
 # Bounded GameObject Checkpoint / Restore
 
-Status: implementation candidate. Do not treat this surface as Verified until the required real-Unity gates are recorded in `STATUS.md`.
+Status: **Verified for the bounded first-slice scope described below** on Unity 6000.3.21f1 at PR #56 code head `6276cb0a7ee5929bafdfdc7e50a66147775126e2`.
+
+Verification evidence is recorded in this document and PR #56. The repository-wide `STATUS.md` is known to lag earlier PR #53/#54/#55 work and has not been normalized by this change; do not infer that `STATUS.md` has already been synchronized.
 
 ## Purpose
 
@@ -123,18 +125,27 @@ The first slice does not:
 - provide arbitrary historical rollback;
 - accept caller-authored checkpoint payloads as restore authority.
 
-## Required verification before `Verified`
+## Verification evidence
 
-At minimum:
+Verified on Unity **6000.3.21f1** against PR #56 code head `6276cb0a7ee5929bafdfdc7e50a66147775126e2`:
 
-1. full installed-package EditMode suite on Unity 6000.3.21f1;
-2. Node build/tests;
-3. dedicated live MCP `verify:checkpoint-restore` gate proving:
-   - capture is read-only for the Unity state token;
-   - unchanged recapture produces the same checkpoint id;
-   - checkpoint get is read-only and exact;
-   - bounded name/active/local Transform mutation can be restored;
-   - same-id restore replay is read-only;
-   - deleting the target makes later restore fail closed;
-   - checkpoint restore does not recreate the deleted target;
-   - verifier cleanup leaves no temporary object.
+1. full installed-package EditMode suite: **126/126 PASS**;
+2. GitHub Actions Node Verification #384: **PASS**;
+3. GitHub Actions Phase 1 Local Bridge Verification #405: **PASS**;
+4. dedicated live MCP `verify:checkpoint-restore`: **PASS** on `Assets/SampleScene.unity`.
+
+The live verifier proved:
+
+- capture left the Unity state token unchanged;
+- unchanged recapture produced the same deterministic checkpoint id;
+- checkpoint get was exact and read-only;
+- name and `activeSelf` restored correctly;
+- local position, quaternion rotation, and scale restored exactly within verifier tolerances;
+- same-id restore replay was read-only;
+- restoring after target deletion failed closed;
+- restore did not recreate the deleted target;
+- verifier cleanup left no temporary GameObject.
+
+## Follow-up hardening note
+
+A separate defense-in-depth follow-up should consider rejecting overlong native GameObject names and non-finite existing Transform values on the Unity capture side before SessionState persistence. The public MCP payload validator already rejects malformed/non-finite checkpoint payloads, so this is not part of the verified first-slice behavior above and should not be retroactively implied as covered by these gates.
