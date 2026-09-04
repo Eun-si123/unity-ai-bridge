@@ -49,6 +49,10 @@ namespace UnityAiBridge.Editor.Connection
                 {
                     throw new ArgumentException("steps are required for task.begin.");
                 }
+                if (isBegin)
+                {
+                    NormalizeTaskStepJsonUtilityArtifacts(arguments.steps);
+                }
             }
             catch (ArgumentException exception)
             {
@@ -127,6 +131,49 @@ namespace UnityAiBridge.Editor.Connection
             }
 
             return true;
+        }
+
+        internal static void NormalizeTaskStepJsonUtilityArtifacts(TaskStepPlanPayload[] steps)
+        {
+            if (steps == null)
+            {
+                return;
+            }
+
+            for (var index = 0; index < steps.Length; index++)
+            {
+                var step = steps[index];
+                if (step == null ||
+                    !string.Equals(
+                        step.operation,
+                        TaskJournalCommand.GameObjectUpdateOperation,
+                        StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                step.localPosition = NormalizeDefaultVectorArtifact(step.localPosition);
+                step.localEulerAngles = NormalizeDefaultVectorArtifact(step.localEulerAngles);
+                step.localScale = NormalizeDefaultVectorArtifact(step.localScale);
+            }
+        }
+
+        private static TransformVector3Payload NormalizeDefaultVectorArtifact(
+            TransformVector3Payload value)
+        {
+            if (value == null)
+            {
+                return null;
+            }
+
+            // Unity's by-value serializer cannot reliably preserve null custom-class
+            // references and may materialize an omitted nested object as an all-default
+            // inline instance. Treat only that exact zero/default shape as a wire artifact.
+            // Any non-default irrelevant Transform payload is intentionally retained so
+            // TaskJournalCommand's operation-specific validation still rejects it.
+            return value.x == 0f && value.y == 0f && value.z == 0f
+                ? null
+                : value;
         }
 
         private sealed class TaskJournalExecutionObservation
