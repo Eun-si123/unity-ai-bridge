@@ -5,6 +5,11 @@ import {
   requestBridgeActionHistory,
   requestUndoLastBridgeAction,
 } from "./bridge/action-bridge.js";
+import {
+  requestCheckpointCapture,
+  requestCheckpointGet,
+  requestCheckpointRestore,
+} from "./bridge/checkpoint-bridge.js";
 import { PrefabPropertyBridgeServer } from "./bridge/prefab-property-bridge-server.js";
 import { requestMutationStatus } from "./bridge/mutation-status-bridge.js";
 
@@ -63,6 +68,70 @@ const undoLastActionInputSchema = fromJsonSchema({
       minimum: 1,
       description:
         "Exact current state revision from the same observation. Any intervening Unity state change rejects the Undo before execution.",
+    },
+  },
+  additionalProperties: false,
+});
+
+const checkpointCaptureInputSchema = fromJsonSchema({
+  type: "object",
+  required: ["globalObjectId"],
+  properties: {
+    globalObjectId: {
+      type: "string",
+      minLength: 1,
+      maxLength: 512,
+      description:
+        "Exact GameObject GlobalObjectId in the current saved active Scene. The first checkpoint slice captures only name, activeSelf, parent identity, and local Transform.",
+    },
+  },
+  additionalProperties: false,
+});
+
+const checkpointGetInputSchema = fromJsonSchema({
+  type: "object",
+  required: ["checkpointId"],
+  properties: {
+    checkpointId: {
+      type: "string",
+      pattern: "^cp-[0-9a-f]{64}$",
+      description:
+        "Exact deterministic checkpoint id previously returned by unity_capture_checkpoint in the current Editor session.",
+    },
+  },
+  additionalProperties: false,
+});
+
+const checkpointRestoreInputSchema = fromJsonSchema({
+  type: "object",
+  required: ["checkpointId", "mutationId", "expectedStateEpoch", "expectedStateRevision"],
+  properties: {
+    checkpointId: {
+      type: "string",
+      pattern: "^cp-[0-9a-f]{64}$",
+      description:
+        "Exact current-session checkpoint to restore. The target must still be the same GameObject in the same saved Scene with the same parent identity.",
+    },
+    mutationId: {
+      type: "string",
+      minLength: 1,
+      maxLength: 128,
+      pattern: "^[A-Za-z0-9._:-]+$",
+      description:
+        "Idempotency key for this restore attempt. Same-id replay is readback-only and never blindly reapplies a completed restore.",
+    },
+    expectedStateEpoch: {
+      type: "string",
+      minLength: 1,
+      maxLength: 128,
+      description:
+        "Fresh Unity state epoch observed immediately before deciding to restore the checkpoint.",
+    },
+    expectedStateRevision: {
+      type: "integer",
+      minimum: 1,
+      description:
+        "Fresh Unity state revision. Any intervening Unity scene-state change rejects the restore before mutation.",
     },
   },
   additionalProperties: false,
@@ -140,6 +209,84 @@ export function registerMutationTools(
         requireAgentCapability(status, "state.revision.v1");
 
         const result = await requestUndoLastBridgeAction(bridge, input);
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify(result) }],
+          structuredContent: result,
+        };
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    "unity_capture_checkpoint",
+    {
+      description:
+        "Capture a bounded current-session checkpoint for exactly one GameObject in the saved active Scene. The first slice stores canonical object identity, Scene path, parent identity, name, activeSelf, and local position/rotation/scale only. It does not snapshot children, components, assets, or the whole Scene. Capture is read-like with respect to Unity scene state and does not advance the Unity state token; it only retains a bounded bridge-local SessionState record.",
+      inputSchema: checkpointCaptureInputSchema,
+    },
+    async (args) => {
+      try {
+        const input = args as { globalObjectId: string };
+        const status = await bridge.requestEditorStatus();
+        requireAgentCapability(status, "checkpoint.capture");
+
+        const result = await requestCheckpointCapture(bridge, input.globalObjectId);
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify(result) }],
+          structuredContent: result,
+        };
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    "unity_get_checkpoint",
+    {
+      description:
+        "Read one retained bounded checkpoint by its exact deterministic checkpointId. The journal is current-Editor-session only and holds at most 16 checkpoints; missing or evicted checkpoints fail closed. Reading a checkpoint never changes Unity scene state.",
+      inputSchema: checkpointGetInputSchema,
+    },
+    async (args) => {
+      try {
+        const input = args as { checkpointId: string };
+        const status = await bridge.requestEditorStatus();
+        requireAgentCapability(status, "checkpoint.get");
+
+        const result = await requestCheckpointGet(bridge, input.checkpointId);
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify(result) }],
+          structuredContent: result,
+        };
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    "unity_restore_checkpoint",
+    {
+      description:
+        "Restore exactly one retained first-slice GameObject checkpoint through one verified Unity Undo transaction. Requires a fresh state epoch/revision and a mutationId. The same GameObject must still exist in the same saved active Scene with the same parent identity; reparenting, deletion, Scene changes, and stale state fail closed. Restore changes only name, activeSelf, and local position/rotation/scale. It never recreates objects, restores children/components/assets, or acts as a whole-Scene backup.",
+      inputSchema: checkpointRestoreInputSchema,
+    },
+    async (args) => {
+      try {
+        const input = args as {
+          checkpointId: string;
+          mutationId: string;
+          expectedStateEpoch: string;
+          expectedStateRevision: number;
+        };
+        const status = await bridge.requestEditorStatus();
+        requireAgentCapability(status, "checkpoint.restore");
+        requireAgentCapability(status, "state.revision.v1");
+
+        const result = await requestCheckpointRestore(bridge, input);
         return {
           content: [{ type: "text" as const, text: JSON.stringify(result) }],
           structuredContent: result,
