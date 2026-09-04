@@ -34,6 +34,8 @@ namespace UnityAiBridge.Editor.Commands
         {
             "editor.status",
             "mutation.status",
+            "action.history",
+            "action.undoLast",
             "editor.playMode.set",
             "test.list",
             "test.run.editMode.start",
