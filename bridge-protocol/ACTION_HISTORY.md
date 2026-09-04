@@ -1,6 +1,6 @@
 # Bridge Action History and Safe Last-Action Undo
 
-Status: implementation candidate in PR #55. Do not treat this surface as Verified until the real Unity gates recorded in `STATUS.md` pass.
+Status: **Verified first slice** on 2026-09-04 against PR #55 head lineage, Windows, Unity 6000.3.21f1.
 
 ## Scope
 
@@ -68,6 +68,56 @@ When admitted, Unity AI Bridge calls `Undo.PerformUndo()` once. It then requires
 - a changed Unity state token after the Undo.
 
 If post-Undo verification does not match, the bridge reports a verification failure and requires native re-observation. It does not blindly issue Redo or a second Undo.
+
+## Verification evidence
+
+Environment:
+
+```text
+Windows
+Unity 6000.3.21f1
+active scene: Assets/SampleScene.unity
+```
+
+Installed-package EditMode suite:
+
+```text
+119 Passed
+0 Failed
+```
+
+Dedicated live gate:
+
+```text
+npm --prefix mcp-server run verify:action-undo
+```
+
+Observed result:
+
+```text
+[Unity AI Bridge] Bridge action history + safe last-action Undo verification PASS
+firstCreateUndoGroup: 36
+firstCreateUndoVerifiedByNativeAbsence: true
+firstCreateCannotUndoTwice: true
+transformUndoGroup: 42
+olderCreateUndoRejected: true
+rejectedOlderUndoLeftTransformUnchanged: true
+transformRestoredExactly: true
+latestUndoneActionNotReexposedAsSafe: true
+temporaryObjectRemaining: false
+```
+
+This live verification proves that:
+
+1. a newly created GameObject can be undone only while that exact bridge action is still the safe latest Unity Undo action, and native resolution confirms the object is gone;
+2. the same action is not exposed as safely undoable twice;
+3. after a second create followed by `transform.set`, the older create mutation ID is rejected rather than walking backward through history;
+4. the rejected older-action request leaves the newer Transform unchanged;
+5. the actual latest Transform Undo restores native local position, Euler rotation, and scale to the pre-mutation values;
+6. the undone latest record is not re-exposed as safe;
+7. verifier cleanup leaves no temporary object.
+
+The initial live-verifier build exposed a verifier-only TypeScript strict-nullability defect around direct `actions[0]` dereferences. The verifier was changed to require a latest entry explicitly before dereference; no Unity C# production behavior changed for that fix, and the live gate then passed.
 
 ## Intentional non-goals
 
