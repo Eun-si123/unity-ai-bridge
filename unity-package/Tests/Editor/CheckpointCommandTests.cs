@@ -56,9 +56,12 @@ namespace UnityAiBridge.Editor.Tests
             createdObjects.Clear();
             target = null;
 
+            // If this Scene was clean before the test, the fixture owns every edit it made.
+            // Saving after removing all temporary objects returns it to a clean serialized state
+            // without depending on non-public/unsupported scene-clean APIs.
             if (testScene.IsValid() && testScene.isLoaded && !testSceneWasDirty)
             {
-                EditorSceneManager.MarkSceneClean(testScene);
+                Assert.That(EditorSceneManager.SaveScene(testScene), Is.True);
             }
 
             if (originalScene.IsValid() && originalScene.isLoaded)
