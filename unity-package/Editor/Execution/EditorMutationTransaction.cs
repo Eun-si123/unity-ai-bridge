@@ -241,6 +241,7 @@ namespace UnityAiBridge.Editor.Execution
                 context.outcome.stateAfter = context.stateAfter;
                 CaptureDirtyStateAfter(context);
                 EditorMutationLifecycle.MarkCompleted(context.lifecycle, context.stateAfter);
+                BridgeActionHistory.TryRecordCompleted(context, mutationId);
 
                 return new EditorMutationExecution<T>
                 {
