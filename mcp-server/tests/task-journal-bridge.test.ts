@@ -1,8 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
+import type { PrefabPropertyBridgeServer } from "../src/bridge/prefab-property-bridge-server.js";
 import {
   isTaskJournalPayload,
+  requestTaskBegin,
+  requestTaskGet,
   validateTaskSteps,
   type TaskStepPlan,
 } from "../src/bridge/task-journal-bridge.js";
@@ -161,4 +164,43 @@ test("task status validator accepts conservative not_found and rejects malformed
   };
   assert.equal(isTaskJournalPayload(missing), true);
   assert.equal(isTaskJournalPayload({ ...missing, retainedTaskCount: 17 }), false);
+});
+
+test("task bridge helpers access a real base bridge instance through the reviewed prototype pattern", async () => {
+  const calls: Array<{ operation: string; risk: string }> = [];
+  const bridge = {
+    connectedEditor: {
+      editorId: "editor-a",
+      connectionGeneration: 7,
+    },
+    requestOperation: async (
+      operation: string,
+      _args: Record<string, unknown>,
+      _route: Record<string, unknown>,
+      _timeoutMs: number,
+      risk: string,
+    ) => {
+      calls.push({ operation, risk });
+      return readyPayload();
+    },
+  } as unknown as PrefabPropertyBridgeServer;
+
+  const begun = await requestTaskBegin(bridge, "task-1", plans());
+  const read = await requestTaskGet(bridge, "task-1");
+
+  assert.equal(begun.taskId, "task-1");
+  assert.equal(read.taskId, "task-1");
+  assert.deepEqual(calls, [
+    { operation: "task.begin", risk: "read" },
+    { operation: "task.get", risk: "read" },
+  ]);
+});
+
+test("task bridge helpers fail closed when no Unity Editor is connected", async () => {
+  const bridge = {
+    connectedEditor: undefined,
+    requestOperation: async () => readyPayload(),
+  } as unknown as PrefabPropertyBridgeServer;
+
+  await assert.rejects(() => requestTaskGet(bridge, "task-1"), /No Unity Editor is connected/);
 });
