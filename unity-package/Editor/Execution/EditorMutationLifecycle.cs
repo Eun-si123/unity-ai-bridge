@@ -59,6 +59,16 @@ namespace UnityAiBridge.Editor.Execution
                 throw new ArgumentNullException(nameof(stateBefore));
             }
 
+            // A task reservation is an additional admission constraint, not a second mutation
+            // lifecycle. Normal non-task mutations have no reservation and pass through unchanged.
+            // Reserved mutations must still match the immutable task plan, step order, and exact
+            // state boundary before the common lifecycle can record "started".
+            EditorTaskJournal.ValidateMutationReservation(
+                operation,
+                mutationId,
+                intentFingerprint,
+                stateBefore);
+
             var existing = Read(mutationId);
             if (existing != null)
             {
