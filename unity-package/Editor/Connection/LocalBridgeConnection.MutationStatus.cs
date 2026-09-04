@@ -18,6 +18,15 @@ namespace UnityAiBridge.Editor.Connection
             string rawJson,
             CancellationToken cancellationToken)
         {
+            if (await TryHandleBridgeActionCommandAsync(
+                    current,
+                    command,
+                    rawJson,
+                    cancellationToken))
+            {
+                return true;
+            }
+
             if (!string.Equals(command.operation, "mutation.status", StringComparison.Ordinal))
             {
                 return false;
