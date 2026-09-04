@@ -122,10 +122,11 @@ export async function requestTaskBegin(
     timeoutMs,
     "read",
   );
-  if (!isTaskJournalPayload(raw) || !raw.found || raw.taskId !== taskId) {
-    throw new Error("Unity returned an invalid task.begin payload.");
+  const normalized = normalizeTaskJournalPayload(raw);
+  if (!isTaskJournalPayload(normalized) || !normalized.found || normalized.taskId !== taskId) {
+    throw new Error(`Unity returned an invalid task.begin payload: ${safePayloadText(raw)}`);
   }
-  return raw;
+  return normalized;
 }
 
 export async function requestTaskGet(
@@ -143,10 +144,11 @@ export async function requestTaskGet(
     timeoutMs,
     "read",
   );
-  if (!isTaskJournalPayload(raw) || raw.taskId !== taskId) {
-    throw new Error("Unity returned an invalid task.get payload.");
+  const normalized = normalizeTaskJournalPayload(raw);
+  if (!isTaskJournalPayload(normalized) || normalized.taskId !== taskId) {
+    throw new Error(`Unity returned an invalid task.get payload: ${safePayloadText(raw)}`);
   }
-  return raw;
+  return normalized;
 }
 
 export function validateTaskSteps(steps: TaskStepPlan[]): void {
@@ -214,6 +216,41 @@ function canonicalizeTaskSteps(steps: TaskStepPlan[]): TaskStepPlan[] {
       localScale: { ...step.localScale },
     };
   });
+}
+
+function normalizeTaskJournalPayload(value: unknown): unknown {
+  if (!isRecord(value) || !Array.isArray(value.steps)) return value;
+
+  return {
+    ...value,
+    steps: value.steps.map((step) => {
+      if (!isRecord(step) || step.operation !== "gameObject.update") return step;
+
+      return {
+        ...step,
+        localPosition: normalizeUnityNullVectorArtifact(step.localPosition),
+        localEulerAngles: normalizeUnityNullVectorArtifact(step.localEulerAngles),
+        localScale: normalizeUnityNullVectorArtifact(step.localScale),
+      };
+    }),
+  };
+}
+
+function normalizeUnityNullVectorArtifact(value: unknown): unknown {
+  if (value === undefined || value === null) return null;
+  if (!isRecord(value)) return value;
+
+  const keys = Object.keys(value);
+  if (keys.length === 0) return null;
+  if (
+    keys.every((key) => key === "x" || key === "y" || key === "z") &&
+    (value.x === undefined || value.x === 0) &&
+    (value.y === undefined || value.y === 0) &&
+    (value.z === undefined || value.z === 0)
+  ) {
+    return null;
+  }
+  return value;
 }
 
 export function isTaskJournalPayload(value: unknown): value is TaskJournalPayload {
@@ -415,6 +452,15 @@ function isStepStatus(value: unknown): value is TaskStepStatusPayload["stepStatu
     value === "failed" ||
     value === "conflict"
   );
+}
+
+function safePayloadText(value: unknown): string {
+  try {
+    const text = JSON.stringify(value);
+    return text.length <= 4_000 ? text : `${text.slice(0, 4_000)}...`;
+  } catch {
+    return String(value);
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, any> {
