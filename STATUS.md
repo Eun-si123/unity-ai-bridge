@@ -2,7 +2,7 @@
 
 Canonical source of truth for what is actually implemented and verified in **Unity AI Bridge**.
 
-Do not infer implementation from README examples, design diagrams, decisions, roadmaps, issues, plans, or other Unity MCP projects.
+Do not infer implementation from README examples, design diagrams, decisions, roadmaps, issues, plans, or other Unity MCP projects. Detailed historical verifier output belongs in the relevant pull request and protocol document; this file tracks the current verified state, important verification boundaries, and the next active work.
 
 ## Status vocabulary
 
@@ -37,241 +37,100 @@ Broader Unity/OS compatibility is not implied.
 
 ## Latest real Unity verification
 
-On **2026-09-03**, PR #52 head `0ee75f40d5fab8b16163015f76820879ac61104a` completed the expanded installed-package EditMode suite:
+The latest expanded installed-package EditMode baseline was verified on **2026-09-04** against PR #56 code head `6276cb0a7ee5929bafdfdc7e50a66147775126e2`:
 
 ```text
 Windows
 Unity 6000.3.21f1
-111 Passed
+126 Passed
 0 Failed
 ```
 
-The dedicated live MCP `verify:mutation-status` gate also passed on Unity 6000.3.21f1 with saved active scene `Assets/SampleScene.unity`. Observed evidence:
+PR #56 was subsequently squash-merged to `main` as `defd88697636e5142a694b6bc4ab587d17096229`. Its documentation-only final PR head `c794a1f727ee8d9c37e1ba91103289cb99dc831b` also completed Node Verification #385 and Phase 1 Local Bridge Verification #406 successfully before merge.
+
+The dedicated live MCP gate also passed:
 
 ```text
-unknown mutation: found=false
-unknown status: not_found
-unknown recommendedAction: reobserve_native_state
-create operation: gameObject.create
-create status: completed
-create state revision: 60 -> 61
-repeated status read changed state token: false
-delete operation: gameObject.delete
-delete status: completed
-delete state revision: 61 -> 62
-temporary object remaining: false
-safeToBlindRetry: false
+npm --prefix mcp-server run verify:checkpoint-restore
+[Unity AI Bridge] Bounded checkpoint restore verification PASS
 ```
 
-This gate verifies the bounded read-only `mutation.status` / MCP `unity_get_mutation_status` surface against the existing common `EditorMutationLifecycle` journal used by `EditorMutationTransaction`. It proves unknown IDs fail closed, completed create/delete lifecycle records are externally observable, repeated status reads do not mutate the scene state token, and cleanup leaves no verifier object behind. The verified scope is explicitly the **current Unity Editor session** and **`editor_mutation_transaction_v1` common journal only**; it does not imply full Editor-restart durability, generic Undo/rollback, blind retry safety, or unification of Script, persistent Prefab/asset, Play Mode, or Test Runner journals.
-
-The live verification also exposed and fixed two verifier-only defects before this slice was marked Verified: a temporary-unsaved-scene fixture assumption and a stale duplicated TypeScript payload schema. The final verifier reuses the production mutation-status validator so the live gate and bridge contract cannot silently drift in the same way.
-
-The previous dedicated live MCP `verify:test-discovery` gate passed on Unity 6000.3.21f1. Observed evidence:
+Observed verified properties included:
 
 ```text
-editAssembly: EunSung.UnityAiBridge.Editor.Tests
-editAssemblyTestCaseCount: 105
-discoveryContractTestCount: 5
-deterministicDiscoveryOrder: true
-pagingVerified: true
-pastEndCursorMonotonic: true
-firstPageFullName: UnityAiBridge.Editor.Tests.AssetCommandTests.InspectValidateArguments_AcceptsDocumentedDependencyBounds
-secondPageFullName: UnityAiBridge.Editor.Tests.AssetCommandTests.ProjectPathValidation_RejectsOutsideAssetsAndPackages
-playAssembly: EunSung.UnityAiBridge.PlayMode.Tests
-playAssemblyTestCaseCount: 1
-exactPlayModeSelector: UnityAiBridge.PlayMode.Tests.PlayModeVerifierTests.RunsOneFrameInsidePlayMode
-exactPlayModeSelectorSelectable: true
-unknownAssemblyRejected: true
-finalPlayModeState: edit
-stateEpoch: cdba6362ce6c44ed89bf271a12fe0150
-stateRevision: 121
-readOnlyStateTokenUnchanged: true
-projectMutated: false
+activeScenePath: Assets/SampleScene.unity
+captureReadOnlyStateTokenUnchanged: true
+deterministicCheckpointId: true
+checkpointGetReadOnly: true
+checkpointGetExact: true
+restoreChanged: true
+restoredNameAndActive: true
+restoredTransformExactly: true
+restoreSameIdReplayReadOnly: true
+deletedTargetRestoreRejected: true
+checkpointDidNotRecreateDeletedTarget: true
+temporaryObjectRemaining: false
 ```
 
-This gate proves `test.list` / MCP `unity_list_tests` reads the Test Framework tree Unity actually discovered rather than inferring selectors from source text. It verified EditMode and PlayMode assembly discovery, five exact discovery-contract leaves, deterministic one-result paging, monotonic past-end cursor behavior, exact compatibility with the already-verified PlayMode selector, fail-closed unknown assembly handling, stable final Edit Mode, unchanged scene state token, and no claimed project mutation.
+This is the current highest real-Unity baseline. Earlier verified gates remain valid within their documented scopes unless superseded below.
 
-The dedicated runtime-capable PlayMode verifier assembly from PR #48 remains independently verified:
+## Reliability / recovery progression
 
-```text
-EunSung.UnityAiBridge.PlayMode.Tests
-1 Passed
-0 Failed
-```
+Issue #50 tracks the current reliability follow-on sequence. Steps 1–4 are now merged and verified.
 
-PR #49 did not modify the PlayMode verifier assembly or execute a PlayMode test as part of the read-only discovery gate; it discovered that assembly and exact leaf selector through the native Test Framework tree.
+| Step | PR | Main merge commit | Status | Verified boundary |
+|---|---:|---|---|---|
+| Mutation lifecycle status | #52 | `b4d0ddf7356cafa4fe3f9a3d3b9f6464893cf52e` | **Verified** | Read-only `mutation.status` / `unity_get_mutation_status` over the current-session common `EditorMutationLifecycle` journal; real Unity **111/111** + live status gate. |
+| First ambiguous-delivery reconciliation | #53 | `affdb042d64b53e95643bb5e37d9402c31d897fd` | **Verified** | `gameObject.create` and `transform.set`; dropped-success-response fault proxy recovered only through completed lifecycle status + exact same-ID operation replay/readback. |
+| Broadened common reconciliation | #54 | `d2e442d80964529dc7354f7e07f0eab36017ab64` | **Verified** | Seven reviewed common scene mutations; every first real success response dropped after Unity execution and recovered without blind retry. |
+| Bridge action history + safe last-action Undo | #55 | `4cc96efaf06071e4363f562e2ed750f7f9f9d391` | **Verified** | Current-session bounded history, newest bridge action only, exact native Undo evidence; real Unity **119/119** + live Undo gate. |
+| Bounded GameObject checkpoint / restore | #56 | `defd88697636e5142a694b6bc4ab587d17096229` | **Verified** | One existing GameObject in one saved active Scene, current-session checkpoint storage, exact parent/scene/state preconditions; real Unity **126/126** + live restore gate. |
 
-The previous dedicated live MCP `verify:playmode-tests` gate passed on Unity 6000.3.21f1. Observed evidence:
-
-```text
-assemblyName: EunSung.UnityAiBridge.PlayMode.Tests
-exactTestName: UnityAiBridge.PlayMode.Tests.PlayModeVerifierTests.RunsOneFrameInsidePlayMode
-runGuid: 463bc221-4385-4b94-87a4-78313e9dc60d
-initialStatus: scheduled
-initialDeliveryReconciled: false
-immediateReplayReadOnly: true
-terminalStatus: completed
-resultState: Passed
-selectedTestCaseCount: 1
-passCount: 1
-failCount: 0
-skipCount: 0
-inconclusiveCount: 0
-issueCount: 0
-issuesTruncated: false
-completedReplayReadOnly: true
-runGuidStableAcrossReplays: true
-conflictingSameIdSelectionRejected: true
-finalPlayModeState: edit
-enterPlayModeOptionsEnabled: false
-disableDomainReload: false
-disableSceneReload: false
-userEnterPlayModeSettingsPreserved: true
-exactFinalEditStateRestored: true
-verifierTestProvedApplicationIsPlayingAcrossFrame: true
-```
-
-`initialDeliveryReconciled=false` is a normal observed fast-path outcome: this run returned its initial scheduling response without requiring transport reconciliation. The same-Editor/same-mutation ambiguous-disconnect reconciliation path remains separately covered by the Node bridge tests. The live gate proves the selected `[UnityTest]` actually observed `Application.isPlaying == true` across a yielded frame, then returned the Editor to exact stable Edit Mode without changing the user's Enter Play Mode settings.
-
-The previous dedicated live MCP `verify:test-runner` EditMode gate also passed on Unity 6000.3.21f1. Observed evidence:
-
-```text
-assemblyName: EunSung.UnityAiBridge.Editor.Tests
-exactTestName: UnityAiBridge.Tests.Editor.TestRunnerControlTests.Get_RejectsMalformedOrUnknownMutationIdsWithoutStartingTests
-runGuid: 4ecc23df-167d-4f51-924b-d4bab3177847
-initialStatus: scheduled
-immediateReplayReadOnly: true
-terminalStatus: completed
-resultState: Passed
-selectedTestCaseCount: 1
-passCount: 1
-failCount: 0
-skipCount: 0
-inconclusiveCount: 0
-issueCount: 0
-issuesTruncated: false
-completedReplayReadOnly: true
-runGuidStableAcrossReplays: true
-conflictingSameIdSelectionRejected: true
-finalPlayModeState: edit
-projectMutationClaimedByBridge: false
-```
-
-The first live EditMode Test Runner attempt correctly executed one filtered test (`passCount=1`) but exposed a payload bug: `RunStarted().TestCaseCount` represented the full loaded test tree rather than the actual filtered terminal selection. The bridge now defines terminal `selectedTestCaseCount` as `pass + fail + skip + inconclusive`; a dedicated regression test raised the real Unity baseline from 97/97 to 98/98 before the EditMode slice was marked Verified.
-
-The dedicated live MCP `verify:play-mode` gate previously passed on Unity 6000.3.21f1. Observed evidence:
-
-```text
-initialMode: edit
-finalMode: edit
-enterChanged: true
-enterReplayReadOnly: true
-enterReconciled: true
-enterReloadObserved: true
-enterInitialConnectionGeneration: 1787569109635
-enterFinalConnectionGeneration: 1787569158803
-staleExpectedModeRejected: true
-staleAttemptLeftPlayModeUnchanged: true
-exitChanged: true
-exitReplayReadOnly: true
-exitReconciled: true
-exitReloadObserved: false
-exitInitialConnectionGeneration: 1787569158803
-exitFinalConnectionGeneration: 1787569158803
-enterPlayModeOptionsEnabled: false
-disableDomainReload: false
-disableSceneReload: false
-userEnterPlayModeSettingsPreserved: true
-exactFinalEditStateRestored: true
-```
-
-A connection-generation change is an observed lifecycle outcome, not a mandatory success condition. The verified gate intentionally accepts stable native completion whether or not a particular Enter/Exit transition reloads the scripting domain; this is necessary because Unity Enter Play Mode settings and lifecycle details can change reload behavior.
-
-The dedicated live MCP `verify:script-replace` gate previously passed on Unity 6000.3.21f1 after verifier timeout hardening. Observed evidence:
-
-```text
-scriptPath: Assets/UnityAiBridge_ScriptReplaceVerify.cs
-guid: 858b3c89136ccfd49bc534aefa7ef77f
-originalContentSha256: 7c224abcea8bc199f94ac1f15d28e3a881ae67e67c8da28585fc9137d48af676
-modifiedContentSha256: ae4761b741782fe4b40a2cfa03c7f3eb7dfc480ebf4cd682ec0891c5554dd9bb
-writeCompileStatus: succeeded
-writeCompilationSequence: 4
-writeReloadObserved: true
-sameIdReplayReadOnly: true
-staleOldShaRejected: true
-staleAttemptLeftModifiedBytesUnchanged: true
-restoreCompileStatus: succeeded
-restoreReloadObserved: true
-exactOriginalRestored: true
-finalContentSha256: 7c224abcea8bc199f94ac1f15d28e3a881ae67e67c8da28585fc9137d48af676
-recoveryCopyRemovedAfterSuccess: true
-```
-
-The first Script-replace live run on a slower machine exposed a verifier-layer timeout mismatch: the MCP SDK's default 60-second request timeout could expire while Unity legitimately performed import, compilation, domain reload, and reconnect. The verifier was hardened to use explicit longer tool-call timeouts, wait for Script capabilities before guarded recovery, precompute the intended modified SHA, and preserve an exact pre-mutation recovery copy until exact restoration succeeds. This was a verifier/orchestration issue, not evidence of a failed Unity write contract.
-
-The dedicated live MCP `verify:script-read` gate previously passed on the same Unity version. Observed evidence:
-
-```text
-scriptPath: Packages/com.eunsung.unity-ai-bridge/Editor/Protocol/BridgeProtocol.cs
-guid: 535573b5098b07445b02ce5ea969259d
-sourceKind: Packages
-packageName: com.eunsung.unity-ai-bridge
-dependencyHash: 1b006f5ec0facfe79226658b89960cda
-contentSha256: b52e965c2c01290b03ba70ca1ca60f6eb62870b4665a821632e5993d7d776fc7
-encoding: utf-8
-hasUtf8Bom: false
-byteLength: 206
-utf16CharCount: 206
-lineCount: 9
-chunkSize: 64
-chunkCount: 4
-reconstructedExactly: true
-chunkIdentityStable: true
-immediateRepeatStable: true
-projectMutated: false
-```
-
-Separately, the dedicated PR #42 live MCP `verify:prefab-property-apply` gate passed on 2026-08-24 against Unity 6000.3.21f1. It verified changed Prefab dependency hash, independent fresh-instance readback, read-only same-`mutationId` replay, asset-removal observation, stale replay rejection, and scene-object cleanup.
+The next planned Issue #50 step is **multi-step task journal / resume**. No implementation should be assumed until a new slice is opened and verified.
 
 ## Current verified / implemented surface
 
 | Area | Status | Evidence / notes |
 |---|---|---|
-| Unity package + local bridge | Verified | Real compile/load, WebSocket connect/reconnect, main-thread dispatch, stale-route protection, deadlines, and capability preflight exercised on Unity 6000.3.21f1. |
-| `editor.status` / `unity_get_status` | **Verified** | Live Editor/project/scene/compile state plus four-state Play Mode lifecycle (`edit`, `entering_play`, `play`, `exiting_play`), pause state, effective Domain/Scene Reload policy, Agent capabilities, and scene state token. |
-| Play Mode control | **Verified** | PR #46; `editor.playMode.set` / `unity_set_play_mode`; exact stable-state preconditions, mutation journal, same-id reconciliation, optional reload/reconnect observation, stale expected-mode rejection, user Enter Play Mode settings preserved, no automatic scene save/Undo claim. Real Unity **93/93** plus live `edit -> play -> edit` MCP gate PASS. |
-| `scene.hierarchy` / `unity_get_hierarchy` | Verified | Bounded hierarchy with `GlobalObjectId` and truncation metadata. |
-| `object.resolve` / `unity_resolve_object` | Verified | Native `GlobalObjectId` re-resolution; missing/Undone targets return `found=false`. |
-| `editor.diagnostics` / `unity_get_diagnostics` | Verified | Bounded Console/compiler diagnostics with source-location metadata where Unity supplies it. |
-| State revision / stale-state protection | Verified | Session epoch + monotonic revision preconditions reject stale scene writes before mutation. |
-| Common mutation transaction | Verified | Main-thread preflight, Undo grouping, semantic verification, rollback, rollback verification, retry identity, and execution-boundary deadline protection for adopted write families. |
-| Mutation lifecycle status | **Verified** | PR #52; `mutation.status` / `unity_get_mutation_status`; read-only view of common `EditorMutationLifecycle` SessionState records, fail-closed unknown IDs, conservative recovery guidance, no raw intent fingerprint, `safeToBlindRetry=false`. Real Unity **111/111** plus live create/status/read-only/delete/status/cleanup gate PASS on Unity 6000.3.21f1. Scope is current Editor session + `editor_mutation_transaction_v1` only. |
-| Dirty-state reporting | Verified | Rollback dirty residue is reported explicitly. |
-| Dirty-state restoration | Not implemented | Undo-based rollback can leave a previously clean scene dirty. |
-| Explicit active-scene save | Verified | Existing saved path only; exact path/state preconditions; native post-save verification; no interactive Save As. |
-| Transform read/write | Verified | PR #22 baseline plus later regression coverage. PR #43 verifies direct scene-Prefab Transform writes record real Prefab overrides. |
-| GameObject update/delete | Verified | PR #23 baseline plus later regression coverage. PR #43 verifies direct scene-Prefab name/active writes record real Prefab overrides. |
-| Component inspect | Verified | PR #24; native-order Components, Missing Script reporting, bounded visible serialized properties, Component identity/ownership. |
-| Component add/remove | Verified | PR #25; exact Component types/identities, Undo, native verification and replay protection. |
-| Component property edit | Verified | PR #26; visible Boolean/Integer/Float/String/Vector3 serialized-property writes with semantic readback and Undo/replay protection. |
-| Asset search/inspect | Verified | PR #27; bounded `AssetDatabase` search and exact GUID/type/importer/dependency inspection. |
-| Script read | **Verified** | PR #44; `script.read` / `unity_read_script`; exact `.cs` Unity assets under Assets/Packages, canonical GUID/path + MonoScript validation, Package Manager resolution, strict UTF-8/BOM handling, raw SHA-256, dependencyHash, bounded paging and 4 MiB source-size cap. Real Unity **85/85** plus live MCP reconstruction/identity/non-mutation gate PASS. |
-| Script replace/write | **Verified** | PR #45; `script.replace` / `unity_replace_script`; existing `Assets/*.cs` only, mandatory path + GUID + raw SHA-256 CAS, bounded complete-source replacement, editability checks, prepared/written journal, atomic replacement, compile outcome separation, reload/reconnect reconciliation, same-id read-only replay, stale-content rejection, post-reload readback, guarded recovery. Real Unity **89/89** plus live MCP CAS/write/reload/replay/stale/restore gate PASS. |
-| Prefab inspect/instantiate | Verified | PR #28; bounded Prefab Asset hierarchy inspect, dependency-hash precondition, linked `PrefabUtility.InstantiatePrefab`, native linkage readback, same-id replay, Undo, stale-replay rejection. |
-| Prefab Asset creation | Verified | PR #29; create-only `SaveAsPrefabAsset`, source unchanged, GUID/dependencyHash/root readback, same-id replay, manual asset removal followed by stale-replay rejection. |
-| Package Test Runner visibility/bootstrap | **Verified** | Development Local/LocalTarball/Git installs self-add `com.eunsung.unity-ai-bridge` to project `testables`; guarded package reimport handles Test Framework refresh. Latest expanded EditMode suite completed **111/111**. |
-| Prefab single-property override apply | **Verified** | PR #36 + harness hardening #37–#40; 80/80 real Unity integration and dedicated PR #42 live MCP E2E PASS. |
-| Direct `Undo.RecordObject` Prefab-instance writes | **Verified** | #41 / PR #43. `PrefabUtility.RecordPrefabInstancePropertyModifications` is guarded to non-asset scene Prefab instances. Real integration verifies `m_LocalScale` and `m_IsActive` overrides persist after scene save; historical milestone **81/81**. |
-| EditMode Test Runner control | **Verified** | PR #47; `test.run.editMode.start` / `test.run.get`, MCP `unity_start_editmode_tests` / `unity_get_test_run`; exact assembly + optional exact test names, asynchronous run handle, SessionState result journal, bounded result details, same-id replay without duplicate scheduling, conflict rejection, and stable Edit-mode precondition. Historical real Unity **98/98** plus live one-test schedule/poll/replay/result gate PASS. |
-| PlayMode Test Runner control | **Verified** | PR #48; `test.run.playMode.start`, MCP `unity_start_playmode_tests`, shared `unity_get_test_run`; Unity Test Framework owns Edit -> Play -> Edit, same-session journal/replay survives lifecycle reconnects, exact runtime-capable assembly selection, one-frame `Application.isPlaying` proof, conflict rejection, final Edit Mode/settings preservation. Real Unity **100/100 EditMode + 1/1 PlayMode** plus live MCP gate PASS. |
-| Test Framework discovery | **Verified** | PR #49; `test.list` / MCP `unity_list_tests`; native EditMode/PlayMode assembly discovery, exact leaf `fullName` selectors, bounded substring filtering, deterministic paging, monotonic past-end cursor, selector compatibility flag, fail-closed unknown assembly, stable Edit Mode/read-only state token. Real Unity **105/105** plus live MCP discovery gate PASS. |
-| Remote gateway / Easy Connect | Planned | Not implemented. |
-| Pairing/authentication | Planned | Not implemented. |
-| Multi-user/editor routing | Planned | Current local bridge supports one active editor. |
-| ChatGPT integration | Planned | Not implemented or submitted. |
-| Portable Agent Plugins packaging | Planned | Architecture/roadmap decision recorded; no plugin manifest/skills package implemented yet. |
-| Open-weight/local-model compatibility | Deferred target | Architecture note in [`docs/OPEN_WEIGHT_MODEL_COMPATIBILITY.md`](docs/OPEN_WEIGHT_MODEL_COMPATIBILITY.md). MCP remains the boundary; no model runtime/inference server is being added to the Unity core. |
+| Unity package + local bridge | **Verified** | Real compile/load, WebSocket connect/reconnect, main-thread dispatch, stale-route protection, deadlines, and capability preflight exercised on Unity 6000.3.21f1. |
+| `editor.status` / `unity_get_status` | **Verified** | Editor/project/scene/compile state, four-state Play Mode lifecycle, pause state, effective Enter Play Mode reload policy, capabilities, and scene state token. |
+| `scene.hierarchy` / `unity_get_hierarchy` | **Verified** | Bounded hierarchy with `GlobalObjectId` and truncation metadata. |
+| `object.resolve` / `unity_resolve_object` | **Verified** | Native `GlobalObjectId` re-resolution; missing/Undone targets return `found=false`. |
+| `editor.diagnostics` / `unity_get_diagnostics` | **Verified** | Bounded Console/compiler diagnostics with source-location metadata where Unity supplies it. |
+| State revision / stale-state protection | **Verified** | Session epoch + monotonic revision preconditions reject stale scene writes before mutation. |
+| Common mutation transaction | **Verified** | Main-thread preflight, Undo grouping, semantic verification, rollback, rollback verification, retry identity, and execution-boundary deadline protection for adopted write families. |
+| Mutation lifecycle status | **Verified** | PR #52. Read-only current-session common lifecycle observation; unknown IDs fail closed; `safeToBlindRetry=false`. |
+| Common mutation delivery reconciliation | **Verified** | PRs #53–#54. Allowlist: `gameObject.create`, `gameObject.update`, `gameObject.delete`, `transform.set`, `component.add`, `component.property.set`, `component.remove`. Timeout/disconnect ambiguity is reconciled only through same Editor + lifecycle status + exact same-ID operation replay/readback. |
+| Bridge action history | **Verified** | PR #55. SessionState-backed, current Editor session, newest-first, public read surface bounded to 1..32 results; only seven reviewed common scene mutation families are recorded. |
+| Safe last-action Undo | **Verified** | PR #55. Only the exact newest bridge-owned action may be undone when fresh state token, scene, Unity Undo group/name, compile state, and Play Mode state still match. No arbitrary historical Undo. |
+| Bounded GameObject checkpoint capture/get | **Verified** | PR #56. Current-session SessionState storage, at most 16 retained checkpoints, deterministic bridge-generated checkpoint IDs, capture/get are read-only for Unity Scene state. |
+| Bounded GameObject checkpoint restore | **Verified** | PR #56. Restores only name, `activeSelf`, local position/rotation/scale for the same still-existing GameObject in the same saved active Scene and same direct parent. Deleted/reparented targets fail closed. |
+| Dirty-state reporting | **Verified** | Rollback dirty residue is reported explicitly. |
+| Dirty-state restoration | **Not implemented** | Undo-based rollback can leave a previously clean scene dirty. |
+| Explicit active-scene save | **Verified** | Existing saved path only; exact path/state preconditions; native post-save verification; no interactive Save As. |
+| Transform read/write | **Verified** | PR #22 baseline plus later regression coverage. PR #43 verifies direct scene-Prefab Transform writes record real Prefab overrides. |
+| GameObject create/update/delete | **Verified** | Create baseline from Phase 1; update/delete from PR #23; current common transaction/reconciliation coverage applies to the reviewed scene-write contracts. |
+| Component inspect | **Verified** | PR #24; native-order Components, Missing Script reporting, bounded visible serialized properties, Component identity/ownership. |
+| Component add/remove | **Verified** | PR #25; exact Component types/identities, Undo, native verification and replay protection. |
+| Component property edit | **Verified** | PR #26; visible Boolean/Integer/Float/String/Vector3 serialized-property writes with semantic readback and Undo/replay protection. |
+| Asset search/inspect | **Verified** | PR #27; bounded `AssetDatabase` search and exact GUID/type/importer/dependency inspection. |
+| Script read | **Verified** | PR #44; exact `.cs` Unity assets under Assets/Packages, canonical GUID/path + MonoScript validation, strict UTF-8/BOM handling, raw SHA-256, dependencyHash, bounded paging and 4 MiB source-size cap. Historical real Unity **85/85** + live reconstruction/non-mutation gate. |
+| Script replace/write | **Verified** | PR #45; existing `Assets/*.cs` only, GUID + raw SHA-256 CAS, atomic replacement, compile/reload observation, same-id reconciliation, stale-content rejection, guarded recovery. Historical real Unity **89/89** + live write/reload/restore gate. |
+| Prefab inspect/instantiate | **Verified** | PR #28; bounded Prefab hierarchy inspect, dependency-hash precondition, linked instantiate, native linkage readback, same-id replay, Undo, stale-replay rejection. |
+| Prefab Asset creation | **Verified** | PR #29; create-only `SaveAsPrefabAsset`, source unchanged, GUID/dependencyHash/root readback, same-id replay, stale replay after manual removal. |
+| Prefab single-property override apply | **Verified** | PR #36 + harness hardening #37–#40; historical **80/80** real Unity integration + PR #42 live MCP gate. |
+| Direct `Undo.RecordObject` Prefab-instance writes | **Verified** | #41 / PR #43; explicit `PrefabUtility.RecordPrefabInstancePropertyModifications` for non-asset scene Prefab instances; historical **81/81** milestone. |
+| Play Mode control | **Verified** | PR #46; exact stable-state preconditions, same-id reconciliation across optional reload/reconnect, stale expected-mode rejection, user Enter Play Mode settings preserved. Historical **93/93** + live edit→play→edit gate. |
+| Installed-package Test Runner bootstrap | **Verified** | Development Local/LocalTarball/Git installs self-add the package to project `testables`; guarded package reimport handles Test Framework refresh. Current overall EditMode regression suite is **126/126**. |
+| EditMode Test Runner control | **Verified** | PR #47; asynchronous exact assembly/test selection, SessionState run journal, bounded results, same-id no-duplicate scheduling, conflict rejection. Historical **98/98** + live one-test gate. |
+| PlayMode Test Runner control | **Verified** | PR #48; Unity Test Framework owns Edit→Play→Edit, same-session journal/replay survives lifecycle reconnects, runtime-capable `[UnityTest]` proved `Application.isPlaying` across a frame. Historical **100/100 EditMode + 1/1 PlayMode** + live gate. |
+| Test Framework discovery | **Verified** | PR #49; native EditMode/PlayMode assembly discovery, exact leaf selectors, bounded substring filtering, deterministic paging, fail-closed unknown assembly, stable Edit Mode/read-only state token. Historical **105/105** + live discovery gate. |
+| Remote gateway / Easy Connect | **Planned** | Not implemented. |
+| Pairing/authentication | **Planned** | Not implemented. |
+| Multi-user/editor routing | **Planned** | Current local bridge supports one active editor. |
+| ChatGPT integration | **Planned** | Not implemented or submitted. |
+| Portable Agent Plugins packaging | **Planned** | Architecture/roadmap decision recorded; no plugin manifest/skills package implemented yet. |
+| Open-weight/local-model compatibility | **Deferred target** | MCP remains the boundary; no model runtime/inference server is being added to the Unity core. See [`docs/OPEN_WEIGHT_MODEL_COMPATIBILITY.md`](docs/OPEN_WEIGHT_MODEL_COMPATIBILITY.md). |
 
 ## Phase 0 — Foundation
 
@@ -335,232 +194,145 @@ Current objective: provide a small but genuinely useful Unity editing/inspection
 9. **Installed-package Test Runner visibility/bootstrap — PRs #31–#35** — **75/75**, verified 2026-08-24
 10. **Bounded Prefab property override apply — PR #36 + #37–#40** — **80/80**, plus PR #42 live MCP E2E PASS
 11. **Direct scene-Prefab override recording — #41 / PR #43** — **81/81**, verified 2026-08-24
-12. **Bounded Script read — PR #44** — **85/85** plus live MCP `verify:script-read` PASS, verified 2026-08-24
-13. **Reload-safe Script replace — PR #45** — **89/89** plus live MCP `verify:script-replace` CAS/write/compile/reload/replay/stale/restore PASS, verified 2026-08-24
-14. **Reload-aware Play Mode control — PR #46** — **93/93** plus live MCP `verify:play-mode` edit/play/replay/stale/restore PASS, verified 2026-08-24
-15. **Bounded EditMode Test Runner control — PR #47** — **98/98** plus live MCP `verify:test-runner` schedule/poll/replay/result/conflict PASS, verified 2026-08-24
-16. **Bounded PlayMode Test Runner control — PR #48** — **100/100 EditMode + 1/1 PlayMode** plus live MCP `verify:playmode-tests` lifecycle/replay/result/conflict/final-restore PASS, verified 2026-08-24
-17. **Bounded native Test Framework discovery — PR #49** — **105/105** plus live MCP `verify:test-discovery` EditMode/PlayMode assembly discovery, exact selectors, deterministic/past-end paging, unknown-assembly rejection, and read-only state-token PASS, verified 2026-08-24
-18. **Bounded common mutation lifecycle status — PR #52** — **111/111** plus live MCP `verify:mutation-status` unknown/create/status/read-only/delete/status/cleanup PASS, verified 2026-09-03
+12. **Bounded Script read — PR #44** — **85/85** + live MCP `verify:script-read` PASS, verified 2026-08-24
+13. **Reload-safe Script replace — PR #45** — **89/89** + live MCP `verify:script-replace` PASS, verified 2026-08-24
+14. **Reload-aware Play Mode control — PR #46** — **93/93** + live MCP `verify:play-mode` PASS, verified 2026-08-24
+15. **Bounded EditMode Test Runner control — PR #47** — **98/98** + live MCP `verify:test-runner` PASS, verified 2026-08-24
+16. **Bounded PlayMode Test Runner control — PR #48** — **100/100 EditMode + 1/1 PlayMode** + live MCP `verify:playmode-tests` PASS, verified 2026-08-24
+17. **Bounded native Test Framework discovery — PR #49** — **105/105** + live MCP `verify:test-discovery` PASS, verified 2026-08-24
+18. **Bounded common mutation lifecycle status — PR #52** — **111/111** + live MCP `verify:mutation-status` PASS, verified 2026-09-03
+19. **Initial common mutation delivery reconciliation — PR #53** — create + transform response-loss recovery through status + same-ID replay; live fault-proxy PASS, verified 2026-09-03
+20. **Seven-operation common mutation reconciliation — PR #54** — create/update/delete/transform/component add/property/remove; every first success response dropped after Unity execution and recovered safely; live fault-proxy PASS, verified 2026-09-04
+21. **Bridge action history + safe latest-action Undo — PR #55** — **119/119** + live MCP `verify:action-undo` PASS, verified 2026-09-04
+22. **Bounded GameObject checkpoint / restore — PR #56** — **126/126** + live MCP `verify:checkpoint-restore` PASS, verified 2026-09-04
 
-### Verified mutation lifecycle status contract
+### Verified common mutation lifecycle status contract
 
 `mutation.status` / MCP `unity_get_mutation_status` is a read-only recovery-observation surface over the existing common `EditorMutationLifecycle` journal.
 
-```text
-mutationId
- -> current-session EditorMutationLifecycle lookup
- -> not_found | started | terminal lifecycle status
- -> operation/timestamps/state-token/failure metadata
- -> conservative recommended action
- -> never execute/replay/retry/rollback/Undo from the status read itself
-```
+Verified boundary:
 
-Verified first-slice behavior:
+- journal scope: current Unity Editor process/session;
+- coverage: common `EditorMutationTransaction` lifecycle only;
+- `found=false` / `not_found` is not proof that Unity never executed anything;
+- `safeToBlindRetry` is always false;
+- unknown IDs recommend native re-observation rather than retry;
+- repeated status reads do not advance the scene state token;
+- Script, persistent Prefab/asset, Play Mode, and Test Runner operation-specific journals are not unified into this surface;
+- no full Editor-restart durability claim.
 
-- The journal kind is `editor_mutation_lifecycle_v1`, scoped to `current_editor_session`, with coverage `editor_mutation_transaction_v1`.
-- `found=false` / `not_found` means only that this bounded common journal has no record; it is not proof that Unity never executed anything.
-- `safeToBlindRetry` is always false.
-- Unknown IDs recommend native re-observation rather than retry.
-- `started` records require native reconciliation before retry decisions.
-- Completed records point callers toward operation-specific same-id replay or native re-observation.
-- Rollback failure states require manual reconciliation.
-- The internal intent fingerprint is not exposed; only `intentIdentityRecorded` is reported.
-- Repeated status reads are read-only and do not advance the scene state token.
-- Live verification created and deleted one temporary GameObject, observed completed lifecycle entries for both mutations, and confirmed no temporary object remained.
-- This contract does not unify Script, persistent Prefab/asset, Play Mode, or Test Runner operation-specific journals and does not survive a full Unity Editor restart.
+### Verified common mutation reconciliation contract
 
-### Verified Play Mode control contract
+The reviewed automatic reconciliation allowlist is exactly:
 
-`editor.playMode.set` / `unity_set_play_mode` treats Play Mode as an asynchronous Editor lifecycle rather than a Boolean write.
+- `gameObject.create`
+- `gameObject.update`
+- `gameObject.delete`
+- `transform.set`
+- `component.add`
+- `component.property.set`
+- `component.remove`
+
+For timeout/disconnect ambiguity after delivery may have occurred:
 
 ```text
-editor.status observation
- -> exact stable expected mode: edit | play
- -> target mode: edit | play
- -> validate mutationId + lifecycle precondition
- -> record retry journal before transition request
- -> Unity EnterPlaymode / ExitPlaymode request
- -> tolerate optional domain reload / bridge disconnect
- -> same-editor reconnect/reconciliation
- -> wait for stable native target mode
- -> same-id replay remains readback-only
- -> stale expected mode fails closed
+same mutationId
+ -> require same Unity editorId
+ -> read mutation.status
+ -> boundedly observe started
+ -> only completed may continue
+ -> invoke exact same operation/intent/mutationId
+ -> existing operation-specific replay/readback must prove result
+ -> otherwise fail closed
 ```
 
-Verified first-slice behavior:
+There is no retry on `not_found`, no new mutation ID, no automatic re-execution after terminal failure/rollback, and no generic Undo in this reconciliation path.
 
-- `editor.status` distinguishes `edit`, `entering_play`, `play`, and `exiting_play`.
-- Pause state and effective Enter Play Mode Domain/Scene Reload policy are observable.
-- The tool never changes the user's Enter Play Mode settings.
-- Only stable `edit`/`play` states are accepted as target and expected precondition values.
-- Same-id retries reconcile native state and never blindly request Enter/Exit twice.
-- A connection-generation change is reported but is not required for success.
-- The tool does not automatically save scenes and does not claim Unity Undo.
-- The live gate restores exact final stable Edit Mode.
-- Long bounded timeouts are used because lifecycle/reload duration varies by machine and project.
+PR #54's live fault proxy deliberately dropped the first real success response for all seven operations **after Unity executed them**, proving this is response-loss recovery rather than mocked result handling.
 
-### Verified EditMode Test Runner control contract
+### Verified bridge action history / safe Undo contract
 
-`test.run.editMode.start` / `test.run.get` and MCP `unity_start_editmode_tests` / `unity_get_test_run` treat tests as asynchronous jobs rather than holding one MCP call open for the full run.
+`action.history` / MCP `unity_get_bridge_action_history` is observational current-session history for verified changed Undo-backed common scene mutations. Results are newest first and the public page size is bounded to 1..32.
 
-```text
-stable Edit Mode + not compiling
- -> exact test assembly + optional exact full test names
- -> normalize selection + mutationId intent
- -> journal before scheduling
- -> TestRunnerApi.Execute returns Unity runGuid
- -> immediate asynchronous start response
- -> public Test Framework callbacks update SessionState journal
- -> client polls test.run.get
- -> completed/error terminal result
- -> same mutationId remains readback-only
-```
+`action.undoLast` / MCP `unity_undo_last_bridge_action` is deliberately narrower than generic Undo:
 
-Verified first-slice behavior:
+- only the exact newest bridge action can be requested;
+- it must not already be undone;
+- fresh state epoch/revision must match the recorded post-action state;
+- active Scene path must match;
+- Unity Undo group and Undo group name must match;
+- Unity must not be compiling or in/transiting Play Mode;
+- Unity performs `Undo.PerformUndo()` once and verifies the exact Undo event/group/name plus state-token change;
+- older entries never become generic historical Undo targets through this surface.
 
-- One explicit EditMode test assembly is mandatory; the bridge does not implicitly run the whole project.
-- Exact test names are optional and bounded to 64 entries; regex/category/group filters are not exposed yet.
-- New runs are rejected while compiling or outside stable Edit Mode.
-- One Unity AI Bridge-owned unfinished run is allowed at a time.
-- `mutationId` schedules at most once; same-id same-intent replays preserve the Unity `runGuid` and never create a second run.
-- Same-id different selection fails with `mutation_id_conflict`.
-- Results are journaled in `SessionState` across domain reload in the current Editor process.
-- Terminal payloads include actual selected outcome count, pass/fail/skip/inconclusive/assert totals, duration, and at most 100 bounded non-passed leaf details.
-- `selectedTestCaseCount` is the terminal outcome total, not `RunStarted().TestCaseCount` from the full loaded tree.
-- Arbitrary selected test code can mutate Unity/project state, so test start is operational/write-like and does not claim generic Undo or cleanup.
+The verified allowlist remains the same seven common scene mutation families. Script, persistent Prefab/asset, Play Mode, Test Runner, and `checkpoint.restore` are outside the safe-action-history allowlist.
 
-### Verified PlayMode Test Runner control contract
+### Verified bounded GameObject checkpoint / restore contract
 
-`test.run.playMode.start` / `test.run.get` and MCP `unity_start_playmode_tests` / `unity_get_test_run` extend the same asynchronous job model across the Unity Test Framework's Edit -> Play -> Edit lifecycle.
+Public surfaces:
 
-```text
-stable Edit Mode + not compiling
- -> exact runtime-capable PlayMode test assembly + optional exact full test names
- -> mode-specific mutationId intent journal
- -> TestRunnerApi.Execute(TestMode.PlayMode)
- -> possible domain reload / bridge reconnect
- -> same-editor, same-mutation reconciliation if start delivery is ambiguous
- -> callbacks update the same SessionState run journal
- -> client polls through transient lifecycle disconnects
- -> completed/error terminal result
- -> Unity Test Framework restores Edit Mode
- -> same-id replay remains readback-only
-```
+- `checkpoint.capture` / `unity_capture_checkpoint`
+- `checkpoint.get` / `unity_get_checkpoint`
+- `checkpoint.restore` / `unity_restore_checkpoint`
 
-Verified first-slice behavior:
+First-slice boundary:
 
-- A new PlayMode run is scheduled only from stable Edit Mode; Unity Test Framework owns the lifecycle transition rather than wrapping the run with a second independent Play Mode tool mutation.
-- One explicit PlayMode test assembly is mandatory; optional exact test names use the same 64-entry bound.
-- Same mutationId + same normalized mode/assembly/selection never schedules twice; conflicting same-id intent fails closed.
-- Lifecycle/reconnect ambiguity preserves the same mutationId and same Editor identity.
-- The dedicated live verifier assembly is runtime-capable and its `[UnityTest]` proves `Application.isPlaying` is true before and after yielding one frame.
-- Terminal result returned one selected pass and zero failures/skips/inconclusive/issues.
-- Immediate and completed replay preserved one stable Unity `runGuid`.
-- Final native Editor state returned to stable Edit Mode and the user's Enter Play Mode settings were unchanged.
-- This slice is Editor-hosted PlayMode only; standalone Player execution is not implied.
+- one existing GameObject;
+- current saved active Scene only;
+- exact canonical `GlobalObjectId`;
+- exact direct parent identity;
+- name, `activeSelf`, local position, local rotation, local scale only;
+- current Editor SessionState storage, maximum 16 retained checkpoints;
+- bridge-generated deterministic `cp-<sha256>` checkpoint IDs;
+- capture/get do not advance the Unity scene state token;
+- restore requires a fresh state epoch/revision and the same still-resolving target, saved Scene path, and direct parent;
+- restore runs through one `EditorMutationTransaction` / Unity Undo group with native verification and rollback verification;
+- same-ID completed restore replay is native-readback-only;
+- deleted targets are rejected and never recreated;
+- reparented targets are rejected rather than applying old local Transform semantics under a new parent.
 
-### Verified Test Framework discovery contract
+This is not whole-Scene backup, arbitrary historical rollback, child/component restoration, reparent/sibling restoration, Prefab/asset restoration, or Editor-restart durability.
 
-`test.list` / MCP `unity_list_tests` is the read-only selector-discovery layer for the verified Test Runner controls.
+## Current next work
 
-```text
-stable Edit Mode + not compiling
- -> RetrieveTestList(EditMode | PlayMode)
- -> no assemblyName: exact discovered assembly list
- -> exact assemblyName: exact leaf test fullName list
- -> optional bounded nameContains filter
- -> deterministic ordinal ordering
- -> bounded offset/maxResults paging
- -> exact fullName selector feeds unity_start_*_tests
-```
+Issue #50 follow-on **step 5 — multi-step task journal / resume** is the next planned reliability slice.
 
-Verified first-slice behavior:
+The design must preserve the existing principles:
 
-- Unity Test Framework is the discovery source of truth; source files are not parsed to infer test selectors.
-- The operation is read-only and never starts tests or enters Play Mode.
-- Discovery itself requires stable Edit Mode and no active compilation.
-- Both EditMode and PlayMode Test Framework trees can be queried from stable Edit Mode.
-- `assemblyName` omitted means assembly scope; a supplied assembly must exactly match a discovered assembly and `.dll` suffixes are rejected.
-- `nameContains` is optional, case-insensitive, and bounded.
-- Results are sorted ordinally before paging; `maxResults` is bounded to 200.
-- Paging invariant is `nextOffset = offset + returnedCount`; past-end pages are empty and do not rewind the requested cursor.
-- Exact leaf `fullName` is deliberately not truncated; `selectableByBridge` reports whether it fits the current exact-run 512-character selector bound.
-- Unknown exact assemblies fail closed with `test_assembly_unavailable`.
-- The live gate discovered the exact PR #48 PlayMode verifier selector already proven runnable.
-- The live gate preserved stable Edit Mode and an unchanged scene state epoch/revision and reported `projectMutated=false`.
+- record immutable task intent before side effects;
+- never infer completion from transport delivery alone;
+- use existing operation mutation IDs rather than inventing a second mutation system;
+- resume from observed verified step state, not from optimistic client memory;
+- fail closed when task journal state and native Unity state cannot be reconciled;
+- keep the first slice bounded rather than attempting a generic workflow engine.
 
-### Verified Script read contract
-
-- `script.read` / `unity_read_script`
-- exact project-relative `.cs` Unity asset paths only
-- reads both `Assets/` and resolved `Packages/`; no writes
-- canonical GUID/path and `MonoScript` validation
-- strict UTF-8 decode with optional BOM reporting
-- raw source-file SHA-256 for content CAS
-- Unity dependencyHash as imported-state metadata
-- UTF-16 offset paging with surrogate-pair boundary protection
-- maximum 100,000 returned UTF-16 code units per call
-- maximum 4 MiB source file
-- raw bridge paging fields range-checked before `int` conversion
-- live multi-chunk reconstruction verifies stable identity/hash metadata and no project mutation
-
-### Verified Script replace contract
-
-`script.replace` / `unity_replace_script` is the first bounded persistent Script mutation family.
-
-```text
-script.read observation
- -> exact writable Assets/*.cs path
- -> expected GUID + raw contentSha256 CAS
- -> validate replacement content/encoding/bounds/editability
- -> record mutationId journal before persistence
- -> compare current bytes to expected identity/SHA
- -> atomic replacement + exact new SHA verification
- -> AssetDatabase import / compilation observation
- -> tolerate expected domain reload/reconnect
- -> same-id reconciliation without a blind second write
- -> post-reload script.read GUID/SHA verification
- -> report persistence and compiler outcome separately
-```
-
-Verified first-slice constraints and behavior:
-
-- Package scripts remain read-only.
-- Complete replacement content is bounded; no arbitrary patch interpreter is exposed.
-- Blind overwrite without the current GUID + `contentSha256` is rejected.
-- Stale content fails before persistence.
-- The same mutationId never blindly repeats an already-started source write.
-- Compiler failure is an observable post-persistence outcome, not proof that persistence failed.
-- Source-file persistence is not Unity Undo.
-- Recovery is guarded by recognized exact SHA states and refuses an unknown third SHA.
-- Slow-machine/large-project compile+reload time is allowed by explicit long external tool-call timeouts; reconnect is treated as a normal success-path boundary rather than a transport failure.
-
-### Current next candidates
-
-No new Phase 3 slice is started as part of PR #52 closeout. Remaining candidates include broader reconciliation across operation-specific journals, bridge action history plus safe last-action Undo, bounded checkpoint/restore, multi-step task journaling/resume, diagnostics extensions where they unlock real workflows, broader tool-schema/result compatibility tests, bounded Test Runner selection/cancellation extensions, and later broader Prefab apply/revert contracts.
+No implementation or verification is claimed yet.
 
 No arbitrary C# execution fallback is planned.
 
 ## Known limitations / future work
 
-- Exact `GlobalObjectId` behavior for every unsaved/new-scene/unusual object case is not exhaustively characterized; live verifiers that require durable scene-object IDs should use a saved active Scene. `gameObject.create` now fails closed before mutation when the active Scene has no persistent asset path because reliable GlobalObjectId-backed retry/readback semantics are unavailable there.
-- The common `EditorMutationLifecycle` / `mutation.status` journal is SessionState-backed and does not survive a full Unity Editor restart. Its first verified external status surface covers only `EditorMutationTransaction` families; Script, persistent Prefab/asset, Play Mode, and Test Runner keep their operation-specific journals for now.
-- A missing mutation-status record never proves an operation did not execute and never makes blind retry safe.
-- Play Mode control currently covers stable Edit/Play transitions and observation only; pause/step control, Play Mode settings mutation, standalone-player control, and full Editor-restart recovery are not implemented.
-- A Play Mode transition may or may not change the bridge connection generation. Callers must use the terminal native lifecycle state rather than infer success from reconnect behavior alone.
-- Test Runner control requires one exact assembly and bounded exact test names, stores run journals only for the current Editor process, and allows only one bridge-owned unfinished run at a time across EditMode and PlayMode.
-- Public Test Framework callbacks do not include the Unity run GUID. The current slices correlate callbacks using the single active bridge journal plus exact mode/assembly/test selection; an externally started indistinguishable run for the same selection can therefore remain ambiguous without relying on private Test Framework internals.
-- Test Framework discovery is stable-Edit-mode only, uses the public 1.4-compatible tree API, returns at most 200 results per page, exposes only exact assembly/leaf discovery plus bounded substring filtering, and does not discover standalone Player tests.
-- Regex/category/group execution filters, arbitrary target-platform/standalone Player runs, cancellation, and full Editor-restart Test Runner recovery are not implemented.
+- Exact `GlobalObjectId` behavior for every unsaved/new-scene/unusual object case is not exhaustively characterized. Live verifiers that require durable scene-object IDs use a saved active Scene. `gameObject.create` fails closed before mutation when the active Scene has no persistent asset path because reliable GlobalObjectId-backed retry/readback semantics are unavailable there.
+- The common `EditorMutationLifecycle` / `mutation.status` journal is SessionState-backed and does not survive a full Unity Editor restart. A missing status record never proves an operation did not execute and never makes blind retry safe.
+- Automatic common mutation reconciliation is intentionally allowlisted to the seven reviewed scene-edit families. Other operation-specific journals require their own reviewed recovery semantics.
+- Bridge action history is current-session only and safe Undo is newest-action-only. It is not arbitrary `undo(mutationId)` and does not walk backward through history.
+- Checkpoints are current-session only, retain at most 16 records, and restore only one existing GameObject's bounded local state. They do not recreate deleted targets or restore hierarchy/components/assets.
+- Checkpoint capture currently has a defense-in-depth follow-up: Unity-side capture should explicitly reject overlong native GameObject names and non-finite existing Transform values before SessionState persistence. The public MCP validator already rejects malformed/non-finite checkpoint payloads; this does not expand the verified first-slice claim.
+- Multi-step task journal/resume is not implemented yet; it is the next planned Issue #50 slice.
 - Clean-scene dirty metadata restoration after Undo rollback is not implemented.
 - An already-started Unity API call is not force-cancelled when its deadline later expires.
+- Play Mode control covers stable Edit/Play transitions and observation only; pause/step control, Play Mode settings mutation, standalone-player control, and full Editor-restart recovery are not implemented.
+- A Play Mode transition may or may not change bridge connection generation. Terminal native lifecycle state, not reconnect behavior alone, is authoritative.
+- Test Runner control requires one exact assembly and bounded exact test names, stores run journals only for the current Editor process, and allows only one bridge-owned unfinished run at a time across EditMode and PlayMode.
+- Public Test Framework callbacks do not include the Unity run GUID. The current slices correlate callbacks using the single active bridge journal plus exact mode/assembly/test selection; an externally started indistinguishable run for the same selection can remain ambiguous without private Test Framework internals.
+- Test Framework discovery is stable-Edit-mode only, uses the public 1.4-compatible tree API, returns at most 200 results per page, exposes exact assembly/leaf discovery plus bounded substring filtering, and does not discover standalone Player tests.
+- Regex/category/group execution filters, arbitrary target-platform/standalone Player runs, cancellation, and full Editor-restart Test Runner recovery are not implemented.
 - Component property edit supports only the explicitly bounded first-slice value kinds; complex serialized forms remain future work.
 - Component add deliberately rejects Transform/RectTransform in the current contract.
 - Generic importer mutation and generic asset move/rename/delete are not implemented.
 - Script read supports strict UTF-8 source only, exact `.cs` Unity assets, at most 4 MiB per source file, and character paging rather than line/symbol parsing.
-- Script replace supports only existing editable `Assets/*.cs`, complete bounded replacement content, raw GUID/SHA CAS, and current-session reload reconciliation; Packages are read-only and there is no generic source Undo/rollback claim.
-- Script-replace live verification demonstrated that fixed short client timeouts can false-fail on slower machines during legitimate compile/domain reload. Callers that synchronously wait for the terminal result need enough timeout headroom for project/machine variability, while same-id reconciliation remains the safety mechanism for ambiguous transport outcomes.
+- Script replace supports only existing editable `Assets/*.cs`, complete bounded replacement content, raw GUID/SHA CAS, and current-session reload reconciliation. Packages are read-only and there is no generic source Undo/rollback claim.
+- Script replace compile/domain-reload duration varies substantially by project and machine. Callers that synchronously wait for terminal results need sufficient timeout headroom while same-id reconciliation remains the safety mechanism for ambiguous transport outcomes.
 - Prefab Asset creation is create-only under `Assets`, never overwrites an existing asset, and is a persistent disk write without Unity Undo.
 - Prefab property apply covers exactly one existing visible non-array override, requires an explicit writable Prefab Asset target, rejects Model Prefabs, and does not claim generic automatic rollback after an ambiguous persistent asset mutation.
 - Prefab Apply All, object/component-wide Apply, Revert Overrides, unpacking, variant authoring, and generic asset deletion remain unimplemented.
