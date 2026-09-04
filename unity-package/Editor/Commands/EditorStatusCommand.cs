@@ -34,6 +34,8 @@ namespace UnityAiBridge.Editor.Commands
         {
             "editor.status",
             "mutation.status",
+            "task.begin",
+            "task.get",
             "action.history",
             "action.undoLast",
             "checkpoint.capture",

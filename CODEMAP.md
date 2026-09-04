@@ -57,6 +57,7 @@ This file maps the current repository at subsystem level and records what is onl
 │  ├─ SCRIPT_READ.md
 │  ├─ TEST_RUNNER_CONTROL.md
 │  ├─ TEST_DISCOVERY.md
+│  ├─ TASK_JOURNAL_RESUME.md
 │  ├─ schemas/
 │  └─ fixtures/
 │
@@ -101,6 +102,7 @@ This file maps the current repository at subsystem level and records what is onl
 - `bridge-protocol/SCRIPT_READ.md` — bounded Script source observation contract and file-content CAS boundary
 - `bridge-protocol/TEST_RUNNER_CONTROL.md` — bounded asynchronous EditMode/PlayMode Test Runner start/get contract, retry identity, current-session journaling, lifecycle behavior, and result bounds
 - `bridge-protocol/TEST_DISCOVERY.md` — bounded read-only Test Framework assembly/leaf discovery contract and paging semantics
+- `bridge-protocol/TASK_JOURNAL_RESUME.md` — bounded current-session multi-step task journal/resume contract, reserved mutation admission, state-boundary continuation rules, and explicit non-goals
 - `llms.txt` — compact AI entrypoint
 
 ## Current source ownership
@@ -117,6 +119,7 @@ Home of the Unity Editor-side implementation:
 - state epoch/revision tracking and stale-state protection,
 - mutation lifecycle/replay protection,
 - common mutation transaction behavior,
+- bounded current-session task journal/reservation admission layered on the existing mutation lifecycle,
 - Undo/dirty-state handling,
 - semantic native readback and rollback verification where applicable,
 - Editor status/hierarchy/diagnostics/object resolution,
@@ -137,7 +140,7 @@ The Unity-facing transport-independent contract:
 - protocol-versioned command/hello/result JSON Schemas,
 - operation fixtures,
 - bridge protocol documentation,
-- operation-specific contracts such as bounded Prefab property apply, Script source read, asynchronous EditMode/PlayMode Test Runner control, and bounded Test Framework discovery.
+- operation-specific contracts such as bounded Prefab property apply, Script source read, asynchronous EditMode/PlayMode Test Runner control, bounded Test Framework discovery, and bounded task journal/resume.
 
 MCP-facing tool contracts and Unity-facing bridge commands remain separate on purpose. Unity command semantics must not depend on a particular LLM vendor, MCP host, or WebSocket-specific detail.
 
@@ -155,6 +158,7 @@ The provider-neutral MCP/tool layer:
 - bounded Script read tool/bridge adapter with raw-file SHA-256 metadata,
 - asynchronous EditMode/PlayMode Test Runner start tools with shared any-mode result polling, exact selection, lifecycle/reconnect reconciliation, and bounded structured result validation,
 - bounded `unity_list_tests` discovery that exposes Unity-native assembly/exact leaf selectors without source inference,
+- bounded task begin/status tools that reserve existing mutation IDs and validate conservative resume guidance without auto-executing task steps,
 - domain-specific bridge subclasses/modules where that keeps large surfaces maintainable,
 - structured MCP results/errors,
 - simulated bridge tests and real-Unity verification helpers.

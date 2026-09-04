@@ -37,46 +37,42 @@ Broader Unity/OS compatibility is not implied.
 
 ## Latest real Unity verification
 
-The latest expanded installed-package EditMode baseline was verified on **2026-09-04** against PR #56 code head `6276cb0a7ee5929bafdfdc7e50a66147775126e2`:
+The latest expanded installed-package EditMode baseline was verified on **2026-09-04** for PR #58 after the Unity task-journal wire-path fix:
 
 ```text
 Windows
 Unity 6000.3.21f1
-126 Passed
+135 Passed
 0 Failed
 ```
 
-PR #56 was subsequently squash-merged to `main` as `defd88697636e5142a694b6bc4ab587d17096229`. Its documentation-only final PR head `c794a1f727ee8d9c37e1ba91103289cb99dc831b` also completed Node Verification #385 and Phase 1 Local Bridge Verification #406 successfully before merge.
-
-The dedicated live MCP gate also passed:
+The subsequent PR #58 Node-side response-normalization changes did not modify the Unity package. The dedicated live MCP gate then passed on PR #58 code head `67e9728c640727c46e618b5da70f7733c73dc50f`:
 
 ```text
-npm --prefix mcp-server run verify:checkpoint-restore
-[Unity AI Bridge] Bounded checkpoint restore verification PASS
+npm --prefix mcp-server run verify:task-resume
+[Unity AI Bridge] Bounded task journal/resume verification PASS
 ```
 
 Observed verified properties included:
 
 ```text
+unityVersion: 6000.3.21f1
 activeScenePath: Assets/SampleScene.unity
-captureReadOnlyStateTokenUnchanged: true
-deterministicCheckpointId: true
-checkpointGetReadOnly: true
-checkpointGetExact: true
-restoreChanged: true
-restoredNameAndActive: true
-restoredTransformExactly: true
-restoreSameIdReplayReadOnly: true
-deletedTargetRestoreRejected: true
-checkpointDidNotRecreateDeletedTarget: true
-temporaryObjectRemaining: false
+taskBeginReadOnly: true
+outOfOrderStepRejectedBeforeMutation: true
+wrongArgumentsRejectedBeforeMutation: true
+firstStepCompletedAndNextBoundaryExposed: true
+secondStepCompleted: true
+taskReachedCompletedState: true
+externalStateDriftBlockedResume: true
+blockedTaskTargetUnchanged: true
 ```
 
-This is the current highest real-Unity baseline. Earlier verified gates remain valid within their documented scopes unless superseded below.
+PR #58 is still open while final documentation-head GitHub verification completes. Runtime verification does not imply that the PR has already been merged to `main`.
 
 ## Reliability / recovery progression
 
-Issue #50 tracks the current reliability follow-on sequence. Steps 1–4 are now merged and verified.
+Issue #50 tracks the reliability follow-on sequence. Steps 1–4 are merged and verified. Step 5 is runtime-verified in PR #58 and awaiting final merge gates.
 
 | Step | PR | Main merge commit | Status | Verified boundary |
 |---|---:|---|---|---|
@@ -85,8 +81,7 @@ Issue #50 tracks the current reliability follow-on sequence. Steps 1–4 are now
 | Broadened common reconciliation | #54 | `d2e442d80964529dc7354f7e07f0eab36017ab64` | **Verified** | Seven reviewed common scene mutations; every first real success response dropped after Unity execution and recovered without blind retry. |
 | Bridge action history + safe last-action Undo | #55 | `4cc96efaf06071e4363f562e2ed750f7f9f9d391` | **Verified** | Current-session bounded history, newest bridge action only, exact native Undo evidence; real Unity **119/119** + live Undo gate. |
 | Bounded GameObject checkpoint / restore | #56 | `defd88697636e5142a694b6bc4ab587d17096229` | **Verified** | One existing GameObject in one saved active Scene, current-session checkpoint storage, exact parent/scene/state preconditions; real Unity **126/126** + live restore gate. |
-
-The next planned Issue #50 step is **multi-step task journal / resume**. No implementation should be assumed until a new slice is opened and verified.
+| Bounded multi-step task journal / resume | #58 | — open PR | **Verified runtime / merge pending** | Current-session task journal, max 16 tasks / 8 ordered steps, first slice only `gameObject.update` + `transform.set`; real Unity **135/135** + live `verify:task-resume` PASS. |
 
 ## Current verified / implemented surface
 
@@ -105,6 +100,7 @@ The next planned Issue #50 step is **multi-step task journal / resume**. No impl
 | Safe last-action Undo | **Verified** | PR #55. Only the exact newest bridge-owned action may be undone when fresh state token, scene, Unity Undo group/name, compile state, and Play Mode state still match. No arbitrary historical Undo. |
 | Bounded GameObject checkpoint capture/get | **Verified** | PR #56. Current-session SessionState storage, at most 16 retained checkpoints, deterministic bridge-generated checkpoint IDs, capture/get are read-only for Unity Scene state. |
 | Bounded GameObject checkpoint restore | **Verified** | PR #56. Restores only name, `activeSelf`, local position/rotation/scale for the same still-existing GameObject in the same saved active Scene and same direct parent. Deleted/reparented targets fail closed. |
+| Bounded multi-step task journal / resume | **Verified runtime / merge pending** | PR #58. `task.begin` / `unity_begin_task` and `task.get` / `unity_get_task_status`; max 16 current-session tasks, max 8 steps, only existing-GameObject `gameObject.update` + `transform.set`; exact reserved mutation IDs and state boundaries; no auto-execution/retry/rollback. |
 | Dirty-state reporting | **Verified** | Rollback dirty residue is reported explicitly. |
 | Dirty-state restoration | **Not implemented** | Undo-based rollback can leave a previously clean scene dirty. |
 | Explicit active-scene save | **Verified** | Existing saved path only; exact path/state preconditions; native post-save verification; no interactive Save As. |
@@ -121,7 +117,7 @@ The next planned Issue #50 step is **multi-step task journal / resume**. No impl
 | Prefab single-property override apply | **Verified** | PR #36 + harness hardening #37–#40; historical **80/80** real Unity integration + PR #42 live MCP gate. |
 | Direct `Undo.RecordObject` Prefab-instance writes | **Verified** | #41 / PR #43; explicit `PrefabUtility.RecordPrefabInstancePropertyModifications` for non-asset scene Prefab instances; historical **81/81** milestone. |
 | Play Mode control | **Verified** | PR #46; exact stable-state preconditions, same-id reconciliation across optional reload/reconnect, stale expected-mode rejection, user Enter Play Mode settings preserved. Historical **93/93** + live edit→play→edit gate. |
-| Installed-package Test Runner bootstrap | **Verified** | Development Local/LocalTarball/Git installs self-add the package to project `testables`; guarded package reimport handles Test Framework refresh. Current overall EditMode regression suite is **126/126**. |
+| Installed-package Test Runner bootstrap | **Verified** | Development Local/LocalTarball/Git installs self-add the package to project `testables`; guarded package reimport handles Test Framework refresh. Current overall EditMode regression suite is **135/135**. |
 | EditMode Test Runner control | **Verified** | PR #47; asynchronous exact assembly/test selection, SessionState run journal, bounded results, same-id no-duplicate scheduling, conflict rejection. Historical **98/98** + live one-test gate. |
 | PlayMode Test Runner control | **Verified** | PR #48; Unity Test Framework owns Edit→Play→Edit, same-session journal/replay survives lifecycle reconnects, runtime-capable `[UnityTest]` proved `Application.isPlaying` across a frame. Historical **100/100 EditMode + 1/1 PlayMode** + live gate. |
 | Test Framework discovery | **Verified** | PR #49; native EditMode/PlayMode assembly discovery, exact leaf selectors, bounded substring filtering, deterministic paging, fail-closed unknown assembly, stable Edit Mode/read-only state token. Historical **105/105** + live discovery gate. |
@@ -205,6 +201,7 @@ Current objective: provide a small but genuinely useful Unity editing/inspection
 20. **Seven-operation common mutation reconciliation — PR #54** — create/update/delete/transform/component add/property/remove; every first success response dropped after Unity execution and recovered safely; live fault-proxy PASS, verified 2026-09-04
 21. **Bridge action history + safe latest-action Undo — PR #55** — **119/119** + live MCP `verify:action-undo` PASS, verified 2026-09-04
 22. **Bounded GameObject checkpoint / restore — PR #56** — **126/126** + live MCP `verify:checkpoint-restore` PASS, verified 2026-09-04
+23. **Bounded multi-step task journal / resume — PR #58** — **135/135** + live MCP `verify:task-resume` PASS, runtime-verified 2026-09-04; merge pending final GitHub gates.
 
 ### Verified common mutation lifecycle status contract
 
@@ -293,20 +290,39 @@ First-slice boundary:
 
 This is not whole-Scene backup, arbitrary historical rollback, child/component restoration, reparent/sibling restoration, Prefab/asset restoration, or Editor-restart durability.
 
+### Verified bounded multi-step task journal / resume contract
+
+Public surfaces:
+
+- `task.begin` / `unity_begin_task`
+- `task.get` / `unity_get_task_status`
+
+First-slice boundary:
+
+- existing GameObjects in the saved active Scene only;
+- only `gameObject.update` and `transform.set` steps;
+- current Editor `SessionState` storage;
+- maximum 16 retained tasks;
+- maximum 8 ordered steps per task;
+- every step owns a unique pre-reserved existing `mutationId`;
+- immutable task intent binds target and operation-specific requested values;
+- step 0 requires the exact task-creation state boundary;
+- later steps require the exact verified finish boundary of the prior completed step;
+- task reservations are enforced inside the existing `EditorMutationLifecycle.Begin` admission path before lifecycle `started` and before Unity side effects;
+- `ready` is exposed only when the next exact reserved step is safe now;
+- `waiting_reconciliation` never grants blind retry of a `started` mutation;
+- external state drift, terminal failure, conflicts, and out-of-order lifecycle state block continuation;
+- `completed` requires every reserved step to have verified common lifecycle completion.
+
+The task API never automatically executes, retries, reorders, skips, rolls back, restores checkpoints, or invents replacement mutation IDs. It is not a generic workflow engine and does not survive a full Unity Editor restart.
+
+Unity `JsonUtility` null/default-object artifacts are normalized only at the task wire boundary; unexpected non-default operation-irrelevant values remain invalid rather than silently broadening the contract. See [`bridge-protocol/TASK_JOURNAL_RESUME.md`](bridge-protocol/TASK_JOURNAL_RESUME.md).
+
 ## Current next work
 
-Issue #50 follow-on **step 5 — multi-step task journal / resume** is the next planned reliability slice.
+PR #58 is runtime-verified and now requires only exact-final-documentation-head GitHub verification plus merge bookkeeping.
 
-The design must preserve the existing principles:
-
-- record immutable task intent before side effects;
-- never infer completion from transport delivery alone;
-- use existing operation mutation IDs rather than inventing a second mutation system;
-- resume from observed verified step state, not from optimistic client memory;
-- fail closed when task journal state and native Unity state cannot be reconciled;
-- keep the first slice bounded rather than attempting a generic workflow engine.
-
-No implementation or verification is claimed yet.
+After PR #58 merges, the five-step Issue #50 follow-on order is complete. The next Phase 3 slice should be selected from the current roadmap/evidence rather than silently extending the task journal into a generic workflow engine.
 
 No arbitrary C# execution fallback is planned.
 
@@ -318,7 +334,8 @@ No arbitrary C# execution fallback is planned.
 - Bridge action history is current-session only and safe Undo is newest-action-only. It is not arbitrary `undo(mutationId)` and does not walk backward through history.
 - Checkpoints are current-session only, retain at most 16 records, and restore only one existing GameObject's bounded local state. They do not recreate deleted targets or restore hierarchy/components/assets.
 - Checkpoint capture currently has a defense-in-depth follow-up: Unity-side capture should explicitly reject overlong native GameObject names and non-finite existing Transform values before SessionState persistence. The public MCP validator already rejects malformed/non-finite checkpoint payloads; this does not expand the verified first-slice claim.
-- Multi-step task journal/resume is not implemented yet; it is the next planned Issue #50 slice.
+- Multi-step task journals are current-session only, retain at most 16 tasks with at most 8 steps each, and currently support only existing-GameObject `gameObject.update` and `transform.set`. They do not auto-execute, auto-retry, auto-rollback, restore checkpoints, or survive a full Editor restart.
+- Task retention eviction can remove the task-level resume view while operation-level common mutation lifecycle records remain separately bounded/current-session. Missing task state never authorizes automatic reconstruction or continuation.
 - Clean-scene dirty metadata restoration after Undo rollback is not implemented.
 - An already-started Unity API call is not force-cancelled when its deadline later expires.
 - Play Mode control covers stable Edit/Play transitions and observation only; pause/step control, Play Mode settings mutation, standalone-player control, and full Editor-restart recovery are not implemented.

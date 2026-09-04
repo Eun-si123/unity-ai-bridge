@@ -18,6 +18,15 @@ namespace UnityAiBridge.Editor.Connection
             string rawJson,
             CancellationToken cancellationToken)
         {
+            if (await TryHandleTaskJournalCommandAsync(
+                    current,
+                    command,
+                    rawJson,
+                    cancellationToken))
+            {
+                return true;
+            }
+
             if (await TryHandleCheckpointCommandAsync(
                     current,
                     command,
