@@ -49,7 +49,7 @@ try {
   const initialHierarchy = await readHierarchy();
   assertPersistentScene(initialHierarchy.scenePath);
 
-  // 1) Prove that the latest bridge-owned create can be undone and verified by native absence.
+  // 1) Latest create is safe to undo, and native state proves the object is gone.
   const firstName = `MCP_ActionUndo_Create_${Date.now()}`;
   const firstCreateMutationId = `verify-action-undo-create-${randomUUID()}`;
   const firstCreate = await createAgainstFreshSnapshot(firstName, firstCreateMutationId);
@@ -69,19 +69,19 @@ try {
   cleanupName = undefined;
 
   const historyAfterFirstUndo = await readActionHistory(10);
+  const firstUndoneRecord = requireLatestEntry(historyAfterFirstUndo, "after first Undo");
   if (
-    historyAfterFirstUndo.actions.length === 0 ||
-    historyAfterFirstUndo.actions[0].mutationId !== firstCreateMutationId ||
-    !historyAfterFirstUndo.actions[0].undone ||
-    historyAfterFirstUndo.actions[0].safeToUndoNow ||
-    historyAfterFirstUndo.actions[0].unsafeReason !== "latest_action_already_undone"
+    firstUndoneRecord.mutationId !== firstCreateMutationId ||
+    !firstUndoneRecord.undone ||
+    firstUndoneRecord.safeToUndoNow ||
+    firstUndoneRecord.unsafeReason !== "latest_action_already_undone"
   ) {
     throw new Error(
-      `Undone latest action did not become fail-closed: ${JSON.stringify(historyAfterFirstUndo.actions[0])}`,
+      `Undone latest action did not become fail-closed: ${JSON.stringify(firstUndoneRecord)}`,
     );
   }
 
-  // 2) Prove an older mutationId is refused, then Undo the actual latest transform and verify exact restoration.
+  // 2) An older bridge action must be refused while the real latest Transform remains undoable.
   const secondName = `MCP_ActionUndo_Transform_${Date.now()}`;
   const secondCreateMutationId = `verify-action-undo-second-create-${randomUUID()}`;
   const secondCreate = await createAgainstFreshSnapshot(secondName, secondCreateMutationId);
@@ -154,14 +154,14 @@ try {
   );
 
   const historyAfterTransformUndo = await readActionHistory(10);
+  const transformUndoneRecord = requireLatestEntry(historyAfterTransformUndo, "after Transform Undo");
   if (
-    historyAfterTransformUndo.actions.length === 0 ||
-    historyAfterTransformUndo.actions[0].mutationId !== transformMutationId ||
-    !historyAfterTransformUndo.actions[0].undone ||
-    historyAfterTransformUndo.actions[0].safeToUndoNow
+    transformUndoneRecord.mutationId !== transformMutationId ||
+    !transformUndoneRecord.undone ||
+    transformUndoneRecord.safeToUndoNow
   ) {
     throw new Error(
-      `Transform action remained undoable after one safe Undo: ${JSON.stringify(historyAfterTransformUndo.actions[0])}`,
+      `Transform action remained undoable after one safe Undo: ${JSON.stringify(transformUndoneRecord)}`,
     );
   }
 
@@ -243,9 +243,13 @@ async function readActionHistory(maxResults: number): Promise<BridgeActionHistor
     name: "unity_get_bridge_action_history",
     arguments: { maxResults },
   });
-  if (result.isError) throw new Error(`unity_get_bridge_action_history failed: ${readToolText(result)}`);
+  if (result.isError) {
+    throw new Error(`unity_get_bridge_action_history failed: ${readToolText(result)}`);
+  }
   if (!isBridgeActionHistoryPayload(result.structuredContent)) {
-    throw new Error(`Invalid action history structuredContent: ${JSON.stringify(result.structuredContent)}`);
+    throw new Error(
+      `Invalid action history structuredContent: ${JSON.stringify(result.structuredContent)}`,
+    );
   }
   return result.structuredContent;
 }
@@ -262,9 +266,13 @@ async function undoLast(
       expectedStateRevision: history.stateRevision,
     },
   });
-  if (result.isError) throw new Error(`unity_undo_last_bridge_action failed: ${readToolText(result)}`);
+  if (result.isError) {
+    throw new Error(`unity_undo_last_bridge_action failed: ${readToolText(result)}`);
+  }
   if (!isBridgeActionUndoPayload(result.structuredContent)) {
-    throw new Error(`Invalid safe Undo structuredContent: ${JSON.stringify(result.structuredContent)}`);
+    throw new Error(
+      `Invalid safe Undo structuredContent: ${JSON.stringify(result.structuredContent)}`,
+    );
   }
   return result.structuredContent;
 }
@@ -274,9 +282,8 @@ function requireSafeLatest(
   mutationId: string,
   operation: string,
 ): BridgeActionHistoryPayload["actions"][number] {
-  const action = history.actions[0];
+  const action = requireLatestEntry(history, `while requiring safe ${operation}`);
   if (
-    action === undefined ||
     action.mutationId !== mutationId ||
     action.operation !== operation ||
     !action.isLatest ||
@@ -294,6 +301,17 @@ function requireSafeLatest(
     throw new Error(
       `History current state does not match latest action completion state: history=${history.stateEpoch}/${history.stateRevision} action=${action.stateAfterEpoch}/${action.stateAfterRevision}`,
     );
+  }
+  return action;
+}
+
+function requireLatestEntry(
+  history: BridgeActionHistoryPayload,
+  context: string,
+): BridgeActionHistoryPayload["actions"][number] {
+  const action = history.actions[0];
+  if (action === undefined) {
+    throw new Error(`Action history unexpectedly empty ${context}.`);
   }
   return action;
 }
@@ -399,7 +417,9 @@ async function bestEffortDelete(globalObjectId: string): Promise<void> {
       `verify-action-undo-best-effort-cleanup-${randomUUID()}`,
     );
   } catch (error) {
-    console.error(`[Unity AI Bridge] Cleanup warning: ${error instanceof Error ? error.message : String(error)}`);
+    console.error(
+      `[Unity AI Bridge] Cleanup warning: ${error instanceof Error ? error.message : String(error)}`,
+    );
     if (cleanupName !== undefined) {
       console.error(`[Unity AI Bridge] Temporary object may remain: ${cleanupName}`);
     }
@@ -466,7 +486,9 @@ function assertVectorApproximately(
     Math.abs(actual.y - expected.y) > tolerance ||
     Math.abs(actual.z - expected.z) > tolerance
   ) {
-    throw new Error(`${label} mismatch: expected=${JSON.stringify(expected)} actual=${JSON.stringify(actual)}`);
+    throw new Error(
+      `${label} mismatch: expected=${JSON.stringify(expected)} actual=${JSON.stringify(actual)}`,
+    );
   }
 }
 
@@ -489,12 +511,17 @@ function isState(value: Record<string, unknown>): boolean {
 }
 
 function isCreatePayload(value: unknown): value is CreatePayload {
-  return isRecord(value) && typeof value.globalObjectId === "string" && value.globalObjectId.length > 0 &&
-    typeof value.name === "string" && isState(value);
+  return isRecord(value) &&
+    typeof value.globalObjectId === "string" && value.globalObjectId.length > 0 &&
+    typeof value.name === "string" &&
+    isState(value);
 }
 
 function isHierarchyPayload(value: unknown): value is HierarchyPayload {
-  return isRecord(value) && typeof value.scenePath === "string" && Array.isArray(value.nodes) && isState(value);
+  return isRecord(value) &&
+    typeof value.scenePath === "string" &&
+    Array.isArray(value.nodes) &&
+    isState(value);
 }
 
 function isResolvePayload(value: unknown): value is ResolvePayload {
@@ -502,12 +529,18 @@ function isResolvePayload(value: unknown): value is ResolvePayload {
 }
 
 function isVector3(value: unknown): value is Vector3 {
-  return isRecord(value) && typeof value.x === "number" && typeof value.y === "number" && typeof value.z === "number";
+  return isRecord(value) &&
+    typeof value.x === "number" &&
+    typeof value.y === "number" &&
+    typeof value.z === "number";
 }
 
 function isTransformPayload(value: unknown): value is TransformPayload {
-  return isRecord(value) && isVector3(value.localPosition) && isVector3(value.localEulerAngles) &&
-    isVector3(value.localScale) && isState(value);
+  return isRecord(value) &&
+    isVector3(value.localPosition) &&
+    isVector3(value.localEulerAngles) &&
+    isVector3(value.localScale) &&
+    isState(value);
 }
 
 function delay(ms: number): Promise<void> {
