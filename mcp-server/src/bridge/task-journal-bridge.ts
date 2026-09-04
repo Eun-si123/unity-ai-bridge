@@ -156,6 +156,9 @@ export function validateTaskSteps(steps: TaskStepPlan[]): void {
   const mutationIds = new Set<string>();
   for (let index = 0; index < steps.length; index += 1) {
     const step = steps[index];
+    if (step === undefined) {
+      throw new Error(`steps[${index}] is required.`);
+    }
     if (step.index !== index) {
       throw new Error(`steps[${index}].index must equal ${index}.`);
     }
