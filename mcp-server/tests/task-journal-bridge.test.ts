@@ -196,6 +196,41 @@ test("task bridge helpers access a real base bridge instance through the reviewe
   ]);
 });
 
+test("task.begin canonicalizes operation-specific wire fields before Unity delivery", async () => {
+  let capturedArgs: Record<string, unknown> | undefined;
+  const bridge = {
+    connectedEditor: {
+      editorId: "editor-a",
+      connectionGeneration: 7,
+    },
+    requestOperation: async (
+      _operation: string,
+      args: Record<string, unknown>,
+    ) => {
+      capturedArgs = args;
+      return readyPayload();
+    },
+  } as unknown as PrefabPropertyBridgeServer;
+
+  const polluted = plans();
+  Object.assign(polluted[0] as object, {
+    localPosition: { x: 99, y: 99, z: 99 },
+    localEulerAngles: { x: 99, y: 99, z: 99 },
+    localScale: { x: 99, y: 99, z: 99 },
+  });
+  Object.assign(polluted[1] as object, {
+    name: "must-not-cross-wire-boundary",
+    activeSelf: true,
+  });
+
+  await requestTaskBegin(bridge, "task-1", polluted);
+
+  assert.deepEqual(capturedArgs, {
+    taskId: "task-1",
+    steps: plans(),
+  });
+});
+
 test("task bridge helpers fail closed when no Unity Editor is connected", async () => {
   const bridge = {
     connectedEditor: undefined,
