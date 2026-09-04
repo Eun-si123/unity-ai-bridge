@@ -9,6 +9,8 @@ const unityFacingPort = 5081;
 const editorWaitMs = 30_000;
 const ambiguousDeliveryTimeoutMs = 1_000;
 const normalTimeoutMs = 5_000;
+const verifierComponentType = "UnityEngine.BoxCollider";
+const verifierPropertyPath = "m_IsTrigger";
 
 class DroppedResultProxy {
   private readonly server: WebSocketServer;
@@ -218,14 +220,15 @@ async function main(): Promise<void> {
       );
     }
 
-    const objectName = `MCP_Reconciliation_${Date.now()}`;
-    cleanupName = objectName;
-    const createMutationId = `verify-reconcile-create-${randomUUID()}`;
+    const originalName = `MCP_Reconciliation_${Date.now()}`;
+    const updatedName = `${originalName}_Updated`;
+    cleanupName = originalName;
 
+    const createMutationId = `verify-reconcile-create-${randomUUID()}`;
     proxy.armDrop("gameObject.create");
     const create = await bridge.requestCreateGameObject(
       {
-        name: objectName,
+        name: originalName,
         mutationId: createMutationId,
         expectedStateEpoch: initialHierarchy.stateEpoch,
         expectedStateRevision: initialHierarchy.stateRevision,
@@ -233,18 +236,30 @@ async function main(): Promise<void> {
       ambiguousDeliveryTimeoutMs,
     );
     cleanupGlobalObjectId = create.globalObjectId;
-
-    if (!create.replayed) {
-      throw new Error(
-        `Expected gameObject.create to recover through same-id replay after the injected lost response, but replayed=false: ${JSON.stringify(create)}`,
-      );
-    }
-    if (!proxy.wasDropped("gameObject.create")) {
-      throw new Error("The verifier did not actually drop the first gameObject.create result.");
-    }
-
+    assertRecovered(create.replayed, proxy, "gameObject.create", createMutationId);
     const createStatus = await requestMutationStatus(bridge, createMutationId, normalTimeoutMs);
     assertCompletedStatus(createStatus, "gameObject.create", createMutationId);
+
+    const updateMutationId = `verify-reconcile-update-${randomUUID()}`;
+    proxy.armDrop("gameObject.update");
+    const update = await bridge.requestUpdateGameObject(
+      {
+        globalObjectId: create.globalObjectId,
+        name: updatedName,
+        activeSelf: true,
+        mutationId: updateMutationId,
+        expectedStateEpoch: create.stateEpoch,
+        expectedStateRevision: create.stateRevision,
+      },
+      ambiguousDeliveryTimeoutMs,
+    );
+    cleanupName = updatedName;
+    assertRecovered(update.replayed, proxy, "gameObject.update", updateMutationId);
+    if (update.gameObject.name !== updatedName || update.gameObject.activeSelf !== true) {
+      throw new Error(`gameObject.update replay readback mismatch: ${JSON.stringify(update)}`);
+    }
+    const updateStatus = await requestMutationStatus(bridge, updateMutationId, normalTimeoutMs);
+    assertCompletedStatus(updateStatus, "gameObject.update", updateMutationId);
 
     const transformBefore = await bridge.requestTransform(create.globalObjectId, normalTimeoutMs);
     const requestedPosition = {
@@ -253,7 +268,6 @@ async function main(): Promise<void> {
       z: transformBefore.localPosition.z - 3.75,
     };
     const transformMutationId = `verify-reconcile-transform-${randomUUID()}`;
-
     proxy.armDrop("transform.set");
     const transformResult = await bridge.requestSetTransform(
       {
@@ -267,42 +281,103 @@ async function main(): Promise<void> {
       },
       ambiguousDeliveryTimeoutMs,
     );
-
-    if (!transformResult.replayed) {
-      throw new Error(
-        `Expected transform.set to recover through same-id replay after the injected lost response, but replayed=false: ${JSON.stringify(transformResult)}`,
-      );
-    }
-    if (!proxy.wasDropped("transform.set")) {
-      throw new Error("The verifier did not actually drop the first transform.set result.");
-    }
-
+    assertRecovered(transformResult.replayed, proxy, "transform.set", transformMutationId);
     const transformStatus = await requestMutationStatus(bridge, transformMutationId, normalTimeoutMs);
     assertCompletedStatus(transformStatus, "transform.set", transformMutationId);
 
     const transformAfter = await bridge.requestTransform(create.globalObjectId, normalTimeoutMs);
     assertVectorApproximately(transformAfter.localPosition, requestedPosition, "final localPosition");
 
-    const cleanupSnapshot = await bridge.requestHierarchy({ maxDepth: 32, maxNodes: 500 }, normalTimeoutMs);
-    const deleteMutationId = `verify-reconcile-cleanup-${randomUUID()}`;
+    const addMutationId = `verify-reconcile-component-add-${randomUUID()}`;
+    proxy.armDrop("component.add");
+    const added = await bridge.requestAddComponent(
+      {
+        gameObjectGlobalObjectId: create.globalObjectId,
+        typeName: verifierComponentType,
+        mutationId: addMutationId,
+        expectedStateEpoch: transformAfter.stateEpoch,
+        expectedStateRevision: transformAfter.stateRevision,
+      },
+      ambiguousDeliveryTimeoutMs,
+    );
+    assertRecovered(added.replayed, proxy, "component.add", addMutationId);
+    if (added.component.typeName !== verifierComponentType) {
+      throw new Error(`component.add replay type mismatch: ${JSON.stringify(added)}`);
+    }
+    const addStatus = await requestMutationStatus(bridge, addMutationId, normalTimeoutMs);
+    assertCompletedStatus(addStatus, "component.add", addMutationId);
+
+    const propertyMutationId = `verify-reconcile-component-property-${randomUUID()}`;
+    proxy.armDrop("component.property.set");
+    const property = await bridge.requestSetComponentProperty(
+      {
+        componentGlobalObjectId: added.component.globalObjectId,
+        propertyPath: verifierPropertyPath,
+        value: { kind: "boolean", boolValue: true },
+        mutationId: propertyMutationId,
+        expectedStateEpoch: added.component.stateEpoch,
+        expectedStateRevision: added.component.stateRevision,
+      },
+      ambiguousDeliveryTimeoutMs,
+    );
+    assertRecovered(property.replayed, proxy, "component.property.set", propertyMutationId);
+    if (property.property.boolValue !== true) {
+      throw new Error(`component.property.set replay readback mismatch: ${JSON.stringify(property)}`);
+    }
+    const propertyStatus = await requestMutationStatus(bridge, propertyMutationId, normalTimeoutMs);
+    assertCompletedStatus(propertyStatus, "component.property.set", propertyMutationId);
+
+    const removeMutationId = `verify-reconcile-component-remove-${randomUUID()}`;
+    proxy.armDrop("component.remove");
+    const removed = await bridge.requestRemoveComponent(
+      {
+        componentGlobalObjectId: added.component.globalObjectId,
+        mutationId: removeMutationId,
+        expectedStateEpoch: property.component.stateEpoch,
+        expectedStateRevision: property.component.stateRevision,
+      },
+      ambiguousDeliveryTimeoutMs,
+    );
+    assertRecovered(removed.replayed, proxy, "component.remove", removeMutationId);
+    if (!removed.removed) {
+      throw new Error(`component.remove replay did not report removed=true: ${JSON.stringify(removed)}`);
+    }
+    const removeStatus = await requestMutationStatus(bridge, removeMutationId, normalTimeoutMs);
+    assertCompletedStatus(removeStatus, "component.remove", removeMutationId);
+
+    const removedComponentReadback = await bridge.requestResolveObject(
+      added.component.globalObjectId,
+      normalTimeoutMs,
+    );
+    if (removedComponentReadback.found) {
+      throw new Error(
+        `Removed verifier Component still resolves after reconciliation: ${JSON.stringify(removedComponentReadback)}`,
+      );
+    }
+
+    const deleteMutationId = `verify-reconcile-delete-${randomUUID()}`;
+    proxy.armDrop("gameObject.delete");
     const deleted = await bridge.requestDeleteGameObject(
       {
         globalObjectId: create.globalObjectId,
         mutationId: deleteMutationId,
-        expectedStateEpoch: cleanupSnapshot.stateEpoch,
-        expectedStateRevision: cleanupSnapshot.stateRevision,
+        expectedStateEpoch: removed.stateEpoch,
+        expectedStateRevision: removed.stateRevision,
       },
-      normalTimeoutMs,
+      ambiguousDeliveryTimeoutMs,
     );
+    assertRecovered(deleted.replayed, proxy, "gameObject.delete", deleteMutationId);
     if (!deleted.deleted) {
-      throw new Error(`Cleanup delete did not report deleted=true: ${JSON.stringify(deleted)}`);
+      throw new Error(`gameObject.delete replay did not report deleted=true: ${JSON.stringify(deleted)}`);
     }
+    const deleteStatus = await requestMutationStatus(bridge, deleteMutationId, normalTimeoutMs);
+    assertCompletedStatus(deleteStatus, "gameObject.delete", deleteMutationId);
     cleanupGlobalObjectId = undefined;
     cleanupName = undefined;
 
     const finalHierarchy = await bridge.requestHierarchy({ maxDepth: 32, maxNodes: 500 }, normalTimeoutMs);
     const remaining = finalHierarchy.nodes.filter(
-      (node) => node.globalObjectId === create.globalObjectId || node.name === objectName,
+      (node) => node.globalObjectId === create.globalObjectId || node.name === originalName || node.name === updatedName,
     );
     if (remaining.length !== 0) {
       throw new Error(`Temporary reconciliation verifier object still exists: ${JSON.stringify(remaining)}`);
@@ -315,15 +390,45 @@ async function main(): Promise<void> {
       initialConnectionGeneration: editor.connectionGeneration,
       activeScenePath: initialHierarchy.scenePath,
       injectedFault: "drop_first_success_result_after_unity_execution",
+      verifiedOperations: [
+        "gameObject.create",
+        "gameObject.update",
+        "transform.set",
+        "component.add",
+        "component.property.set",
+        "component.remove",
+        "gameObject.delete",
+      ],
       createMutationId,
       createRecoveredViaSameIdReplay: create.replayed,
       createLifecycleStatus: createStatus.status,
+      updateMutationId,
+      updateRecoveredViaSameIdReplay: update.replayed,
+      updateLifecycleStatus: updateStatus.status,
       transformMutationId,
       transformRecoveredViaSameIdReplay: transformResult.replayed,
       transformLifecycleStatus: transformStatus.status,
+      addMutationId,
+      addRecoveredViaSameIdReplay: added.replayed,
+      addLifecycleStatus: addStatus.status,
+      propertyMutationId,
+      propertyRecoveredViaSameIdReplay: property.replayed,
+      propertyLifecycleStatus: propertyStatus.status,
+      removeMutationId,
+      removeRecoveredViaSameIdReplay: removed.replayed,
+      removeLifecycleStatus: removeStatus.status,
+      deleteMutationId,
+      deleteRecoveredViaSameIdReplay: deleted.replayed,
+      deleteLifecycleStatus: deleteStatus.status,
       createResultDropped: proxy.wasDropped("gameObject.create"),
+      updateResultDropped: proxy.wasDropped("gameObject.update"),
       transformResultDropped: proxy.wasDropped("transform.set"),
+      addResultDropped: proxy.wasDropped("component.add"),
+      propertyResultDropped: proxy.wasDropped("component.property.set"),
+      removeResultDropped: proxy.wasDropped("component.remove"),
+      deleteResultDropped: proxy.wasDropped("gameObject.delete"),
       finalPositionVerified: true,
+      removedComponentStillPresent: false,
       temporaryObjectRemaining: false,
     }, null, 2));
   } catch (error) {
@@ -334,6 +439,22 @@ async function main(): Promise<void> {
     await bestEffortCleanup();
     await proxy?.stop();
     await bridge.stop();
+  }
+}
+
+function assertRecovered(
+  replayed: boolean,
+  proxy: DroppedResultProxy,
+  operation: string,
+  mutationId: string,
+): void {
+  if (!replayed) {
+    throw new Error(
+      `Expected ${operation} to recover through same-id replay after the injected lost response, but replayed=false mutationId=${mutationId}`,
+    );
+  }
+  if (!proxy.wasDropped(operation)) {
+    throw new Error(`The verifier did not actually drop the first ${operation} result.`);
   }
 }
 

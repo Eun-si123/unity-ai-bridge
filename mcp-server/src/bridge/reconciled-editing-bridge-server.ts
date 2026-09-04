@@ -5,9 +5,14 @@ import {
 } from "./mutation-status-contract.js";
 import type { BridgeRoute, RiskClass } from "../protocol/bridge.js";
 
-const RECONCILED_OPERATIONS = new Set([
+export const RECONCILED_COMMON_MUTATION_OPERATIONS = new Set([
   "gameObject.create",
+  "gameObject.update",
+  "gameObject.delete",
   "transform.set",
+  "component.add",
+  "component.remove",
+  "component.property.set",
 ]);
 const RECONCILIATION_GRACE_MS = 5_000;
 const RECONCILIATION_POLL_MS = 100;
@@ -22,7 +27,7 @@ export class ReconciledEditingBridgeServer extends EditingBridgeServer {
     timeoutMs: number,
     risk: RiskClass = "read",
   ): Promise<unknown> {
-    if (!RECONCILED_OPERATIONS.has(operation)) {
+    if (!RECONCILED_COMMON_MUTATION_OPERATIONS.has(operation)) {
       return await super.requestOperation(operation, args, route, timeoutMs, risk);
     }
 

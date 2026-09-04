@@ -3,7 +3,11 @@ import test from "node:test";
 
 import { WebSocket } from "ws";
 
-import { ReconciledEditingBridgeServer } from "../src/bridge/reconciled-editing-bridge-server.js";
+import {
+  RECONCILED_COMMON_MUTATION_OPERATIONS,
+  ReconciledEditingBridgeServer,
+} from "../src/bridge/reconciled-editing-bridge-server.js";
+import type { GameObjectUpdatePayload } from "../src/bridge/editing-bridge-server.js";
 import type {
   BridgeHello,
   GameObjectCreatePayload,
@@ -86,6 +90,51 @@ function createPayload(mutationId: string): GameObjectCreatePayload {
     stateRevision: 11,
   };
 }
+
+function updatePayload(mutationId: string): GameObjectUpdatePayload {
+  return {
+    mutationId,
+    replayed: true,
+    changed: true,
+    requestedGlobalObjectId: "GlobalObjectId_V1-2-update-target-0-0",
+    requestedName: "Updated",
+    requestedActiveSelf: true,
+    expectedStateEpoch: "snapshot-epoch",
+    expectedStateRevision: 8,
+    gameObject: {
+      globalObjectId: "GlobalObjectId_V1-2-update-target-0-0",
+      instanceId: 902,
+      name: "Updated",
+      activeSelf: true,
+      activeInHierarchy: true,
+      childCount: 0,
+      sceneName: "SampleScene",
+      scenePath: "Assets/SampleScene.unity",
+      hierarchyPath: "Updated",
+      siblingIndex: 4,
+      sceneIsDirty: true,
+      stateEpoch: "test-state-epoch",
+      stateRevision: 12,
+    },
+  };
+}
+
+test("common mutation reconciliation allowlist is explicit and bounded", () => {
+  assert.deepEqual(
+    [...RECONCILED_COMMON_MUTATION_OPERATIONS].sort(),
+    [
+      "component.add",
+      "component.property.set",
+      "component.remove",
+      "gameObject.create",
+      "gameObject.delete",
+      "gameObject.update",
+      "transform.set",
+    ],
+  );
+  assert.equal(RECONCILED_COMMON_MUTATION_OPERATIONS.has("scene.save"), false);
+  assert.equal(RECONCILED_COMMON_MUTATION_OPERATIONS.has("script.replace"), false);
+});
 
 test("timeout ambiguity uses mutation.status and same-id replay to recover gameObject.create result", async () => {
   const bridge = new ReconciledEditingBridgeServer("127.0.0.1", 0);
@@ -239,38 +288,48 @@ test("not_found after ambiguous delivery fails closed and never replays the muta
   }
 });
 
-test("non-allowlisted GameObject update still surfaces disconnect ambiguity without automatic status replay", async () => {
+test("newly admitted gameObject.update recovers an ambiguous timeout through same-id replay", async () => {
   const bridge = new ReconciledEditingBridgeServer("127.0.0.1", 0);
   const port = await bridge.start();
   const client = await connectEditor(bridge, port, hello(400));
-  const mutationId = "reconcile-update-not-enabled-1";
-  let deliveries = 0;
-  const commandPromise = nextCommand(client);
-  const resultPromise = bridge.requestUpdateGameObject(
-    {
-      globalObjectId: "GlobalObjectId_V1-2-update-target-0-0",
-      name: "Updated",
-      activeSelf: true,
-      mutationId,
-      expectedStateEpoch: "snapshot-epoch",
-      expectedStateRevision: 8,
-    },
-    500,
-  );
+  const mutationId = "reconcile-update-enabled-1";
+  let updateDeliveries = 0;
+  let statusReads = 0;
 
   try {
-    const command = await commandPromise;
-    deliveries += 1;
-    assert.equal(command.operation, "gameObject.update");
-    const closed = waitForClose(client);
-    client.terminate();
-    await closed;
+    client.on("message", (data) => {
+      const command = parseCommand(data);
+      if (command.operation === "gameObject.update") {
+        updateDeliveries += 1;
+        assert.equal(command.arguments.mutationId, mutationId);
+        if (updateDeliveries === 1) return;
+        sendSuccess(client, command.requestId, updatePayload(mutationId));
+        return;
+      }
+      if (command.operation === "mutation.status") {
+        statusReads += 1;
+        sendSuccess(client, command.requestId, completedStatus(mutationId, "gameObject.update"));
+        return;
+      }
+      assert.fail(`Unexpected operation ${command.operation}`);
+    });
 
-    await assert.rejects(
-      resultPromise,
-      /Unity Editor disconnected before the request completed[\s\S]*mutationId=reconcile-update-not-enabled-1/,
+    const result = await bridge.requestUpdateGameObject(
+      {
+        globalObjectId: "GlobalObjectId_V1-2-update-target-0-0",
+        name: "Updated",
+        activeSelf: true,
+        mutationId,
+        expectedStateEpoch: "snapshot-epoch",
+        expectedStateRevision: 8,
+      },
+      75,
     );
-    assert.equal(deliveries, 1);
+
+    assert.equal(result.replayed, true);
+    assert.equal(result.mutationId, mutationId);
+    assert.equal(updateDeliveries, 2);
+    assert.equal(statusReads, 1);
   } finally {
     await bridge.stop();
     closeSocket(client);
