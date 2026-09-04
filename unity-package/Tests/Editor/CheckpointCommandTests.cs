@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using NUnit.Framework;
 using UnityAiBridge.Editor.Commands;
 using UnityAiBridge.Editor.Execution;
@@ -14,8 +13,7 @@ namespace UnityAiBridge.Editor.Tests
     {
         private Scene originalScene;
         private Scene testScene;
-        private bool testSceneWasDirty;
-        private readonly List<GameObject> createdObjects = new List<GameObject>();
+        private string temporaryScenePath;
         private GameObject target;
         private string globalObjectId;
 
@@ -23,15 +21,19 @@ namespace UnityAiBridge.Editor.Tests
         public void SetUp()
         {
             originalScene = SceneManager.GetActiveScene();
-            testScene = FindLoadedSavedScene();
-            Assert.That(
-                testScene.IsValid() && testScene.isLoaded && !string.IsNullOrEmpty(testScene.path),
-                Is.True,
-                "Checkpoint tests require at least one already-loaded saved Scene. " +
-                "The fixture intentionally does not create/close/save user Scenes because Unity rejects additive " +
-                "NewScene while an untitled unsaved Scene is open, and tests must not destroy that user state.");
+            Assert.That(originalScene.IsValid() && originalScene.isLoaded, Is.True);
 
-            testSceneWasDirty = testScene.isDirty;
+            temporaryScenePath =
+                "Assets/UnityAiBridge_CheckpointTest_" + Guid.NewGuid().ToString("N") + ".unity";
+
+            Assert.That(
+                EditorSceneManager.SaveScene(originalScene, temporaryScenePath, true),
+                Is.True,
+                "Checkpoint tests must be able to create a temporary saved copy of the current Scene without changing the user's Scene or clearing its dirty state.");
+
+            testScene = EditorSceneManager.OpenScene(temporaryScenePath, OpenSceneMode.Additive);
+            Assert.That(testScene.IsValid() && testScene.isLoaded, Is.True);
+            Assert.That(testScene.path, Is.EqualTo(temporaryScenePath));
             Assert.That(SceneManager.SetActiveScene(testScene), Is.True);
 
             target = CreateGameObject("Checkpoint Original");
@@ -45,28 +47,21 @@ namespace UnityAiBridge.Editor.Tests
         [TearDown]
         public void TearDown()
         {
-            for (var index = createdObjects.Count - 1; index >= 0; index--)
-            {
-                var gameObject = createdObjects[index];
-                if (gameObject != null)
-                {
-                    UnityEngine.Object.DestroyImmediate(gameObject);
-                }
-            }
-            createdObjects.Clear();
             target = null;
-
-            // If this Scene was clean before the test, the fixture owns every edit it made.
-            // Saving after removing all temporary objects returns it to a clean serialized state
-            // without depending on non-public/unsupported scene-clean APIs.
-            if (testScene.IsValid() && testScene.isLoaded && !testSceneWasDirty)
-            {
-                Assert.That(EditorSceneManager.SaveScene(testScene), Is.True);
-            }
 
             if (originalScene.IsValid() && originalScene.isLoaded)
             {
                 SceneManager.SetActiveScene(originalScene);
+            }
+
+            if (testScene.IsValid() && testScene.isLoaded)
+            {
+                EditorSceneManager.CloseScene(testScene, true);
+            }
+
+            if (!string.IsNullOrEmpty(temporaryScenePath))
+            {
+                AssetDatabase.DeleteAsset(temporaryScenePath);
             }
         }
 
@@ -222,30 +217,7 @@ namespace UnityAiBridge.Editor.Tests
             {
                 SceneManager.MoveGameObjectToScene(gameObject, testScene);
             }
-            createdObjects.Add(gameObject);
             return gameObject;
-        }
-
-        private static Scene FindLoadedSavedScene()
-        {
-            var activeScene = SceneManager.GetActiveScene();
-            if (activeScene.IsValid() &&
-                activeScene.isLoaded &&
-                !string.IsNullOrEmpty(activeScene.path))
-            {
-                return activeScene;
-            }
-
-            for (var index = 0; index < SceneManager.sceneCount; index++)
-            {
-                var scene = SceneManager.GetSceneAt(index);
-                if (scene.IsValid() && scene.isLoaded && !string.IsNullOrEmpty(scene.path))
-                {
-                    return scene;
-                }
-            }
-
-            return default;
         }
 
         private static void AssertVector(Vector3 actual, TransformVector3Payload expected)
