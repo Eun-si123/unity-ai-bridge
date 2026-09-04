@@ -112,11 +112,12 @@ export async function requestTaskBegin(
 ): Promise<TaskJournalPayload> {
   validateId(taskId, "taskId");
   validateTaskSteps(steps);
+  const wireSteps = canonicalizeTaskSteps(steps);
   const editor = requireConnectedEditor(bridge);
   const raw = await requestOperation(
     bridge,
     "task.begin",
-    { taskId, steps },
+    { taskId, steps: wireSteps },
     editor,
     timeoutMs,
     "read",
@@ -188,6 +189,31 @@ export function validateTaskSteps(steps: TaskStepPlan[]): void {
 
     throw new Error(`steps[${index}].operation is not supported by the bounded task journal.`);
   }
+}
+
+function canonicalizeTaskSteps(steps: TaskStepPlan[]): TaskStepPlan[] {
+  return steps.map((step) => {
+    if (step.operation === "gameObject.update") {
+      return {
+        index: step.index,
+        operation: step.operation,
+        mutationId: step.mutationId,
+        globalObjectId: step.globalObjectId,
+        name: step.name,
+        activeSelf: step.activeSelf,
+      };
+    }
+
+    return {
+      index: step.index,
+      operation: step.operation,
+      mutationId: step.mutationId,
+      globalObjectId: step.globalObjectId,
+      localPosition: { ...step.localPosition },
+      localEulerAngles: { ...step.localEulerAngles },
+      localScale: { ...step.localScale },
+    };
+  });
 }
 
 export function isTaskJournalPayload(value: unknown): value is TaskJournalPayload {
