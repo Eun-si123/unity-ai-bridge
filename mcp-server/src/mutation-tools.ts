@@ -12,6 +12,11 @@ import {
 } from "./bridge/checkpoint-bridge.js";
 import { PrefabPropertyBridgeServer } from "./bridge/prefab-property-bridge-server.js";
 import { requestMutationStatus } from "./bridge/mutation-status-bridge.js";
+import {
+  requestTaskBegin,
+  requestTaskGet,
+  type TaskStepPlan,
+} from "./bridge/task-journal-bridge.js";
 
 const mutationStatusInputSchema = fromJsonSchema({
   type: "object",
@@ -24,6 +29,105 @@ const mutationStatusInputSchema = fromJsonSchema({
       pattern: "^[A-Za-z0-9._:-]+$",
       description:
         "Mutation id to inspect in the current Editor-session common mutation lifecycle journal. Absence is not proof that no side effect occurred because this first slice does not unify every operation-specific journal and does not survive a full Editor restart.",
+    },
+  },
+  additionalProperties: false,
+});
+
+const taskVector3Schema = {
+  type: "object",
+  required: ["x", "y", "z"],
+  properties: {
+    x: { type: "number" },
+    y: { type: "number" },
+    z: { type: "number" },
+  },
+  additionalProperties: false,
+} as const;
+
+const taskBeginInputSchema = fromJsonSchema({
+  type: "object",
+  required: ["taskId", "steps"],
+  properties: {
+    taskId: {
+      type: "string",
+      minLength: 1,
+      maxLength: 128,
+      pattern: "^[A-Za-z0-9._:-]+$",
+      description:
+        "Caller-chosen current-session identity for this exact immutable task plan. Reuse only for the same plan after ambiguous task.begin delivery.",
+    },
+    steps: {
+      type: "array",
+      minItems: 1,
+      maxItems: 8,
+      description:
+        "Ordered bounded task steps. The first slice supports only existing-GameObject gameObject.update and transform.set mutations with unique reserved mutation IDs.",
+      items: {
+        oneOf: [
+          {
+            type: "object",
+            required: ["index", "operation", "mutationId", "globalObjectId", "name", "activeSelf"],
+            properties: {
+              index: { type: "integer", minimum: 0, maximum: 7 },
+              operation: { const: "gameObject.update" },
+              mutationId: {
+                type: "string",
+                minLength: 1,
+                maxLength: 128,
+                pattern: "^[A-Za-z0-9._:-]+$",
+              },
+              globalObjectId: { type: "string", minLength: 1, maxLength: 512 },
+              name: { type: "string", minLength: 1, maxLength: 128 },
+              activeSelf: { type: "boolean" },
+            },
+            additionalProperties: false,
+          },
+          {
+            type: "object",
+            required: [
+              "index",
+              "operation",
+              "mutationId",
+              "globalObjectId",
+              "localPosition",
+              "localEulerAngles",
+              "localScale",
+            ],
+            properties: {
+              index: { type: "integer", minimum: 0, maximum: 7 },
+              operation: { const: "transform.set" },
+              mutationId: {
+                type: "string",
+                minLength: 1,
+                maxLength: 128,
+                pattern: "^[A-Za-z0-9._:-]+$",
+              },
+              globalObjectId: { type: "string", minLength: 1, maxLength: 512 },
+              localPosition: taskVector3Schema,
+              localEulerAngles: taskVector3Schema,
+              localScale: taskVector3Schema,
+            },
+            additionalProperties: false,
+          },
+        ],
+      },
+    },
+  },
+  additionalProperties: false,
+});
+
+const taskGetInputSchema = fromJsonSchema({
+  type: "object",
+  required: ["taskId"],
+  properties: {
+    taskId: {
+      type: "string",
+      minLength: 1,
+      maxLength: 128,
+      pattern: "^[A-Za-z0-9._:-]+$",
+      description:
+        "Exact current-session taskId to inspect. A not_found result is not reconstructed from caller memory and is not safe to resume automatically.",
     },
   },
   additionalProperties: false,
@@ -155,6 +259,57 @@ export function registerMutationTools(
         requireAgentCapability(status, "mutation.status");
 
         const result = await requestMutationStatus(bridge, input.mutationId);
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify(result) }],
+          structuredContent: result,
+        };
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    "unity_begin_task",
+    {
+      description:
+        "Journal an immutable bounded multi-step Unity task before any task step side effect begins. The first slice supports only ordered gameObject.update and transform.set steps against existing GameObjects in the saved active Scene, with 1..8 unique reserved mutation IDs. task.begin itself does not mutate Scene state. Reserved mutations are later admitted only when operation arguments, step order, and the exact Unity state boundary still match the journaled plan.",
+      inputSchema: taskBeginInputSchema,
+    },
+    async (args) => {
+      try {
+        const input = args as { taskId: string; steps: TaskStepPlan[] };
+        const status = await bridge.requestEditorStatus();
+        requireAgentCapability(status, "task.begin");
+        requireAgentCapability(status, "task.get");
+        requireAgentCapability(status, "state.revision.v1");
+
+        const result = await requestTaskBegin(bridge, input.taskId, input.steps);
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify(result) }],
+          structuredContent: result,
+        };
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    "unity_get_task_status",
+    {
+      description:
+        "Read a retained current-session bounded task journal and determine whether the next exact reserved step is safe to execute. This tool never executes or retries a mutation. It returns every step's mutation lifecycle state, the exact next operation/mutationId, a fresh Unity state token, and safeToExecuteNextStep only when all prior steps are verified completed and Unity state still equals the expected task boundary. Started, failed, out-of-order, missing, or state-drifted tasks fail closed and require reconciliation/replanning.",
+      inputSchema: taskGetInputSchema,
+    },
+    async (args) => {
+      try {
+        const input = args as { taskId: string };
+        const status = await bridge.requestEditorStatus();
+        requireAgentCapability(status, "task.get");
+        requireAgentCapability(status, "state.revision.v1");
+
+        const result = await requestTaskGet(bridge, input.taskId);
         return {
           content: [{ type: "text" as const, text: JSON.stringify(result) }],
           structuredContent: result,
