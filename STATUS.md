@@ -68,11 +68,13 @@ externalStateDriftBlockedResume: true
 blockedTaskTargetUnchanged: true
 ```
 
-PR #58 is still open while final documentation-head GitHub verification completes. Runtime verification does not imply that the PR has already been merged to `main`.
+PR #58's exact final head `69399c989b6b08a6490bd22ba088fe498051d1dc` subsequently passed Node Verification #400 and Phase 1 Local Bridge Verification #421 and was squash-merged to `main` as `4463560cb29f278773adb02194bcb7322fa00978`.
+
+PR #59 then optimized the existing Node CI without changing Unity runtime or bridge-protocol behavior and was squash-merged to `main` as `ef45578ba01dcb0c2a87dce4fb383486f2a53847` after Node Verification #401 and Phase 1 Local Bridge Verification #422 passed.
 
 ## Reliability / recovery progression
 
-Issue #50 tracks the reliability follow-on sequence. Steps 1–4 are merged and verified. Step 5 is runtime-verified in PR #58 and awaiting final merge gates.
+Issue #50 tracked the five-step reliability follow-on sequence. **Steps 1–5 are now merged and verified; the sequence is complete.**
 
 | Step | PR | Main merge commit | Status | Verified boundary |
 |---|---:|---|---|---|
@@ -81,7 +83,7 @@ Issue #50 tracks the reliability follow-on sequence. Steps 1–4 are merged and 
 | Broadened common reconciliation | #54 | `d2e442d80964529dc7354f7e07f0eab36017ab64` | **Verified** | Seven reviewed common scene mutations; every first real success response dropped after Unity execution and recovered without blind retry. |
 | Bridge action history + safe last-action Undo | #55 | `4cc96efaf06071e4363f562e2ed750f7f9f9d391` | **Verified** | Current-session bounded history, newest bridge action only, exact native Undo evidence; real Unity **119/119** + live Undo gate. |
 | Bounded GameObject checkpoint / restore | #56 | `defd88697636e5142a694b6bc4ab587d17096229` | **Verified** | One existing GameObject in one saved active Scene, current-session checkpoint storage, exact parent/scene/state preconditions; real Unity **126/126** + live restore gate. |
-| Bounded multi-step task journal / resume | #58 | — open PR | **Verified runtime / merge pending** | Current-session task journal, max 16 tasks / 8 ordered steps, first slice only `gameObject.update` + `transform.set`; real Unity **135/135** + live `verify:task-resume` PASS. |
+| Bounded multi-step task journal / resume | #58 | `4463560cb29f278773adb02194bcb7322fa00978` | **Verified** | Current-session task journal, max 16 tasks / 8 ordered steps, first slice only `gameObject.update` + `transform.set`; real Unity **135/135** + live `verify:task-resume` PASS. |
 
 ## Current verified / implemented surface
 
@@ -100,7 +102,7 @@ Issue #50 tracks the reliability follow-on sequence. Steps 1–4 are merged and 
 | Safe last-action Undo | **Verified** | PR #55. Only the exact newest bridge-owned action may be undone when fresh state token, scene, Unity Undo group/name, compile state, and Play Mode state still match. No arbitrary historical Undo. |
 | Bounded GameObject checkpoint capture/get | **Verified** | PR #56. Current-session SessionState storage, at most 16 retained checkpoints, deterministic bridge-generated checkpoint IDs, capture/get are read-only for Unity Scene state. |
 | Bounded GameObject checkpoint restore | **Verified** | PR #56. Restores only name, `activeSelf`, local position/rotation/scale for the same still-existing GameObject in the same saved active Scene and same direct parent. Deleted/reparented targets fail closed. |
-| Bounded multi-step task journal / resume | **Verified runtime / merge pending** | PR #58. `task.begin` / `unity_begin_task` and `task.get` / `unity_get_task_status`; max 16 current-session tasks, max 8 steps, only existing-GameObject `gameObject.update` + `transform.set`; exact reserved mutation IDs and state boundaries; no auto-execution/retry/rollback. |
+| Bounded multi-step task journal / resume | **Verified** | PR #58. `task.begin` / `unity_begin_task` and `task.get` / `unity_get_task_status`; max 16 current-session tasks, max 8 steps, only existing-GameObject `gameObject.update` + `transform.set`; exact reserved mutation IDs and state boundaries; no auto-execution/retry/rollback. |
 | Dirty-state reporting | **Verified** | Rollback dirty residue is reported explicitly. |
 | Dirty-state restoration | **Not implemented** | Undo-based rollback can leave a previously clean scene dirty. |
 | Explicit active-scene save | **Verified** | Existing saved path only; exact path/state preconditions; native post-save verification; no interactive Save As. |
@@ -201,7 +203,7 @@ Current objective: provide a small but genuinely useful Unity editing/inspection
 20. **Seven-operation common mutation reconciliation — PR #54** — create/update/delete/transform/component add/property/remove; every first success response dropped after Unity execution and recovered safely; live fault-proxy PASS, verified 2026-09-04
 21. **Bridge action history + safe latest-action Undo — PR #55** — **119/119** + live MCP `verify:action-undo` PASS, verified 2026-09-04
 22. **Bounded GameObject checkpoint / restore — PR #56** — **126/126** + live MCP `verify:checkpoint-restore` PASS, verified 2026-09-04
-23. **Bounded multi-step task journal / resume — PR #58** — **135/135** + live MCP `verify:task-resume` PASS, runtime-verified 2026-09-04; merge pending final GitHub gates.
+23. **Bounded multi-step task journal / resume — PR #58** — **135/135** + live MCP `verify:task-resume` PASS, merged and verified 2026-09-04.
 
 ### Verified common mutation lifecycle status contract
 
@@ -320,9 +322,7 @@ Unity `JsonUtility` null/default-object artifacts are normalized only at the tas
 
 ## Current next work
 
-PR #58 is runtime-verified and now requires only exact-final-documentation-head GitHub verification plus merge bookkeeping.
-
-After PR #58 merges, the five-step Issue #50 follow-on order is complete. The next Phase 3 slice should be selected from the current roadmap/evidence rather than silently extending the task journal into a generic workflow engine.
+The five-step Issue #50 reliability follow-on order is complete and merged. The next Phase 3 slice should be selected from the current roadmap and repository evidence rather than silently extending the task journal into a generic workflow engine.
 
 No arbitrary C# execution fallback is planned.
 
