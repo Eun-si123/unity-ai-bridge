@@ -299,9 +299,12 @@ function isTaskStepStatus(value: unknown, index: number): value is TaskStepStatu
   );
 }
 
+function access(bridge: PrefabPropertyBridgeServer): TaskJournalBridgeAccess {
+  return bridge as unknown as TaskJournalBridgeAccess;
+}
+
 function requireConnectedEditor(bridge: PrefabPropertyBridgeServer): EditorIdentity {
-  const access = bridge as TaskJournalBridgeAccess;
-  const current = access.connectedEditorAccess();
+  const current = TaskJournalBridgeAccess.prototype.connectedEditorAccess.call(access(bridge));
   if (current === undefined) {
     throw new Error("No Unity Editor is connected to the local bridge.");
   }
@@ -316,7 +319,8 @@ function requestOperation(
   timeoutMs: number,
   risk: RiskClass,
 ): Promise<unknown> {
-  return (bridge as TaskJournalBridgeAccess).requestOperationAccess(
+  return TaskJournalBridgeAccess.prototype.requestOperationAccess.call(
+    access(bridge),
     operation,
     args,
     route,
