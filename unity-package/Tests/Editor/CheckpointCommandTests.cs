@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using NUnit.Framework;
 using UnityAiBridge.Editor.Commands;
 using UnityAiBridge.Editor.Execution;
@@ -13,7 +14,8 @@ namespace UnityAiBridge.Editor.Tests
     {
         private Scene originalScene;
         private Scene testScene;
-        private string scenePath;
+        private bool testSceneWasDirty;
+        private readonly List<GameObject> createdObjects = new List<GameObject>();
         private GameObject target;
         private string globalObjectId;
 
@@ -21,16 +23,21 @@ namespace UnityAiBridge.Editor.Tests
         public void SetUp()
         {
             originalScene = SceneManager.GetActiveScene();
-            scenePath = "Assets/UnityAiBridge_CheckpointTest_" + Guid.NewGuid().ToString("N") + ".unity";
-            testScene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Additive);
-            Assert.That(EditorSceneManager.SaveScene(testScene, scenePath), Is.True);
+            testScene = FindLoadedSavedScene();
+            Assert.That(
+                testScene.IsValid() && testScene.isLoaded && !string.IsNullOrEmpty(testScene.path),
+                Is.True,
+                "Checkpoint tests require at least one already-loaded saved Scene. " +
+                "The fixture intentionally does not create/close/save user Scenes because Unity rejects additive " +
+                "NewScene while an untitled unsaved Scene is open, and tests must not destroy that user state.");
+
+            testSceneWasDirty = testScene.isDirty;
             Assert.That(SceneManager.SetActiveScene(testScene), Is.True);
 
-            target = new GameObject("Checkpoint Original");
+            target = CreateGameObject("Checkpoint Original");
             target.transform.localPosition = new Vector3(1.25f, -2f, 3.5f);
             target.transform.localRotation = Quaternion.Euler(10f, 20f, 30f);
             target.transform.localScale = new Vector3(1.5f, 0.75f, 2f);
-            Assert.That(EditorSceneManager.SaveScene(testScene), Is.True);
             globalObjectId = GlobalObjectId.GetGlobalObjectIdSlow(target).ToString();
             Assert.That(globalObjectId, Is.Not.Empty);
         }
@@ -38,19 +45,25 @@ namespace UnityAiBridge.Editor.Tests
         [TearDown]
         public void TearDown()
         {
+            for (var index = createdObjects.Count - 1; index >= 0; index--)
+            {
+                var gameObject = createdObjects[index];
+                if (gameObject != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(gameObject);
+                }
+            }
+            createdObjects.Clear();
+            target = null;
+
+            if (testScene.IsValid() && testScene.isLoaded && !testSceneWasDirty)
+            {
+                EditorSceneManager.MarkSceneClean(testScene);
+            }
+
             if (originalScene.IsValid() && originalScene.isLoaded)
             {
                 SceneManager.SetActiveScene(originalScene);
-            }
-
-            if (testScene.IsValid() && testScene.isLoaded)
-            {
-                EditorSceneManager.CloseScene(testScene, true);
-            }
-
-            if (!string.IsNullOrEmpty(scenePath))
-            {
-                AssetDatabase.DeleteAsset(scenePath);
             }
         }
 
@@ -64,7 +77,7 @@ namespace UnityAiBridge.Editor.Tests
             Assert.That(checkpoint.checkpointId, Does.StartWith("cp-"));
             Assert.That(checkpoint.checkpointId.Length, Is.EqualTo(67));
             Assert.That(checkpoint.globalObjectId, Is.EqualTo(globalObjectId));
-            Assert.That(checkpoint.scenePath, Is.EqualTo(scenePath));
+            Assert.That(checkpoint.scenePath, Is.EqualTo(testScene.path));
             Assert.That(checkpoint.parentGlobalObjectId, Is.Empty);
             Assert.That(checkpoint.name, Is.EqualTo("Checkpoint Original"));
             Assert.That(checkpoint.activeSelf, Is.True);
@@ -152,12 +165,11 @@ namespace UnityAiBridge.Editor.Tests
         [Test]
         public void Restore_RejectsReparentedTargetBeforeCheckpointValuesAreApplied()
         {
-            var parentA = new GameObject("Parent A");
-            var parentB = new GameObject("Parent B");
+            var parentA = CreateGameObject("Parent A");
+            var parentB = CreateGameObject("Parent B");
             target.transform.SetParent(parentA.transform, false);
             EditorSceneManager.MarkSceneDirty(testScene);
             EditorStateRevision.Advance();
-            Assert.That(EditorSceneManager.SaveScene(testScene), Is.True);
             globalObjectId = GlobalObjectId.GetGlobalObjectIdSlow(target).ToString();
 
             var checkpoint = CheckpointStore.Capture(globalObjectId);
@@ -198,6 +210,39 @@ namespace UnityAiBridge.Editor.Tests
                 CheckpointStore.ValidateCheckpointId("cp-" + new string('A', 64)));
             Assert.Throws<ArgumentException>(() =>
                 CheckpointStore.ValidateCheckpointId("cp-" + new string('a', 63)));
+        }
+
+        private GameObject CreateGameObject(string name)
+        {
+            var gameObject = new GameObject(name);
+            if (gameObject.scene != testScene)
+            {
+                SceneManager.MoveGameObjectToScene(gameObject, testScene);
+            }
+            createdObjects.Add(gameObject);
+            return gameObject;
+        }
+
+        private static Scene FindLoadedSavedScene()
+        {
+            var activeScene = SceneManager.GetActiveScene();
+            if (activeScene.IsValid() &&
+                activeScene.isLoaded &&
+                !string.IsNullOrEmpty(activeScene.path))
+            {
+                return activeScene;
+            }
+
+            for (var index = 0; index < SceneManager.sceneCount; index++)
+            {
+                var scene = SceneManager.GetSceneAt(index);
+                if (scene.IsValid() && scene.isLoaded && !string.IsNullOrEmpty(scene.path))
+                {
+                    return scene;
+                }
+            }
+
+            return default;
         }
 
         private static void AssertVector(Vector3 actual, TransformVector3Payload expected)
