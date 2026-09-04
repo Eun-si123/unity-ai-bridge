@@ -7,11 +7,16 @@ on:
     branches: [feat/phase0-runtime-scaffold]
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: node-verification-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   node-verify:
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -22,33 +27,14 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 24.19.0
+          cache: npm
+          cache-dependency-path: mcp-server/package-lock.json
 
-      - name: Generate lockfile
-        run: npm install --package-lock-only --prefix mcp-server
-
-      - name: Install dependencies from lockfile
-        run: npm ci --prefix mcp-server
+      - name: Install dependencies from committed lockfile
+        run: npm ci --prefix mcp-server --prefer-offline --no-audit --no-fund
 
       - name: Build
         run: npm run build
 
-      - name: Test
-        run: npm test
-
-      - name: Commit generated lockfile
-        if: github.event_name == 'push'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add mcp-server/package-lock.json
-          if ! git diff --cached --quiet; then
-            git commit -m "chore: refresh MCP server lockfile"
-            git push
-          fi
-
-      - name: Upload generated lockfile
-        uses: actions/upload-artifact@v4
-        with:
-          name: mcp-server-package-lock
-          path: mcp-server/package-lock.json
-          if-no-files-found: error
+      - name: Test compiled suite
+        run: npm --prefix mcp-server run test:built

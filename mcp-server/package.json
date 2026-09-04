@@ -8,7 +8,9 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "npm run build && node --test dist/tests/*.test.js",
+    "test": "npm run build && npm run test:built",
+    "test:built": "node --test dist/tests/*.test.js",
+    "test:local-bridge:built": "node --test dist/tests/local-bridge.test.js",
     "start": "node dist/src/index.js",
     "verify:unity": "npm run build && node dist/src/dev/verify-unity.js",
     "verify:mcp-unity": "npm run build && node dist/src/dev/verify-mcp-unity.js",
