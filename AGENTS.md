@@ -197,6 +197,10 @@ Before adding a subsystem, ask:
 2. Can an existing bounded primitive cover it safely?
 3. Does it create a new security/maintenance burden?
 4. Can it wait until there is a concrete need?
+5. Are we assuming the documented candidates exhaust the useful solution space?
+6. For a costly or hard-to-reverse choice, would a different problem framing, current platform capability, standard, or adjacent-domain approach remove the need for this subsystem or make it materially simpler/safer?
+
+Do not turn this into open-ended research for routine reversible work. When a newly discovered approach could materially change architecture, record it in the appropriate design/decision/roadmap context, test the assumptions that distinguish it, and change direction only when evidence justifies doing so.
 
 Prefer finishing one verified end-to-end path over starting many incomplete systems.
 
