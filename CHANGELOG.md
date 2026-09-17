@@ -265,7 +265,7 @@ The project is pre-alpha. Internal package version `0.0.1` does not represent a 
 - Strict TypeScript build configuration and Node test-runner protocol smoke tests.
 - Root build/test delegation, Node 24.19.0 runtime pin, and repository ignore rules.
 - GitHub Actions Node verification workflow.
-- Generated `mcp-server/package-lock.json` with the Phase 1 dependency graph.
+- Generated `mcp-server/package-lock.json` dependency lockfile.
 
 ### Changed
 
