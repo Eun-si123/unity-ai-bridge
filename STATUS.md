@@ -2,7 +2,21 @@
 
 Canonical source of truth for what is actually implemented and verified in **Unity AI Bridge**.
 
-Do not infer implementation from README examples, design diagrams, decisions, roadmaps, issues, plans, or other Unity MCP projects. Detailed historical verifier output belongs in the relevant pull request and protocol document; this file tracks the current verified state, important verification boundaries, and the next active work.
+Do not infer implementation from README examples, design diagrams, decisions, roadmaps, issues, plans, or other Unity MCP projects. Detailed historical verifier output belongs in the relevant pull request and protocol document; this file tracks the current verified state, important verification boundaries, and the current project state.
+
+## Current project state
+
+**Active development: Paused (soft freeze) as of 2026-09-18.**
+
+The repository remains public and **unarchived** so the implementation, tests, verification evidence, and reliability experiments stay available for reference and possible reuse. New feature development is paused because Unity now provides and is rapidly developing official Unity CLI, Pipeline, MCP, and Codex tooling that overlaps substantially with the project's original AI-to-Unity bridge goal.
+
+This pause is not a claim that the existing work is obsolete or incorrect. The verified reliability/recovery work remains preserved. Substantial development should resume only when at least one of these is true:
+
+- current official Unity tooling has been tested and a concrete, durable gap is demonstrated;
+- the project can address that gap without mainly duplicating an official Unity capability;
+- the project is deliberately repurposed around a clearly distinct problem with a new evidence-backed scope.
+
+Existing roadmap/design entries remain historical/planned context and must not be interpreted as active commitments while the pause is in effect. Routine compatibility work should also not be performed merely to keep the project moving during the pause.
 
 ## Status vocabulary
 
@@ -11,11 +25,12 @@ Do not infer implementation from README examples, design diagrams, decisions, ro
 - **Implemented** — implementation exists but relevant runtime behavior may still be unverified.
 - **Verified** — reproduced with evidence on a named revision/environment.
 - **Blocked** — progress is prevented by a named unresolved dependency/problem.
+- **Paused** — no active feature-development phase; existing verified work is preserved pending an explicit resume decision.
 
 ## Current phase
 
-**Phase 3 — Useful Unity Editing Core**  
-Overall status: **In progress**
+**Historical phase at pause: Phase 3 — Useful Unity Editing Core**  
+Overall project status: **Paused**
 
 Completed milestones:
 
@@ -23,7 +38,9 @@ Completed milestones:
 - **Phase 1 — Minimal Local End-to-End:** Verified, completed 2026-08-23.
 - **Phase 2 — Reliability Core:** Verified milestone, completed 2026-08-23 for the surface that existed at exit.
 
-Phase 2 exit evidence and non-goals are recorded in [`docs/PHASE2_EXIT_GATE.md`](docs/PHASE2_EXIT_GATE.md). Each new Phase 3 family must adopt and verify the reliability contract independently.
+Phase 3 contains additional verified slices documented below, but it is no longer an actively advancing phase while the soft freeze is in effect.
+
+Phase 2 exit evidence and non-goals are recorded in [`docs/PHASE2_EXIT_GATE.md`](docs/PHASE2_EXIT_GATE.md).
 
 ## Current verified environment
 
@@ -123,11 +140,11 @@ Issue #50 tracked the five-step reliability follow-on sequence. **Steps 1–5 ar
 | EditMode Test Runner control | **Verified** | PR #47; asynchronous exact assembly/test selection, SessionState run journal, bounded results, same-id no-duplicate scheduling, conflict rejection. Historical **98/98** + live one-test gate. |
 | PlayMode Test Runner control | **Verified** | PR #48; Unity Test Framework owns Edit→Play→Edit, same-session journal/replay survives lifecycle reconnects, runtime-capable `[UnityTest]` proved `Application.isPlaying` across a frame. Historical **100/100 EditMode + 1/1 PlayMode** + live gate. |
 | Test Framework discovery | **Verified** | PR #49; native EditMode/PlayMode assembly discovery, exact leaf selectors, bounded substring filtering, deterministic paging, fail-closed unknown assembly, stable Edit Mode/read-only state token. Historical **105/105** + live discovery gate. |
-| Remote gateway / Easy Connect | **Planned** | Not implemented. |
-| Pairing/authentication | **Planned** | Not implemented. |
-| Multi-user/editor routing | **Planned** | Current local bridge supports one active editor. |
-| ChatGPT integration | **Planned** | Not implemented or submitted. |
-| Portable Agent Plugins packaging | **Planned** | Architecture/roadmap decision recorded; no plugin manifest/skills package implemented yet. |
+| Remote gateway / Easy Connect | **Planned** | Not implemented; not active work while paused. |
+| Pairing/authentication | **Planned** | Not implemented; not active work while paused. |
+| Multi-user/editor routing | **Planned** | Current local bridge supports one active editor; expansion is not active work while paused. |
+| ChatGPT integration | **Planned** | Not implemented or submitted; not active work while paused. |
+| Portable Agent Plugins packaging | **Planned** | Architecture/roadmap decision recorded; no plugin manifest/skills package implemented; not active work while paused. |
 | Open-weight/local-model compatibility | **Deferred target** | MCP remains the boundary; no model runtime/inference server is being added to the Unity core. See [`docs/OPEN_WEIGHT_MODEL_COMPATIBILITY.md`](docs/OPEN_WEIGHT_MODEL_COMPATIBILITY.md). |
 
 ## Phase 0 — Foundation
@@ -177,7 +194,7 @@ See [`docs/PHASE2_EXIT_GATE.md`](docs/PHASE2_EXIT_GATE.md).
 
 ## Phase 3 — Useful Unity Editing Core
 
-Current objective: provide a small but genuinely useful Unity editing/inspection surface without arbitrary code execution while retaining Phase 2 reliability rules.
+Historical objective before the pause: provide a small but genuinely useful Unity editing/inspection surface without arbitrary code execution while retaining Phase 2 reliability rules.
 
 ### Verified slices
 
@@ -322,11 +339,15 @@ Unity `JsonUtility` null/default-object artifacts are normalized only at the tas
 
 ## Current next work
 
-The five-step Issue #50 reliability follow-on order is complete and merged. The next Phase 3 slice should be selected from the current roadmap and repository evidence rather than silently extending the task journal into a generic workflow engine.
+**None while the soft freeze is in effect.**
+
+Do not select another Phase 3 slice merely because roadmap work remains. If development is reconsidered, first compare the proposed need against the then-current official Unity CLI/Pipeline/MCP/Codex stack and gather evidence for a concrete gap. A resume decision should update this section and the README before implementation starts.
 
 No arbitrary C# execution fallback is planned.
 
 ## Known limitations / future work
+
+The items below describe limitations of the preserved implementation and previously identified future work. They are **not an active backlog** while development is paused.
 
 - Exact `GlobalObjectId` behavior for every unsaved/new-scene/unusual object case is not exhaustively characterized. Live verifiers that require durable scene-object IDs use a saved active Scene. `gameObject.create` fails closed before mutation when the active Scene has no persistent asset path because reliable GlobalObjectId-backed retry/readback semantics are unavailable there.
 - The common `EditorMutationLifecycle` / `mutation.status` journal is SessionState-backed and does not survive a full Unity Editor restart. A missing status record never proves an operation did not execute and never makes blind retry safe.
@@ -356,5 +377,5 @@ No arbitrary C# execution fallback is planned.
 - Asset `dependencyHash` is imported-state metadata/precondition evidence for the current bounded asset contracts; it is not a general transaction token. Script writes use raw content SHA-256 as the file-content CAS token.
 - Recent Console text covers only the current domain-load capture window.
 - Unity support beyond 6000.3.21f1 is unverified.
-- Multi-editor routing, remote authentication/pairing, remote gateway hosting, and production AI-host integrations remain later-phase work.
+- Multi-editor routing, remote authentication/pairing, remote gateway hosting, and production AI-host integrations remain later-phase work if development ever resumes.
 - Open-weight/local models remain a later compatibility target through MCP-capable agent runtimes; the Unity core does not own model serving.

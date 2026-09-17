@@ -6,6 +6,14 @@ The project is pre-alpha. Internal package version `0.0.1` does not represent a 
 
 ## Unreleased
 
+### Project status — active development paused
+
+- Paused new feature development on **2026-09-18** while Unity's official Unity CLI, Pipeline, MCP, and Codex tooling matures and overlaps substantially with the project's original bridge goal.
+- Kept the repository public and **unarchived** so the implementation, tests, verification evidence, and reliability/recovery experiments remain available for reference and possible reuse.
+- Preserved the verified Phase 0–3 work without claiming that planned roadmap items are active commitments.
+- Defined resume criteria: first demonstrate a concrete gap in the then-current official Unity tooling, avoid primarily duplicating an official capability, or deliberately repurpose the project around a clearly distinct evidence-backed problem.
+- No runtime implementation changed as part of the pause decision.
+
 ### Phase 3 — Bounded Common Mutation Lifecycle Status — Verified slice
 
 #### Added
